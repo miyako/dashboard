@@ -18,9 +18,14 @@ commit `78952faa7ceba81909b6b757a76108afa76f8993` and syntax resource SHA256
 These are recorded research provenance, not freshly recomputed source hashes
 or 21 LTS runtime evidence.
 
-This document preserves the researched families, restrictions and ordered plan
-from the original inventory (SHA256
-`018f59c49648fd132e177c79bd273df14d07bd4ec796c76243790e9dd21c263a`).
+The [complete per-API research catalog](dashboard-capability-catalog.md)
+is preserved verbatim, including source/location/unit/thread/privacy/risk/cadence
+profiles, uncertainty, provenance and exclusions. This document is its concise
+overview and current implementation roadmap. The original inventory's SHA256 is
+`018f59c49648fd132e177c79bd273df14d07bd4ec796c76243790e9dd21c263a`.
+The catalog describes the research-time evidence and proposals, not current
+runtime acceptance or a new public metric envelope. The implementation uses the
+existing normalized metric contract described in README.
 That research used official indexed excerpts and captured version-21 HTML;
 it did not execute 4D. For this first increment, the official version-21
 [DataStore.getInfo](https://developer.4d.com/docs/21/API/DataStoreClass#getinfo),
@@ -104,7 +109,7 @@ range and persistence; never automatically round-trip GET values into SET.
 
 | Exact members / official version-21 class | Evidence / boundary |
 | --- | --- |
-| [DataStore](https://developer.4d.com/docs/21/API/DataStoreClass): getInfo(), encryptionStatus(), locked(), getGlobalStamp(), getAllRemoteContexts(), getRemoteContextInfo(), getRequestLog() | 21; type/networked safe; encryption/lock eligibility local/Server only. Stamps not activity rates. Context/log objects may contain names, attributes and request contents: aggregate only after bounded-contract review. `isAdminProtected()` remains unknown here: researched as 21, but absent from the directly fetched 21 summary; verify before implementation. |
+| [DataStore](https://developer.4d.com/docs/21/API/DataStoreClass): getInfo(), encryptionStatus(), locked(), getGlobalStamp(), getAllRemoteContexts(), getRemoteContextInfo(), getRequestLog(), isAdminProtected() | 21; type/networked safe; encryption/lock eligibility local/Server only. Stamps not activity rates. Context/log objects may contain names, attributes and request contents: aggregate only after bounded-contract review. The full [isAdminProtected() body](https://developer.4d.com/docs/21/API/DataStoreClass#isadminprotected) documents a Boolean since 18 R6: True if Data Explorer access is disabled for the working session. This is not dashboard authorization and has no new runtime proof here. |
 | [DataClass](https://developer.4d.com/docs/21/API/DataClassClass): getInfo(), getCount(), getDataStore(), attributeName, getRemoteCache() | 21; `getInfo` exposes `{exposed,name,primaryKey,tableNumber}` internally. First PR counts only. `getCount` is record access, not needed for metadata. Attributes describe schema, not values; remote cache contains entities/keys, excluded. |
 | [Entity](https://developer.4d.com/docs/21/API/EntityClass): getStamp(), isNew(), touched(), touchedAttributes() | Partial, existing-record context only; no arbitrary entity creation/loading for telemetry. |
 | [Session](https://developer.4d.com/docs/21/API/SessionClass): info, id, userName, storage, expirationDate, idleTimeout, getPrivileges(), hasPrivilege(), isGuest() | 21; current-session context. Expiry date/time and idle minutes distinct. Privilege getters omit promoted process privileges; web/REST enforcement is not desktop authorization. IDs/identity/storage excluded. |
