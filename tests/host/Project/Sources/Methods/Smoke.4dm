@@ -179,6 +179,41 @@ Else
 		$report.success:=False
 	End if
 End if
+HOST_Phase:="license usage normalization"
+var $collector : cs.Dashboard._DashboardCollector
+var $licenseCases; $licenseCase : Object
+var $licenseEntries; $normalized : Collection
+var $measurement : Object
+var $licenseCaseName : Text
+var $productIndex : Integer
+$collector:=cs.Dashboard._DashboardCollector.new()
+$licenseEntries:=New collection(\
+	New object("productId"; 7; "productName"; "Client"; "productUsedCount"; 500; "productBalance"; 200; "token"; 123456; "reason"; "private caller"; "session"; New object("userName"; "private user")); \
+	New object("productId"; 17; "productName"; "REST"; "globalProductUsedCount"; 999); \
+	New object("productId"; 7; "productName"; "Client"; "productUsedCount"; 501))
+$licenseCases:=New object(\
+	"populated"; New object("ok"; True; "data"; $licenseEntries); \
+	"empty"; New object("ok"; True; "data"; New collection); \
+	"failed"; New object("ok"; False); \
+	"null"; New object("ok"; True; "data"; Null); \
+	"invalid"; New object("ok"; True; "data"; New collection(New object("productId"; "7"))))
+$licenseEntries:=New collection
+For ($productIndex; 1; 64)
+	$licenseEntries.push(New object("productId"; $productIndex; "productName"; "Product"))
+End for
+$licenseCases.boundary:=New object("ok"; True; "data"; $licenseEntries.copy())
+$licenseEntries.push(New object("productId"; 65; "productName"; "Product"))
+$licenseCases.overflow:=New object("ok"; True; "data"; $licenseEntries)
+$report.licenseUsage:=New object
+// Execute in this order: known products must survive empty/error enumerations.
+For each ($licenseCaseName; New collection("populated"; "empty"; "failed"; "null"; "invalid"; "overflow"; "boundary"))
+	$licenseCase:=New object
+	$normalized:=$collector._licenseUsageMetrics($licenseCases[$licenseCaseName])
+	For each ($measurement; $normalized)
+		$licenseCase[$measurement.id]:=$measurement
+	End for each
+	$report.licenseUsage[$licenseCaseName]:=$licenseCase
+End for each
 HOST_Phase:="async web service"
 var $service : Object
 var $deadline : Integer

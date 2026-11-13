@@ -2,11 +2,13 @@ property info : Object
 property staticMetrics : Collection
 property sampleCount : Integer
 property remote : Boolean
+property licenseProducts : Object
 
 Class constructor
 	var $system; $license; $read : Object
 	var $role; $platform : Text
 	This.sampleCount:=0
+	This.licenseProducts:=New object
 	This.remote:=(Application type=4D Remote mode)
 	$role:="standalone"
 	Case of
@@ -53,7 +55,7 @@ Class constructor
 
 Function read($command : Text)->$result : Object
 	var $previous : Text
-	var $data : Object
+	var $data : Variant
 	var CLI_LastErrors : Collection
 	$previous:=Method called on error(ek local)
 	CLI_LastErrors:=Null
@@ -65,6 +67,8 @@ Function read($command : Text)->$result : Object
 			$data:=System info
 		: ($command="license")
 			$data:=License info
+		: ($command="licenseUsage")
+			$data:=License usage
 		: ($command="cache")
 			$data:=Cache info(New object("dbFilter"; "All"))
 		: ($command="measures")
@@ -96,6 +100,101 @@ Function metric($id : Text; $label : Text; $type : Text; $unit : Text; $kind : T
 Function unavailable($id : Text; $label : Text; $type : Text; $unit : Text; $kind : Text; $status : Text; $reason : Text)->$metric : Object
 	$metric:=New object("id"; $id; "label"; $label; "type"; $type; "unit"; $unit; "kind"; $kind; "availability"; $status; "reason"; $reason)
 
+Function licenseUsage()->$metrics : Collection
+	If (Application type=4D Server)
+		$metrics:=This._licenseUsageMetrics(This.read("licenseUsage"))
+	Else
+		$metrics:=This._licenseUsageMetrics(New object("ok"; True; "data"; Null))
+	End if
+
+Function _licenseUsageMetrics($read : Object)->$metrics : Collection
+	var $entries; $ids : Collection
+	var $entry : Variant
+	var $products; $names : Object
+	var $status; $reason; $id; $name; $metricId : Text
+	var $count : Integer
+	$products:=New object
+	$status:="error"
+	$reason:="License usage failed"
+	If ($read.ok)
+		If (Value type($read.data)=Is collection)
+			$entries:=$read.data
+			$status:="available"
+			For each ($entry; $entries)
+				If (Value type($entry)#Is object)
+					$status:="error"
+					$reason:="Invalid license usage entry"
+					break
+				End if
+				If ((Value type($entry.productId)#Is longint) & (Value type($entry.productId)#Is real))
+					$status:="error"
+					$reason:="Invalid license product identifier"
+					break
+				End if
+				If (($entry.productId<0) | ($entry.productId>9007199254740991))
+					$status:="error"
+					$reason:="Invalid license product identifier"
+					break
+				End if
+				If (Int($entry.productId)#$entry.productId)
+					$status:="error"
+					$reason:="Invalid license product identifier"
+					break
+				End if
+				$id:=String($entry.productId; 10)
+				$name:="Product "+$id
+				If (Value type($entry.productName)=Is text)
+					If ($entry.productName#"")
+						$name:=Substring($entry.productName; 1; 24)
+					End if
+				End if
+				If ($products[$id]=Null)
+					$products[$id]:=New object("name"; $name; "count"; 0)
+				End if
+				$products[$id].count+=1
+			End for each
+			If ($status="available")
+				$names:=OB Copy(This.licenseProducts)
+				For each ($id; OB Keys($products))
+					$names[$id]:=$products[$id].name
+				End for each
+				$ids:=OB Keys($names)
+				If ($ids.length>64)
+					$status:="error"
+					$reason:="License product tracking limit exceeded (64)"
+				Else
+					This.licenseProducts:=$names
+				End if
+			End if
+		Else
+			If ($read.data=Null)
+				$status:="unsupported"
+				$reason:="License usage is available only on 4D Server"
+			Else
+				$reason:="License usage did not return a Collection"
+			End if
+		End if
+	End if
+	$metrics:=New collection
+	If ($status="available")
+		$metrics.push(This.metric("license.usage.records"; "Retained license records"; "number"; "records"; "gauge"; $entries.length))
+	Else
+		$metrics.push(This.unavailable("license.usage.records"; "Retained license records"; "number"; "records"; "gauge"; $status; $reason))
+	End if
+	For each ($id; OB Keys(This.licenseProducts))
+		$metricId:="license.usage.product."+$id
+		$name:=This.licenseProducts[$id]+": retained records"
+		If ($status="available")
+			$count:=0
+			If ($products[$id]#Null)
+				$count:=$products[$id].count
+			End if
+			$metrics.push(This.metric($metricId; $name; "number"; "records"; "gauge"; $count))
+		Else
+			$metrics.push(This.unavailable($metricId; $name; "number"; "records"; "gauge"; $status; $reason))
+		End if
+	End for each
+
 Function snapshot()->$snapshot : Object
 	var $metrics; $processes; $sessions : Collection
 	var $read; $data; $entry; $detail; $entity : Object
@@ -104,6 +203,9 @@ Function snapshot()->$snapshot : Object
 	var CLI_LastErrors : Collection
 	This.sampleCount+=1
 	$metrics:=This.staticMetrics.copy()
+	For each ($entry; This.licenseUsage())
+		$metrics.push($entry)
+	End for each
 	$processes:=New collection
 	$sessions:=New collection
 	$read:=This.read("application")

@@ -305,6 +305,17 @@
 			],
 			"Summary": ""
 		},
+		"licenseUsage()": {
+			"Syntax": "**.licenseUsage**()->metrics : Collection",
+			"Params": [
+				[
+					"metrics",
+					"Collection",
+					"<-"
+				]
+			],
+			"Summary": ""
+		},
 		"unavailable()": {
 			"Syntax": "**.unavailable**( *id* : Text; *label* : Text; *type* : Text; *unit* : Text; *kind* : Text; *status* : Text; *reason* : Text )->metric : Object",
 			"Params": [
@@ -407,6 +418,9 @@
 				]
 			],
 			"Summary": ""
+		},
+		"licenseProducts": {
+			"Syntax": "licenseProducts : Object"
 		},
 		"remote": {
 			"Syntax": "remote : Boolean"

@@ -51,7 +51,7 @@ function drawMetric(metric, samples = [], key = metric.id, unit = metric.unit) {
   const available = metric.availability === 'available';
   node.children[1].textContent = available ? `${typeof metric.value === 'number' ? format(metric.value) : String(metric.value)}${metric.unit ? ' ' + metric.unit : ''}` : metric.availability;
   node.children[2].textContent = available ? `${metric.kind} / ${metric.id}` : metric.reason;
-  if (metric.type === 'number' && metric.kind !== 'static') {
+  if (DashboardCharts.hasGraph(metric)) {
     let graph = node.querySelector('svg');
     if (!graph) {
       graph = svgEl('svg', { viewBox: '0 0 600 205', role: 'img', class: 'chart' });
@@ -164,7 +164,7 @@ function render(state) {
   const groups = { metrics: [], 'static-metrics': [], 'database-metrics': [], 'process-trends': [], 'session-trends': [] };
   graphNodes.clear();
   for (const metric of Object.values(state.metrics || {}).sort((a, b) => a.id.localeCompare(b.id))) {
-    let group = metric.kind === 'static' ? 'static-metrics' : metric.id.startsWith('database.') ? 'database-metrics' :
+    let group = metric.kind === 'static' || metric.id === 'app.uptime' ? 'static-metrics' : metric.id.startsWith('database.') ? 'database-metrics' :
       metric.id.startsWith('process.') ? 'process-trends' : metric.id.startsWith('session.') ? 'session-trends' : 'metrics';
     let samples = state.history[metric.id] || [], unit = metric.unit;
     if (metric.kind === 'counter' && group === 'database-metrics' && $('counter-mode').value === 'rate') {

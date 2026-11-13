@@ -17,6 +17,12 @@ test('counter rates use elapsed seconds and break on resets, gaps and duplicate 
   assert.deepEqual(charts.rate(samples).map(p => p.value), [null, 10, null, null, null, null, null]);
 });
 
+test('uptime is a readout while changing license usage stays graphed', () => {
+  assert.equal(charts.hasGraph({ id: 'app.uptime', type: 'number', kind: 'gauge' }), false);
+  assert.equal(charts.hasGraph({ id: 'license.usage.records', type: 'number', kind: 'gauge' }), true);
+  assert.equal(charts.hasGraph({ id: 'system.cores', type: 'number', kind: 'static' }), false);
+});
+
 test('identity tracking distinguishes disappearance from enumeration failure and missing CPU', () => {
   const samples = [
     { at: at(0), processes: { entities: { 'p:1': { state: 'executing', cpu: 0.1 } } } },

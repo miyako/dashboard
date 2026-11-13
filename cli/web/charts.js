@@ -1,6 +1,9 @@
 'use strict';
 const DashboardCharts = (() => {
   const windowMs = 120000;
+  function hasGraph(metric) {
+    return metric.type === 'number' && metric.kind !== 'static' && metric.id !== 'app.uptime';
+  }
   function rate(samples) {
     return samples.map((sample, i) => {
       const previous = samples[i - 1];
@@ -43,6 +46,6 @@ const DashboardCharts = (() => {
         ? null : values.reduce((sum, e) => sum + e.cpu * 100, 0) };
     });
   }
-  return { windowMs, rate, plot, entities, cpu };
+  return { windowMs, hasGraph, rate, plot, entities, cpu };
 })();
 if (typeof module !== 'undefined') module.exports = DashboardCharts;

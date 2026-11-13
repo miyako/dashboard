@@ -18,6 +18,9 @@ graphs and a rate-per-second / cumulative-total selector. Rates use elapsed
 sample time, not an assumed frequency; resets, unavailable data and pauses over
 15 seconds break the trace instead of inventing zero or interpolation.
 The latest scalar is secondary to the graph. Changing tabs never stops collection.
+Uptime remains an updating readout in **Instance information**, not a graph.
+Live license-usage graphs count retained records returned by **4D Server**,
+in total and by product; client, standalone and tool4d contexts show unsupported.
 
 **Processes & sessions** provides **Snapshot** tables and **Tracking** views:
 counts over time, summed visible process CPU, per-process CPU, and per-identity
@@ -131,6 +134,7 @@ this version neither aggregates instances nor executes remote administration.
 | [Process activity](https://developer.4d.com/docs/21/commands/process-activity), [Process info](https://developer.4d.com/docs/21/commands/process-info) | Local visible processes, CPU fraction, numeric type/state and opaque identity; activity entries retain internal processes unavailable through Process info |
 | [Session info](https://developer.4d.com/docs/21/commands/session-info) | Opaque server session identity, type and state; enumeration requires the server's Process activity sessions list |
 | [License info](https://developer.4d.com/docs/21/commands/license-info) | Product name only, once at collector construction; the command itself reloads license rights from disk. Null or command failure stays unavailable |
+| [License usage](https://developer.4d.com/docs/21/commands/license-usage) | 4D Server only: total and per-product counts of the currently returned retained-license records, sampled every refresh |
 | [Is compiled mode](https://developer.4d.com/docs/21/commands/is-compiled-mode) | Host mode (`*`), independently of the component's mode |
 | [Is data file locked](https://developer.4d.com/docs/21/commands/is-data-file-locked) | Write protection, **not** record locks |
 | [Is macOS](https://developer.4d.com/docs/21/commands/is-macos), [Is Windows](https://developer.4d.com/docs/21/commands/is-windows) | Collecting platform |
@@ -142,6 +146,16 @@ errors and absent process enumeration are reported rather than fabricated.
 Static OS/license information is cached for each monitor lifetime; restart the
 monitor to refresh it. CPU percentages retain 4D's OS-specific semantics.
 Process CPU is a 0..1 fraction; database counters are totals, not rates.
+
+License usage sends only product IDs/names and derived record counts. It never
+sends license tokens, reasons/callers, retention timestamps or session objects.
+The command's `productUsedCount`, `productBalance` and
+`globalProductUsedCount` describe values **at retention time**, not a fresh
+census; they are not summed or presented as current capacity. Known products
+remain at zero when absent from a successful complete enumeration, so releases
+remain visible on their graphs. Errors/Null produce gaps, never zero.
+At most 64 product identities are retained per monitor lifetime; exceeding
+that limit reports an error without accepting partial counts.
 
 Only allowlisted scalar fields leave 4D. User/account names, machine names,
 process names, session usernames/IPs, license numbers/keys/email/company,

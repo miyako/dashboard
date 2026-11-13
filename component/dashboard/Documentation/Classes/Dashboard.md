@@ -27,6 +27,9 @@ Use persistent monitoring to cache static OS/license fields; a one-off collect
 constructs a fresh collector. Every metric reports availability, not invented
 zero values. License info's documented rights reload occurs once per collector.
 Only allowlisted scalar fields are returned.
+`License usage` is sampled only on 4D Server, yielding total/per-product
+retained-record gauges. Other contexts report unsupported. Session fields,
+tokens/callers and historical retention-time balances are not exported.
 
 `version() : Object` runs the finite CLI version command and decodes
 `{"protocol":1,"version":"0.1.0"}`.
@@ -46,3 +49,5 @@ information and database tabs. Process/session views include current snapshots
 and bounded state/CPU tracking across the last 60 samples. Database graphs can
 show cumulative totals or elapsed-time rates; missing samples and counter
 resets create gaps. No change to the 4D methods or input protocol is required.
+Uptime is an updating information readout, not a graph. License usage appears
+in live tracking with at most 64 product identities retained per monitor.
