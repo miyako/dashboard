@@ -176,7 +176,13 @@ func validMetric(m metric) bool {
 		switch m.Type {
 		case "number":
 			v, ok := m.Value.(float64)
-			return ok && !math.IsNaN(v) && !math.IsInf(v, 0)
+			if !ok || math.IsNaN(v) || math.IsInf(v, 0) {
+				return false
+			}
+			if m.Unit == "records" {
+				return v >= 0 && v <= 9007199254740991 && math.Trunc(v) == v
+			}
+			return true
 		case "text":
 			v, ok := m.Value.(string)
 			return ok && len(v) <= 512

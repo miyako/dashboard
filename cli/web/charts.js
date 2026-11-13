@@ -4,6 +4,19 @@ const DashboardCharts = (() => {
   function hasGraph(metric) {
     return metric.type === 'number' && metric.kind !== 'static' && metric.id !== 'app.uptime';
   }
+  const overlaps = [
+    { id: 'network', label: 'Network traffic (machine)', unit: 'B/s', metrics: [
+      { id: 'app.networkInputThroughput', label: 'Inbound' },
+      { id: 'app.networkOutputThroughput', label: 'Outbound' },
+    ] },
+    { id: 'cache', label: 'Cache memory', unit: 'bytes', metrics: [
+      { id: 'cache.usedMem', label: 'Used' },
+      { id: 'cache.maxMem', label: 'Capacity' },
+    ] },
+  ];
+  function integerUnit(unit) {
+    return ['records', 'processes', 'sessions'].includes(unit);
+  }
   function rate(samples) {
     return samples.map((sample, i) => {
       const previous = samples[i - 1];
@@ -13,11 +26,15 @@ const DashboardCharts = (() => {
       return { at: sample.at, value };
     });
   }
-  function plot(samples, end) {
+  function plot(samples, end, { integer = false, range } = {}) {
     const start = end - windowMs;
     const visible = samples.filter(p => Date.parse(p.at) >= start && Date.parse(p.at) <= end);
     const values = visible.filter(p => Number.isFinite(p.value)).map(p => p.value);
-    const lo = Math.min(0, ...values), hi = Math.max(1, ...values);
+    let lo = range ? range.lo : Math.min(0, ...values), hi = range ? range.hi : Math.max(1, ...values);
+    if (integer && !range) {
+      const step = Math.max(1, Math.ceil((hi - lo) / 3));
+      lo = Math.floor(lo / step) * step; hi = lo + step * 3;
+    }
     let drawing = false;
     let previousAt;
     const path = visible.map(p => {
@@ -25,10 +42,15 @@ const DashboardCharts = (() => {
       if (previousAt !== undefined && Date.parse(p.at) - previousAt > 15000) drawing = false;
       const x = 56 + (Date.parse(p.at) - start) * 524 / windowMs;
       const y = 170 - (p.value - lo) * 150 / (hi - lo);
-      const command = drawing ? 'L' : 'M'; drawing = true; previousAt = Date.parse(p.at);
-      return `${command}${x.toFixed(2)},${y.toFixed(2)}`;
+      const point = drawing && integer ? `H${x.toFixed(2)} V${y.toFixed(2)}` : `${drawing ? 'L' : 'M'}${x.toFixed(2)},${y.toFixed(2)}`;
+      drawing = true; previousAt = Date.parse(p.at);
+      return point;
     }).join(' ');
     return { path, lo, hi, start, end, count: values.length };
+  }
+  function overlay(series, end, integer = false) {
+    const scale = plot(series.flat(), end, { integer });
+    return { scale, plots: series.map(samples => plot(samples, end, { integer, range: scale })) };
   }
   function entities(samples, kind, id) {
     return samples.map(sample => {
@@ -46,6 +68,6 @@ const DashboardCharts = (() => {
         ? null : values.reduce((sum, e) => sum + e.cpu * 100, 0) };
     });
   }
-  return { windowMs, hasGraph, rate, plot, entities, cpu };
+  return { windowMs, hasGraph, overlaps, integerUnit, rate, plot, overlay, entities, cpu };
 })();
 if (typeof module !== 'undefined') module.exports = DashboardCharts;

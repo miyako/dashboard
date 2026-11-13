@@ -19,6 +19,12 @@ svg.chart{height:auto;aspect-ratio:600/205;display:block;margin-top:1rem;overflo
 .axis{font:12px system-ui,sans-serif;fill:var(--muted)}
 .trace{stroke:var(--accent);fill:none;stroke-width:2;vector-effect:non-scaling-stroke;stroke-linejoin:round}
 .sample-dot{fill:var(--accent)}
+.series-0{--series-color:var(--accent)}.series-1{--series-color:#dc8232}
+.trace.series-0,.trace.series-1{stroke:var(--series-color)}
+.trace.series-1{stroke-dasharray:6 3}
+.sample-dot.series-0,.sample-dot.series-1{fill:var(--series-color)}
+.series-key{display:flex;align-items:center;gap:.4rem;color:var(--fg);font-size:.85rem;overflow-wrap:anywhere}
+.series-key:before{content:"";flex-shrink:0;width:1.2rem;height:.2rem;background:var(--series-color)}
 .section-heading{display:flex;gap:1rem;align-items:center;justify-content:space-between;flex-wrap:wrap}
 .timeline-card{margin:1rem 0}.timeline-card label{max-width:100%}.timeline-card select{width:100%;min-width:0}
 svg.timeline{height:auto;aspect-ratio:600/76;display:block;margin-top:1rem}

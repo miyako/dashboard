@@ -93,6 +93,27 @@ func TestInvalidFrames(t *testing.T) {
 	}
 }
 
+func TestRecordCountsAreWholeNonnegativeSafeIntegers(t *testing.T) {
+	for _, test := range []struct {
+		value float64
+		valid bool
+	}{{0, true}, {3, true}, {0.3, false}, {-1, false}, {9007199254740991, true}, {9007199254740992, false}} {
+		t.Run(fmt.Sprint(test.value), func(t *testing.T) {
+			s := newService("http://127.0.0.1", "token")
+			hello(t, s)
+			sample := frame("snapshot", 2)
+			sample.Metrics = []metric{{ID: "license.usage.records", Label: "Retained license records", Type: "number", Unit: "records", Kind: "gauge", Availability: "available", Value: test.value}}
+			err := s.apply(sample)
+			if (err == nil) != test.valid {
+				t.Fatalf("record count %v: %v", test.value, err)
+			}
+			if !test.valid && s.current.Seq != 1 {
+				t.Fatal("invalid record count mutated state")
+			}
+		})
+	}
+}
+
 func TestBoundedHistoryAndCoalescing(t *testing.T) {
 	s := newService("http://127.0.0.1", "token")
 	hello(t, s)

@@ -23,6 +23,25 @@ test('uptime is a readout while changing license usage stays graphed', () => {
   assert.equal(charts.hasGraph({ id: 'system.cores', type: 'number', kind: 'static' }), false);
 });
 
+test('license counts use integer ticks and step traces without fractional interpolation', () => {
+  const samples = [{at:at(0),value:1}, {at:at(2),value:2}, {at:at(4),value:null}, {at:at(6),value:0}];
+  const plot = charts.plot(samples, Date.parse(at(120)), {integer:charts.integerUnit('records')});
+  assert.equal(plot.path, 'M56.00,120.00 H64.73 V70.00  M82.20,170.00');
+  assert.ok([0,1,2,3].every(i => Number.isInteger(plot.hi - (plot.hi-plot.lo)*i/3)));
+  const empty = charts.plot([], Date.parse(at(120)), {integer:true});
+  assert.ok([0,1,2,3].every(i => Number.isInteger(empty.hi - (empty.hi-empty.lo)*i/3)));
+});
+
+test('overlapping traces share a scale without summing capacity and usage or bridging gaps', () => {
+  const used = [{at:at(0),value:60}, {at:at(2),value:null}, {at:at(4),value:20}];
+  const capacity = [{at:at(0),value:100}, {at:at(4),value:100}];
+  const overlay = charts.overlay([used,capacity], Date.parse(at(120)));
+  assert.equal(overlay.scale.hi, 100);
+  assert.equal(overlay.plots[0].path, 'M56.00,80.00  M73.47,140.00');
+  assert.equal(overlay.plots[1].path, 'M56.00,20.00 L73.47,20.00');
+  assert.ok(overlay.plots.every(plot => plot.lo === 0 && plot.hi === 100));
+});
+
 test('identity tracking distinguishes disappearance from enumeration failure and missing CPU', () => {
   const samples = [
     { at: at(0), processes: { entities: { 'p:1': { state: 'executing', cpu: 0.1 } } } },

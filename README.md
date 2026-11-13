@@ -21,6 +21,11 @@ The latest scalar is secondary to the graph. Changing tabs never stops collectio
 Uptime remains an updating readout in **Instance information**, not a graph.
 Live license-usage graphs count retained records returned by **4D Server**,
 in total and by product; client, standalone and tool4d contexts show unsupported.
+Record counts use whole-number axes and step traces, not fractional licenses.
+The protocol rejects fractional/negative/unsafe record counts.
+Network inbound/outbound rates share one overlapping chart; cache used/capacity
+share another. Both use a common scale, separate colored/dashed traces and
+individual readouts, not a misleading sum of capacity and usage.
 
 **Processes & sessions** provides **Snapshot** tables and **Tracking** views:
 counts over time, summed visible process CPU, per-process CPU, and per-identity

@@ -51,3 +51,5 @@ show cumulative totals or elapsed-time rates; missing samples and counter
 resets create gaps. No change to the 4D methods or input protocol is required.
 Uptime is an updating information readout, not a graph. License usage appears
 in live tracking with at most 64 product identities retained per monitor.
+License records have integer axes/step traces. Network rates share one
+overlapping chart, as do cache used/capacity values; they are not summed.
