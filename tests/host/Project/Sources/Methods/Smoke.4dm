@@ -187,6 +187,41 @@ var $measurement : Object
 var $licenseCaseName : Text
 var $productIndex : Integer
 $collector:=cs.Dashboard._DashboardCollector.new()
+HOST_Phase:="datastore normalization"
+var $metadataCases; $metadataCase : Object
+var $metadataEntries : Collection
+var $metadataIndex : Integer
+$metadataCases:=New object(\
+	"populated"; New object("ok"; True; "data"; New object("info"; New object("type"; "4D"; "networked"; False; "localID"; "private-id"; "connection"; New object("hostname"; "private-ip"; "user"; "private-user")); "classes"; New collection(New object("exposed"; True; "name"; "private-class"; "primaryKey"; "private-key"; "tableNumber"; 999); New object("exposed"; False)))); \
+	"empty"; New object("ok"; True; "data"; New object("info"; New object("type"; "4D"; "networked"; False); "classes"; New collection)); \
+	"failed"; New object("ok"; False); \
+	"absent"; New object("ok"; True; "data"; Null); \
+	"invalid"; New object("ok"; True; "data"; New object("info"; New object("type"; "4D"; "networked"; False); "classes"; New collection(New object("exposed"; True); New object("exposed"; "true")))); \
+	"invalidInfo"; New object("ok"; True; "data"; New object("info"; False)); \
+	"invalidType"; New object("ok"; True; "data"; New object("info"; New object("type"; "private-type"; "networked"; Null); "classes"; New collection)); \
+	"invalidEntry"; New object("ok"; True; "data"; New object("info"; New object("type"; "4D"; "networked"; False); "classes"; New collection(False))); \
+	"truncated"; New object("ok"; True; "data"; New object("info"; New object("type"; "4D"; "networked"; False); "classes"; New collection; "limitExceeded"; True)))
+$metadataEntries:=New collection
+For ($metadataIndex; 1; 512)
+	$metadataEntries.push(New object("exposed"; False))
+End for
+$metadataCases.boundary:=New object("ok"; True; "data"; New object("info"; New object("type"; "4D"; "networked"; False); "classes"; $metadataEntries.copy()))
+$metadataEntries.push(New object("exposed"; True))
+$metadataCases.overflow:=New object("ok"; True; "data"; New object("info"; New object("type"; "4D"; "networked"; False); "classes"; $metadataEntries))
+$report.datastore:=New object
+For each ($name; OB Keys($metadataCases))
+	$metadataCase:=New object
+	$normalized:=$collector._datastoreMetrics($metadataCases[$name])
+	If ($normalized.length#5)
+		$report.success:=False
+	End if
+	For each ($measurement; $normalized)
+		$metadataCase[$measurement.id]:=$measurement
+	End for each
+	$report.datastore[$name]:=$metadataCase
+End for each
+$report.datastore.cached:=(JSON Stringify($collector.staticMetrics)=JSON Stringify($collector.snapshot().metrics.slice(0; $collector.staticMetrics.length)))
+HOST_Phase:="license usage normalization"
 $licenseEntries:=New collection(\
 	New object("productId"; 7; "productName"; "Client"; "productUsedCount"; 500; "productBalance"; 200; "token"; 123456; "reason"; "private caller"; "session"; New object("userName"; "private user")); \
 	New object("productId"; 17; "productName"; "REST"; "globalProductUsedCount"; 999); \

@@ -18,7 +18,27 @@ class CrudEvidenceTests(unittest.TestCase):
             "baseline": {"DB": {field: {"value": 10} for field in fields}},
             "samples": [{"measures": {"DB": {field: {"value": 20} for field in fields}}}],
             "final": {"DB": {field: {"value": 30} for field in fields}},
+            "datastore": {
+                "datastore." + field: {"id": "datastore." + field, "label": field,
+                    "type": "text" if field == "type" else "boolean" if field == "networked" else "number",
+                    "unit": "" if field in ("type", "networked") else "dataclasses",
+                    "kind": "static", "availability": "available", "value": value}
+                for field, value in {"type": "4D", "networked": False, "classes": 1,
+                                     "exposed": 0, "unexposed": 1}.items()
+            },
         }
+
+    def test_requires_genuine_host_schema_and_no_private_metadata(self):
+        for update in ({"value": 0}, {"availability": "unsupported"},
+                       {"name": "private-class"}, {"value": True}):
+            bad = copy.deepcopy(self.report)
+            bad["datastore"]["datastore.classes"].update(update)
+            with self.subTest(update=update), self.assertRaisesRegex(ValueError, "datastore"):
+                verify(bad)
+        bad = copy.deepcopy(self.report)
+        del bad["datastore"]
+        with self.assertRaisesRegex(ValueError, "Datastore"):
+            verify(bad)
 
     def test_requires_round_trips_and_real_counter_movement(self):
         result = verify(self.report)

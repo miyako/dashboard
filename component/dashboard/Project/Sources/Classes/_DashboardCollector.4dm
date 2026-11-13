@@ -52,10 +52,16 @@ Class constructor
 	Else
 		This.staticMetrics.push(This.unavailable("license.product"; "Licensed product"; "text"; ""; "static"; "error"; "License info failed"))
 	End if
+	For each ($read; This._datastoreMetrics(This.read("datastore")))
+		This.staticMetrics.push($read)
+	End for each
 
 Function read($command : Text)->$result : Object
 	var $previous : Text
 	var $data : Variant
+	var $store; $class : Object
+	var $classes : Collection
+	var $name : Text
 	var CLI_LastErrors : Collection
 	$previous:=Method called on error(ek local)
 	CLI_LastErrors:=Null
@@ -75,6 +81,26 @@ Function read($command : Text)->$result : Object
 			$data:=Database measures(New object("withHistory"; False; "path"; New collection("DB.diskReadBytes"; "DB.diskWriteBytes"; "DB.cacheReadBytes"; "DB.cacheMissBytes"; "DB.diskReadCount"; "DB.diskWriteCount"; "DB.cacheReadCount"; "DB.cacheMissCount")))
 		: ($command="activity")
 			$data:=Process activity
+		: ($command="datastore")
+			$store:=ds
+			If ($store#Null)
+				$classes:=New collection
+				$data:=New object("info"; $store.getInfo(); "classes"; $classes)
+				// Enumerate model properties only; never query entities or copy the datastore.
+				For each ($name; $store)
+					If ($classes.length=512)
+						$data.limitExceeded:=True
+						break
+					End if
+					$class:=$store[$name]
+					$classes.push($class.getInfo())
+					If (CLI_LastErrors#Null)
+						break
+					End if
+				End for each
+			Else
+				$data:=Null
+			End if
 	End case
 	ON ERR CALL($previous; ek local)
 	$result:=New object("ok"; CLI_LastErrors=Null; "data"; $data)
@@ -99,6 +125,105 @@ Function metric($id : Text; $label : Text; $type : Text; $unit : Text; $kind : T
 
 Function unavailable($id : Text; $label : Text; $type : Text; $unit : Text; $kind : Text; $status : Text; $reason : Text)->$metric : Object
 	$metric:=New object("id"; $id; "label"; $label; "type"; $type; "unit"; $unit; "kind"; $kind; "availability"; $status; "reason"; $reason)
+
+Function _datastoreMetrics($read : Object)->$metrics : Collection
+	var $info; $data : Object
+	var $entry : Variant
+	var $status; $reason; $field; $type; $unit; $label : Text
+	var $exposed : Integer
+	$metrics:=New collection
+	$status:="error"
+	$reason:="Datastore metadata failed"
+	If ($read.ok)
+		Case of
+			: ($read.data=Null)
+				$status:="unsupported"
+				$reason:="No datastore available in this host"
+			: (Value type($read.data)#Is object)
+				$reason:="Invalid datastore metadata"
+			Else
+				$data:=$read.data
+				If (Value type($data.info)=Is object)
+					$info:=$data.info
+					If (Value type($info.type)=Is text)
+						If (($info.type="4D") | ($info.type="4D Server"))
+							$metrics.push(This.metric("datastore.type"; "Host datastore type"; "text"; ""; "static"; $info.type))
+						End if
+					End if
+					If ($metrics.length=0)
+						$metrics.push(This.unavailable("datastore.type"; "Host datastore type"; "text"; ""; "static"; "error"; "Invalid datastore type"))
+					End if
+					$metrics.push(This.metric("datastore.networked"; "Host datastore networked"; "boolean"; ""; "static"; $info.networked))
+					If (Value type($data.classes)=Is collection)
+						$status:="available"
+						If (($data.classes.length>512) | ($data.limitExceeded=True))
+							$status:="error"
+							$reason:="Dataclass metadata limit exceeded (512)"
+						Else
+							For each ($entry; $data.classes)
+								If (Value type($entry)#Is object)
+									$status:="error"
+									$reason:="Invalid dataclass metadata"
+									break
+								End if
+								If (Value type($entry.exposed)#Is boolean)
+									$status:="error"
+									$reason:="Invalid dataclass exposure"
+									break
+								End if
+								If ($entry.exposed)
+									$exposed+=1
+								End if
+							End for each
+						End if
+					Else
+						$reason:="Missing dataclass metadata"
+					End if
+					If (($metrics[0].availability#"available") | ($metrics[1].availability#"available"))
+						$status:="error"
+						$reason:="Invalid datastore information"
+					End if
+				Else
+					$reason:="Invalid datastore information"
+				End if
+		End case
+	End if
+	For each ($field; New collection("type"; "networked"; "classes"; "exposed"; "unexposed"))
+		$type:="number"
+		$unit:="dataclasses"
+		$label:="Mapped dataclasses"
+		Case of
+			: ($field="type")
+				$type:="text"
+				$unit:=""
+				$label:="Host datastore type"
+			: ($field="networked")
+				$type:="boolean"
+				$unit:=""
+				$label:="Host datastore networked"
+			: ($field="exposed")
+				$label:="REST-exposed dataclasses"
+			: ($field="unexposed")
+				$label:="REST-unexposed dataclasses"
+		End case
+		If ($metrics.length>=2)
+			If (($field="type") | ($field="networked"))
+				continue
+			End if
+		End if
+		If ($status="available")
+			Case of
+				: ($field="classes")
+					$metrics.push(This.metric("datastore."+$field; $label; $type; $unit; "static"; $data.classes.length))
+				: ($field="exposed")
+					$metrics.push(This.metric("datastore."+$field; $label; $type; $unit; "static"; $exposed))
+				: ($field="unexposed")
+					$metrics.push(This.metric("datastore."+$field; $label; $type; $unit; "static"; $data.classes.length-$exposed))
+			End case
+		Else
+			$metrics.push(This.unavailable("datastore."+$field; $label; $type; $unit; "static"; $status; $reason))
+		End if
+	End for each
 
 Function licenseUsage()->$metrics : Collection
 	If (Application type=4D Server)
