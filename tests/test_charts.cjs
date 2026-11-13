@@ -42,6 +42,32 @@ test('overlapping traces share a scale without summing capacity and usage or bri
   assert.ok(overlay.plots.every(plot => plot.lo === 0 && plot.hi === 100));
 });
 
+test('mirrored disk I/O centers zero with reads above and writes below on an equal scale', () => {
+  const read = [{at:at(0),value:100}, {at:at(2),value:null}, {at:at(4),value:20}];
+  const write = [{at:at(0),value:20}, {at:at(4),value:100}];
+  const mirror = charts.mirror([read,write], Date.parse(at(120)));
+  assert.equal(mirror.scale.hi, 100);
+  assert.equal(mirror.scale.lo, -100);
+  assert.equal(mirror.plots[0].path, 'M56.00,20.00  M73.47,80.00');
+  assert.equal(mirror.plots[1].path, 'M56.00,110.00 L73.47,170.00');
+  assert.equal((mirror.scale.hi + mirror.scale.lo) / 2, 0);
+  assert.equal(write[1].value, 100);
+  const missingRead = charts.mirror([[],write], Date.parse(at(120)));
+  assert.equal(missingRead.plots[0].count, 0);
+  assert.equal(missingRead.plots[1].path, mirror.plots[1].path);
+  const empty = charts.mirror([[],[]], Date.parse(at(120)));
+  assert.equal(empty.scale.hi, 1);
+  assert.equal(empty.scale.lo, -1);
+});
+
+test('mirrored counter rates are computed before flipping writes and retain resets and integer totals', () => {
+  const writes = [{at:at(0),value:10}, {at:at(2),value:30}, {at:at(4),value:1}, {at:at(6),value:5}];
+  const mirror = charts.mirror([[],charts.rate(writes)], Date.parse(at(120)));
+  assert.deepEqual(mirror.series[1].map(p=>p.value), [null,-10,null,-2]);
+  const totals = charts.mirror([[],writes], Date.parse(at(120)), true);
+  assert.ok([0,1,2,3,4].every(i => Number.isInteger(totals.scale.hi - (totals.scale.hi-totals.scale.lo)*i/4)));
+});
+
 test('identity tracking distinguishes disappearance from enumeration failure and missing CPU', () => {
   const samples = [
     { at: at(0), processes: { entities: { 'p:1': { state: 'executing', cpu: 0.1 } } } },

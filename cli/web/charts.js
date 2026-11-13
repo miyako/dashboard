@@ -14,8 +14,18 @@ const DashboardCharts = (() => {
       { id: 'cache.maxMem', label: 'Capacity' },
     ] },
   ];
+  const mirrors = [
+    { id: 'disk-bytes', label: 'Disk I/O (bytes)', unit: 'bytes', mirrored: true, metrics: [
+      { id: 'database.diskReadBytes', label: 'Read' },
+      { id: 'database.diskWriteBytes', label: 'Write' },
+    ] },
+    { id: 'disk-count', label: 'Disk I/O (operations)', unit: 'operations', mirrored: true, metrics: [
+      { id: 'database.diskReadCount', label: 'Read' },
+      { id: 'database.diskWriteCount', label: 'Write' },
+    ] },
+  ];
   function integerUnit(unit) {
-    return ['records', 'processes', 'sessions'].includes(unit);
+    return ['records', 'processes', 'sessions', 'operations'].includes(unit);
   }
   function rate(samples) {
     return samples.map((sample, i) => {
@@ -52,6 +62,17 @@ const DashboardCharts = (() => {
     const scale = plot(series.flat(), end, { integer });
     return { scale, plots: series.map(samples => plot(samples, end, { integer, range: scale })) };
   }
+  function mirror(series, end, integer = false) {
+    const signed = series.map((samples, i) => samples.map(sample => ({
+      ...sample, value: i === 1 && Number.isFinite(sample.value) ? -sample.value : sample.value,
+    })));
+    const bounds = plot(signed.flat(), end);
+    let magnitude = Math.max(Math.abs(bounds.lo), bounds.hi);
+    if (integer) magnitude = Math.max(2, Math.ceil(magnitude / 2) * 2);
+    const range = { lo: -magnitude, hi: magnitude };
+    return { scale: plot(signed.flat(), end, { range }), series: signed,
+      plots: signed.map(samples => plot(samples, end, { integer, range })) };
+  }
   function entities(samples, kind, id) {
     return samples.map(sample => {
       const items = sample[kind].entities;
@@ -68,6 +89,6 @@ const DashboardCharts = (() => {
         ? null : values.reduce((sum, e) => sum + e.cpu * 100, 0) };
     });
   }
-  return { windowMs, hasGraph, overlaps, integerUnit, rate, plot, overlay, entities, cpu };
+  return { windowMs, hasGraph, overlaps, mirrors, integerUnit, rate, plot, overlay, mirror, entities, cpu };
 })();
 if (typeof module !== 'undefined') module.exports = DashboardCharts;

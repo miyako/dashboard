@@ -73,34 +73,42 @@ function drawOverlay(group, state) {
       svgEl('svg', { viewBox: '0 0 600 205', role: 'img', class: 'chart' }));
     cardNodes.set(key, node);
   }
-  const series = group.metrics.filter(item => state.metrics[item.id]).map(item => ({
-    metric: state.metrics[item.id], label: item.label, color: group.metrics.indexOf(item), samples: state.history[item.id] || [],
+  const rate = group.mirrored && $('counter-mode').value === 'rate';
+  const unit = rate ? group.unit + '/s' : group.unit;
+  const series = group.metrics.filter(item => group.mirrored || state.metrics[item.id]).map(item => ({
+    metric: state.metrics[item.id] || { availability: 'missing', reason: 'No measurements provided' },
+    label: item.label, color: group.metrics.indexOf(item),
+    samples: rate ? DashboardCharts.rate(state.history[item.id] || []) : state.history[item.id] || [],
   }));
   node.children[1].replaceChildren(...series.map((item, i) => {
     const metric = item.metric;
     const value = metric.availability === 'available' ? `${format(metric.value)} ${group.unit}` : `${metric.availability}: ${metric.reason}`;
     return el('span', `${item.label}: ${value}`, 'series-key series-' + item.color);
   }));
-  node.children[2].textContent = `Overlapping traces / shared ${group.unit} scale`;
-  const item = { graph: node.children[3], metric: { label: group.label }, series, unit: group.unit };
+  node.children[2].textContent = group.mirrored
+    ? `Read above / write below the centered time axis / shared ${unit} scale. Readouts are cumulative totals.`
+    : `Overlapping traces / shared ${group.unit} scale`;
+  const item = { graph: node.children[3], metric: { label: group.label }, series, unit, mirrored: group.mirrored };
   graphNodes.set(key, item); drawPlot(item);
   return node;
 }
-function drawPlot({ graph, samples, metric, unit, series }) {
-  const lines = series || [{ samples, label: metric.label }];
+function drawPlot({ graph, samples, metric, unit, series, mirrored }) {
+  let lines = series || [{ samples, label: metric.label }];
   const integer = DashboardCharts.integerUnit(unit);
-  const { scale: plot, plots } = DashboardCharts.overlay(lines.map(item => item.samples), Date.now(), integer);
-  graph.setAttribute('aria-label', `${metric.label}: ${plot.count} available samples in the last two minutes, ${unit || 'value'} from ${format(plot.lo)} to ${format(plot.hi)}`);
+  const geometry = (mirrored ? DashboardCharts.mirror : DashboardCharts.overlay)(lines.map(item => item.samples), Date.now(), integer);
+  const { scale: plot, plots } = geometry;
+  if (mirrored) lines = lines.map((line, i) => ({ ...line, samples: geometry.series[i] }));
+  graph.setAttribute('aria-label', mirrored
+    ? `${metric.label}: reads above zero, writes below zero, centered time axis; ${plot.count} available samples, up to ${format(plot.hi)} ${unit} in either direction`
+    : `${metric.label}: ${plot.count} available samples in the last two minutes, ${unit || 'value'} from ${format(plot.lo)} to ${format(plot.hi)}`);
   const nodes = [svgEl('title', {}, graph.getAttribute('aria-label'))];
-  for (let i = 0; i <= 3; i++) {
-    const y = 20 + i * 50;
+  const divisions = mirrored ? 4 : 3;
+  for (let i = 0; i <= divisions; i++) {
+    const y = 20 + i * 150 / divisions;
     nodes.push(svgEl('line', { x1: 56, x2: 580, y1: y, y2: y, class: 'gridline' }));
-    const tick = plot.hi - (plot.hi - plot.lo) * i / 3;
+    const value = plot.hi - (plot.hi - plot.lo) * i / divisions;
+    const tick = mirrored ? Math.abs(value) : value;
     nodes.push(svgEl('text', { x: 48, y: y + 4, 'text-anchor': 'end', class: 'axis' }, integer ? new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(tick) : axisFormat(tick)));
-  }
-  for (let i = 0; i <= 2; i++) {
-    const at = plot.start + i * DashboardCharts.windowMs / 2;
-    nodes.push(svgEl('text', { x: 56 + i * 262, y: 196, 'text-anchor': i === 0 ? 'start' : i === 2 ? 'end' : 'middle', class: 'axis' }, new Date(at).toLocaleTimeString()));
   }
   lines.forEach((line, i) => {
     const color = 'series-' + (line.color ?? i);
@@ -110,10 +118,21 @@ function drawPlot({ graph, samples, metric, unit, series }) {
       if (at < plot.start || at > plot.end || !Number.isFinite(sample.value)) continue;
       const dot = svgEl('circle', { cx: 56 + (at - plot.start) * 524 / DashboardCharts.windowMs,
         cy: 170 - (sample.value - plot.lo) * 150 / (plot.hi - plot.lo), r: 2.5, class: 'sample-dot ' + color });
-      dot.append(svgEl('title', {}, `${line.label} / ${new Date(at).toLocaleTimeString()}: ${format(sample.value)} ${unit}`)); nodes.push(dot);
+      dot.append(svgEl('title', {}, `${line.label} / ${new Date(at).toLocaleTimeString()}: ${format(mirrored ? Math.abs(sample.value) : sample.value)} ${unit}`)); nodes.push(dot);
     }
   });
-  if (!plot.count) nodes.push(svgEl('text', { x: 318, y: 96, 'text-anchor': 'middle', class: 'axis' }, 'No available samples'));
+  if (mirrored) {
+    nodes.push(svgEl('line', { x1: 56, x2: 580, y1: 95, y2: 95, class: 'zero-axis' }),
+      svgEl('text', { x: 580, y: 12, 'text-anchor': 'end', class: 'axis' }, 'Read'),
+      svgEl('text', { x: 580, y: 190, 'text-anchor': 'end', class: 'axis' }, 'Write'));
+  }
+  for (let i = 0; i <= 2; i++) {
+    const at = plot.start + i * DashboardCharts.windowMs / 2;
+    nodes.push(svgEl('text', { x: 56 + i * 262, y: mirrored ? 111 : 196,
+      'text-anchor': i === 0 ? 'start' : i === 2 ? 'end' : 'middle',
+      class: 'axis time-axis' }, new Date(at).toLocaleTimeString()));
+  }
+  if (!plot.count) nodes.push(svgEl('text', { x: 318, y: mirrored ? 57 : 96, 'text-anchor': 'middle', class: 'axis' }, 'No available samples'));
   graph.replaceChildren(...nodes);
 }
 function redrawGraphs() {
@@ -191,11 +210,13 @@ function render(state) {
   $('sample').textContent = state.sampledAt ? `Sample ${state.seq} / ${new Date(state.sampledAt).toLocaleTimeString()}` : 'Waiting for first sample';
   const groups = { metrics: [], 'static-metrics': [], 'database-metrics': [], 'process-trends': [], 'session-trends': [] };
   graphNodes.clear();
-  const combined = new Map(DashboardCharts.overlaps.flatMap(group => group.metrics.map(item => [item.id, group])));
+  const combined = new Map([...DashboardCharts.overlaps, ...DashboardCharts.mirrors].flatMap(group => group.metrics.map(item => [item.id, group])));
   for (const metric of Object.values(state.metrics || {}).sort((a, b) => a.id.localeCompare(b.id))) {
     if (combined.has(metric.id)) {
       const group = combined.get(metric.id);
-      if (group.metrics.find(item => state.metrics[item.id]).id === metric.id) groups.metrics.push(drawOverlay(group, state));
+      if (group.metrics.find(item => state.metrics[item.id]).id === metric.id) {
+        groups[group.mirrored ? 'database-metrics' : 'metrics'].push(drawOverlay(group, state));
+      }
       continue;
     }
     let group = metric.kind === 'static' || metric.id === 'app.uptime' ? 'static-metrics' : metric.id.startsWith('database.') ? 'database-metrics' :

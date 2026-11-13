@@ -53,3 +53,6 @@ Uptime is an updating information readout, not a graph. License usage appears
 in live tracking with at most 64 product identities retained per monitor.
 License records have integer axes/step traces. Network rates share one
 overlapping chart, as do cache used/capacity values; they are not summed.
+Database disk I/O uses paired mirrored graphs for bytes and operation counts,
+with reads above a centered time axis and writes below it on an equal scale.
+Readouts/tooltips show positive magnitudes; the normalized counters are unchanged.
