@@ -140,6 +140,32 @@ func TestBoundedHistoryAndCoalescing(t *testing.T) {
 	}
 }
 
+func TestStaticDatastoreCountsAreBoundedAndUnavailableIsNotZero(t *testing.T) {
+	for _, test := range []struct {
+		value float64
+		valid bool
+	}{{0, true}, {512, true}, {513, false}, {-1, false}, {1.5, false}} {
+		m := metric{ID: "datastore.classes", Label: "Mapped dataclasses", Type: "number", Unit: "dataclasses", Kind: "static", Availability: "available", Value: test.value}
+		if validMetric(m) != test.valid {
+			t.Fatalf("dataclass count %v", test.value)
+		}
+	}
+	s := newService("http://127.0.0.1", "token")
+	hello(t, s)
+	sample := frame("snapshot", 2)
+	sample.Metrics = []metric{
+		{ID: "datastore.type", Label: "Host datastore type", Type: "text", Kind: "static", Availability: "available", Value: "4D"},
+		{ID: "datastore.networked", Label: "Host datastore networked", Type: "boolean", Kind: "static", Availability: "available", Value: false},
+		{ID: "datastore.classes", Label: "Mapped dataclasses", Type: "number", Unit: "dataclasses", Kind: "static", Availability: "unsupported", Reason: "No datastore"},
+	}
+	if err := s.apply(sample); err != nil {
+		t.Fatal(err)
+	}
+	if len(s.current.History) != 0 || s.current.Metrics["datastore.classes"].Value != nil {
+		t.Fatal("static metadata graphed or unavailable became zero")
+	}
+}
+
 func TestRefreshCorrelation(t *testing.T) {
 	s := newService("http://127.0.0.1", "token")
 	hello(t, s)

@@ -27,6 +27,15 @@ Use persistent monitoring to cache static OS/license fields; a one-off collect
 constructs a fresh collector. Every metric reports availability, not invented
 zero values. License info's documented rights reload occurs once per collector.
 Only allowlisted scalar fields are returned.
+Static datastore metadata uses the host's main `ds`, not the component's matrix
+schema or a separately opened remote datastore. `DataStore.getInfo()` supplies
+type/networked; `DataClass.getInfo().exposed` supplies mapped/exposed/unexposed
+dataclass counts. At most 512 dataclasses are inspected once per collector.
+Any enumeration failure/overflow invalidates the counts, with no partial totals.
+Null datastore is unsupported. Counts exclude tables without a single primary
+key and say nothing about records, indexes or effective REST permissions.
+No names, primary keys, table numbers, paths, IDs or connection details are exported.
+Restart the monitor after schema changes; one-off `collect()` reads fresh metadata.
 `License usage` is sampled only on 4D Server, yielding total/per-product
 retained-record gauges. Other contexts report unsupported. Session fields,
 tokens/callers and historical retention-time balances are not exported.

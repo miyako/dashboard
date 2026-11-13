@@ -27,6 +27,20 @@ def verify(report):
             raise ValueError("CRUD operation count mismatch: " + operation)
     if report.get("service", {}).get("status") != "stopped":
         raise ValueError("Dashboard did not stop cleanly")
+    metadata = report.get("datastore", {})
+    expected = {"type": "4D", "networked": False, "classes": 1, "exposed": 0, "unexposed": 1}
+    if set(metadata) != {"datastore." + field for field in expected}:
+        raise ValueError("Datastore metric inventory mismatch")
+    for field, value in expected.items():
+        metric = metadata["datastore." + field]
+        unit = "" if field in ("type", "networked") else "dataclasses"
+        kind = "text" if field == "type" else "boolean" if field == "networked" else "number"
+        if (set(metric) != {"id", "label", "type", "unit", "kind", "availability", "value"}
+                or metric["id"] != "datastore." + field or metric["type"] != kind
+                or metric["unit"] != unit or metric["kind"] != "static"
+                or metric["availability"] != "available"
+                or type(metric["value"]) is not type(value) or metric["value"] != value):
+            raise ValueError("Invalid or private datastore metadata: " + field)
     measures = [report.get("baseline"), *[
         sample.get("measures") for sample in report.get("samples", [])
     ], report.get("final")]
@@ -48,7 +62,8 @@ def verify(report):
         if delta <= 0:
             raise ValueError("No measured database activity: " + field)
         deltas[field] = delta
-    return {"counts": counts, "rows": report["rows"], "counterDeltas": deltas}
+    return {"counts": counts, "rows": report["rows"], "counterDeltas": deltas,
+            "datastore": metadata, "componentCompiled": report.get("componentCompiled")}
 
 
 def stage(root, component):

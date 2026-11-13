@@ -182,6 +182,9 @@ func validMetric(m metric) bool {
 			if m.Unit == "records" {
 				return v >= 0 && v <= 9007199254740991 && math.Trunc(v) == v
 			}
+			if m.Unit == "dataclasses" {
+				return v >= 0 && v <= 512 && math.Trunc(v) == v
+			}
 			return true
 		case "text":
 			v, ok := m.Value.(string)

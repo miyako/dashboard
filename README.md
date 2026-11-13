@@ -7,6 +7,8 @@ started or used**.
 
 The first version is read-only: measurements, local process/session summaries,
 refresh, and light/dark/system appearance. There are no administrative commands.
+The researched [capability inventory and ordered roadmap](docs/dashboard-capabilities.md)
+separates 21 LTS observations from later APIs and future, separately gated administration.
 The mobile-aware interface uses system fonts, semantic HTML, keyboard-accessible
 controls, high-contrast themes and incremental SSE updates without page reloads.
 No CDN, JavaScript package manager or external runtime is needed.
@@ -190,6 +192,7 @@ this version neither aggregates instances nor executes remote administration.
 | [Is compiled mode](https://developer.4d.com/docs/21/commands/is-compiled-mode) | Host mode (`*`), independently of the component's mode |
 | [Is data file locked](https://developer.4d.com/docs/21/commands/is-data-file-locked) | Write protection, **not** record locks |
 | [Is macOS](https://developer.4d.com/docs/21/commands/is-macos), [Is Windows](https://developer.4d.com/docs/21/commands/is-windows) | Collecting platform |
+| [DataStore.getInfo()](https://developer.4d.com/docs/21/API/DataStoreClass#getinfo), [DataClass.getInfo()](https://developer.4d.com/docs/21/API/DataClassClass#getinfo) | Cached host main-datastore type/networked scalars and mapped/exposed/unexposed dataclass counts; no entities or schema names |
 
 Every measurement has explicit `available`, `missing`, `unsupported` or `error`
 availability. **Missing is not zero.** Empty database counters do not imply
@@ -198,6 +201,20 @@ errors and absent process enumeration are reported rather than fabricated.
 Static OS/license information is cached for each monitor lifetime; restart the
 monitor to refresh it. CPU percentages retain 4D's OS-specific semantics.
 Process CPU is a 0..1 fraction; database counters are totals, not rates.
+
+Datastore metadata is also cached per collector, appearing in **Instance information**.
+`datastore.type` is the native `"4D"` / `"4D Server"` enum, not the application role;
+the main `ds` remains `"4D"` on a remote client while `networked` is true.
+Only the host's main `ds` is inspected, never `Open datastore` connections.
+`datastore.classes`, `.exposed` and `.unexposed` count ORDA-mapped dataclasses,
+not all physical tables, attributes, indexes or records. Tables without a single
+primary key are not mapped. REST exposure is a schema flag, not proof of effective
+authorization or a running REST server. Enumeration stops before a 513th
+`getInfo()` call; overflow or any inaccessible/invalid class invalidates all
+three counts, without publishing partial totals. A genuinely empty mapped model
+can report zero; an absent datastore reports unsupported, never zero.
+Restart monitoring after schema changes. Dataclass names, primary-key names,
+table numbers, connection details and local datastore IDs never leave the collector.
 
 License usage sends only product IDs/names and derived record counts. It never
 sends license tokens, reasons/callers, retention timestamps or session objects.
