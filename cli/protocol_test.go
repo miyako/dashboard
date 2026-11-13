@@ -114,6 +114,52 @@ func TestRecordCountsAreWholeNonnegativeSafeIntegers(t *testing.T) {
 	}
 }
 
+func TestBackupMetadataContractAndNoRepeatedValueHistory(t *testing.T) {
+	for _, test := range []struct {
+		id, kind, unit string
+		value          any
+		valid          bool
+	}{
+		{"backup.statusCode", "number", "", float64(37), true},
+		{"backup.statusCode", "number", "", float64(-1), true},
+		{"backup.statusCode", "number", "", float64(1.5), false},
+		{"backup.duration", "number", "ms", float64(0), true},
+		{"backup.duration", "number", "ms", float64(1200), true},
+		{"backup.duration", "number", "s", float64(1200), false},
+		{"backup.duration", "number", "ms", float64(-1), false},
+		{"backup.duration", "number", "ms", float64(2147483648), false},
+		{"backup.lastAt", "text", "", "2026-11-14T00:00:00", true},
+		{"backup.nextAt", "text", "", "2026-11-15T00:00:00Z", false},
+		{"backup.lastAt", "text", "", "0000-00-00T00:00:00", false},
+		{"backup.beginUTC", "text", "", "2026-11-13T15:00:00.123Z", true},
+		{"backup.beginUTC", "text", "", "2026-02-31T15:00:00.123Z", false},
+		{"backup.beginUTC", "text", "", "2026-11-13T15:00:00Z", false},
+		{"backup.beginUTC", "text", "", "/private/backup", false},
+		{"backup.statusText", "text", "", "private status", false},
+	} {
+		t.Run(fmt.Sprint(test.id, test.value), func(t *testing.T) {
+			s := newService("http://127.0.0.1", "token")
+			hello(t, s)
+			sample := frame("snapshot", 2)
+			sample.Metrics = []metric{{ID: test.id, Label: "Backup", Type: test.kind, Unit: test.unit,
+				Kind: "static", Availability: "available", Value: test.value}}
+			err := s.apply(sample)
+			if (err == nil) != test.valid {
+				t.Fatalf("backup metadata: %v", err)
+			}
+			if !test.valid && s.current.Seq != 1 {
+				t.Fatal("invalid metadata mutated state")
+			}
+			if test.valid {
+				sample.Seq++
+				if err := s.apply(sample); err != nil || len(s.current.History) != 0 {
+					t.Fatal("cached metadata acquired a rate graph", err)
+				}
+			}
+		})
+	}
+}
+
 func TestBoundedHistoryAndCoalescing(t *testing.T) {
 	s := newService("http://127.0.0.1", "token")
 	hello(t, s)

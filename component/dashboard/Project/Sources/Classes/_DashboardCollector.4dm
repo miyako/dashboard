@@ -3,6 +3,8 @@ property staticMetrics : Collection
 property sampleCount : Integer
 property remote : Boolean
 property licenseProducts : Object
+property backupMetrics : Collection
+property backupReadAt : Real
 
 Class constructor
 	var $system; $license; $read : Object
@@ -62,6 +64,10 @@ Function read($command : Text)->$result : Object
 	var $store; $class : Object
 	var $classes : Collection
 	var $name : Text
+	var $date : Date
+	var $time : Time
+	var $number : Integer
+	var $text : Text
 	var CLI_LastErrors : Collection
 	$previous:=Method called on error(ek local)
 	CLI_LastErrors:=Null
@@ -81,6 +87,33 @@ Function read($command : Text)->$result : Object
 			$data:=Database measures(New object("withHistory"; False; "path"; New collection("DB.diskReadBytes"; "DB.diskWriteBytes"; "DB.cacheReadBytes"; "DB.cacheMissBytes"; "DB.diskReadCount"; "DB.diskWriteCount"; "DB.cacheReadCount"; "DB.cacheMissCount")))
 		: ($command="activity")
 			$data:=Process activity
+		: ($command="backupContext")
+			$store:=ds
+			If ($store#Null)
+				$data:=$store.getInfo()
+			Else
+				$data:=Null
+			End if
+		: ($command="backupLast")
+			BACKUP INFO(Last backup date; $date; $time)
+			$data:=New object("local"; "")
+			If ($date#!0000-00-00!)
+				$data.local:=String($date; ISO date; $time)
+			End if
+		: ($command="backupNext")
+			BACKUP INFO(Next backup date; $date; $time)
+			$data:=New object("local"; "")
+			If ($date#!0000-00-00!)
+				$data.local:=String($date; ISO date; $time)
+			End if
+		: ($command="backupStatus")
+			BACKUP INFO(Last backup status; $number; $text)
+			// Native status text can contain private paths; never return it.
+			$data:=New object("code"; $number)
+		: ($command="backupInformation")
+			$number:=-1
+			BACKUP INFO(Last backup information; $number; $text)
+			$data:=New object("duration"; $number; "begin"; $text)
 		: ($command="datastore")
 			$store:=ds
 			If ($store#Null)
@@ -232,6 +265,227 @@ Function licenseUsage()->$metrics : Collection
 		$metrics:=This._licenseUsageMetrics(New object("ok"; True; "data"; Null))
 	End if
 
+Function backup()->$metrics : Collection
+	var $now : Real
+	var $context; $read : Object
+	$now:=Milliseconds
+	If (This.backupMetrics#Null)
+		If (($now>=This.backupReadAt) & ($now-This.backupReadAt<60000))
+			$metrics:=This.backupMetrics.copy()
+			return
+		End if
+	End if
+	$read:=New object("availability"; "unsupported")
+	If (Not(This.remote))
+		$context:=This.read("backupContext")
+		If (Not($context.ok))
+			$read.availability:="error"
+		Else
+			If (Value type($context.data)=Is object)
+				If ((Value type($context.data.type)=Is text) & (Value type($context.data.networked)=Is boolean))
+					If (($context.data.type="4D") & Not($context.data.networked))
+						// Main ds eligibility does not establish BACKUP INFO's data-file scope.
+						$read.scopeUnverified:=True
+					End if
+				Else
+					$read.availability:="error"
+				End if
+			Else
+				If ($context.data#Null)
+					$read.availability:="error"
+				End if
+			End if
+		End if
+	End if
+	This.backupMetrics:=This._backupMetrics($read)
+	This.backupMetrics.push(This.metric("backup.observedAt"; "Backup eligibility checked (UTC, 60s cache)"; "text"; ""; "static"; Timestamp))
+	This.backupReadAt:=Milliseconds
+	$metrics:=This.backupMetrics.copy()
+
+Function _backupDate($id : Text; $label : Text; $read : Object)->$metric : Object
+	var $data : Object
+	$metric:=This.unavailable($id; $label; "text"; ""; "static"; "error"; "Backup date/time read failed or invalid")
+	If (Value type($read)#Is object)
+		return
+	End if
+	If (Value type($read.ok)#Is boolean)
+		return
+	End if
+	If (Not($read.ok))
+		return
+	End if
+	If (Value type($read.data)#Is object)
+		return
+	End if
+	$data:=$read.data
+	If (Value type($data.local)#Is text)
+		return
+	End if
+	If ($data.local="")
+		$metric:=This.unavailable($id; $label; "text"; ""; "static"; "missing"; "No backup date reported; history or schedule is unknown")
+		return
+	End if
+	If (Not(This._backupTimestampValid($data.local; False)))
+		return
+	End if
+	$metric:=This.metric($id; $label; "text"; ""; "static"; $data.local)
+
+Function _backupTimestampValid($value : Variant; $utc : Boolean)->$valid : Boolean
+	var $date : Date
+	var $previous; $pattern : Text
+	var CLI_LastErrors : Collection
+	$valid:=False
+	If (Value type($value)#Is text)
+		return
+	End if
+	$pattern:="^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]"
+	If ($utc)
+		$pattern+="\\.[0-9]{3}Z"
+	End if
+	If (Not(Match regex($pattern+"$"; $value)))
+		return
+	End if
+	$previous:=Method called on error(ek local)
+	CLI_LastErrors:=Null
+	ON ERR CALL("_CaptureError"; ek local)
+	// Date requires the full ISO date/time form to avoid regional parsing.
+	$date:=Date(Substring($value; 1; 19))
+	If ($date#!0000-00-00!)
+		$valid:=(Substring(String($date; ISO date); 1; 10)=Substring($value; 1; 10))
+	End if
+	ON ERR CALL($previous; ek local)
+	If (CLI_LastErrors#Null)
+		$valid:=False
+	End if
+	CLI_LastErrors:=Null
+
+Function _backupIntegerValid($value : Variant; $minimum : Real)->$valid : Boolean
+	$valid:=False
+	If ((Value type($value)#Is real) & (Value type($value)#Is longint))
+		return
+	End if
+	If (Not(($value>=$minimum) & ($value<=2147483647)))
+		return
+	End if
+	$valid:=(Int($value)=$value)
+
+Function _backupMetrics($read : Object)->$metrics : Collection
+	var $last; $next; $information; $statusRead; $data; $metric : Object
+	var $history; $beginValid : Boolean
+	var $status; $reason; $field; $type; $unit; $label : Text
+	$metrics:=New collection
+	$data:=New object
+	If (Value type($read)#Is object)
+		$read:=New object("availability"; "error")
+	End if
+	If ($read.availability#"available")
+		$status:=$read.availability
+		$reason:="Backup metadata requires an eligible local main datastore; remote or dataless host unsupported"
+		If ($read.scopeUnverified=True)
+			$reason:="BACKUP INFO component-to-host data-file scope is unverified; host backup metadata unsupported"
+		End if
+		If ($status#"unsupported")
+			$status:="error"
+			$reason:="Backup datastore eligibility read failed or invalid"
+		End if
+	Else
+		$last:=This._backupDate("backup.lastAt"; "Last backup (host-local)"; $read.last)
+		$next:=This._backupDate("backup.nextAt"; "Next scheduled backup (host-local)"; $read.next)
+		$metrics.push($last; $next)
+		$information:=New object("ok"; False)
+		$statusRead:=New object("ok"; False)
+		If (Value type($read.information)=Is object)
+			If (Value type($read.information.ok)=Is boolean)
+				$information:=$read.information
+			End if
+		End if
+		If (Value type($read.status)=Is object)
+			If (Value type($read.status.ok)=Is boolean)
+				$statusRead:=$read.status
+			End if
+		End if
+		$beginValid:=False
+		If ($information.ok)
+			If (Value type($information.data)=Is object)
+				$data:=$information.data
+				$beginValid:=This._backupTimestampValid($data.begin; True)
+			End if
+		End if
+		$history:=($last.availability="available") | $beginValid
+		$status:="missing"
+		$reason:="No recorded backup evidence; status and duration are unknown"
+		If (Not($history))
+			If (($last.availability="error") | Not($information.ok) | (Value type($information.data)#Is object))
+				$status:="error"
+				$reason:="Backup history could not be established"
+			End if
+		End if
+	End if
+	For each ($field; New collection("lastAt"; "nextAt"; "statusCode"; "duration"; "beginUTC"))
+		$type:="text"
+		$unit:=""
+		Case of
+			: ($field="lastAt")
+				$label:="Last backup (host-local)"
+			: ($field="nextAt")
+				$label:="Next scheduled backup (host-local)"
+			: ($field="statusCode")
+				$label:="Last backup status code (uninterpreted)"
+				$type:="number"
+			: ($field="duration")
+				$label:="Last backup duration"
+				$type:="number"
+				$unit:="ms"
+			: ($field="beginUTC")
+				$label:="Last backup begin (UTC)"
+		End case
+		If ($read.availability="available")
+			If (($field="lastAt") | ($field="nextAt"))
+				continue
+			End if
+		End if
+		$metric:=This.unavailable("backup."+$field; $label; $type; $unit; "static"; $status; $reason)
+		If ($read.availability="available")
+			Case of
+				: (($field="statusCode") & Not($statusRead.ok))
+					$metric:=This.unavailable("backup."+$field; $label; $type; $unit; "static"; "error"; "Backup numeric metadata read failed or invalid")
+				: (($field="duration") & Not($information.ok))
+					$metric:=This.unavailable("backup."+$field; $label; $type; $unit; "static"; "error"; "Backup numeric metadata read failed or invalid")
+				: ($field="beginUTC")
+					$metric:=This.unavailable("backup."+$field; $label; $type; $unit; "static"; "error"; "Backup begin timestamp read failed or invalid")
+					If ($beginValid)
+						$metric:=This.metric("backup."+$field; $label; $type; $unit; "static"; $data.begin)
+					Else
+						If ($information.ok)
+							If (Value type($data.begin)=Is text)
+								If ($data.begin="")
+									$metric:=This.unavailable("backup."+$field; $label; $type; $unit; "static"; "missing"; "No backup begin timestamp reported")
+								End if
+							End if
+						End if
+					End if
+				: ($history)
+					$metric:=This.unavailable("backup."+$field; $label; $type; $unit; "static"; "error"; "Backup numeric metadata read failed or invalid")
+					If ($field="statusCode")
+						If ($statusRead.ok)
+							If (Value type($statusRead.data)=Is object)
+								If (This._backupIntegerValid($statusRead.data.code; -2147483648))
+									$metric:=This.metric("backup."+$field; $label; $type; $unit; "static"; $statusRead.data.code)
+								End if
+							End if
+						End if
+					Else
+						If ($information.ok)
+							If (This._backupIntegerValid($data.duration; 0))
+								$metric:=This.metric("backup."+$field; $label; $type; $unit; "static"; $data.duration)
+							End if
+						End if
+					End if
+			End case
+		End if
+		$metrics.push($metric)
+	End for each
+
 Function _licenseUsageMetrics($read : Object)->$metrics : Collection
 	var $entries; $ids : Collection
 	var $entry : Variant
@@ -328,6 +582,9 @@ Function snapshot()->$snapshot : Object
 	var CLI_LastErrors : Collection
 	This.sampleCount+=1
 	$metrics:=This.staticMetrics.copy()
+	For each ($entry; This.backup())
+		$metrics.push($entry)
+	End for each
 	For each ($entry; This.licenseUsage())
 		$metrics.push($entry)
 	End for each

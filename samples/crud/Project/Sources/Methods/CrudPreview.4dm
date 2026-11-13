@@ -28,14 +28,45 @@ $service:=$monitor.start(New object)
 $deadline:=Milliseconds+($request.seconds*1000)
 $report:=New object("success"; False; "finished"; False; "phase"; "starting"; "counts"; $workload.counts; "baseline"; $baseline; "samples"; New collection; "hostCompiled"; Is compiled mode(*))
 $report.datastore:=New object
+$report.backup:=New object
 var $sample; $metric : Object
 $sample:=$monitor.collect()
 For each ($metric; $sample.value.metrics)
 	If (Position("datastore."; $metric.id; *)=1)
 		$report.datastore[$metric.id]:=$metric
 	End if
+	If (Position("backup."; $metric.id; *)=1)
+		$report.backup[$metric.id]:=$metric
+	End if
 End for each
 $report.componentCompiled:=$monitor._cli.compiled
+// Independent observations only: identical empty histories cannot establish command scope.
+var $backupCollector : cs.Dashboard._DashboardCollector
+var $backupDate : Date
+var $backupTime : Time
+var $backupCode; $backupDuration : Integer
+var $backupText; $backupBegin : Text
+$backupCollector:=cs.Dashboard._DashboardCollector.new()
+$report.backupComponentNative:=New object(\
+	"last"; $backupCollector.read("backupLast"); \
+	"next"; $backupCollector.read("backupNext"); \
+	"status"; $backupCollector.read("backupStatus"); \
+	"information"; $backupCollector.read("backupInformation"))
+$report.backupHostNative:=New object("lastLocal"; ""; "nextLocal"; "")
+BACKUP INFO(Last backup date; $backupDate; $backupTime)
+If ($backupDate#!0000-00-00!)
+	$report.backupHostNative.lastLocal:=String($backupDate; ISO date; $backupTime)
+End if
+BACKUP INFO(Next backup date; $backupDate; $backupTime)
+If ($backupDate#!0000-00-00!)
+	$report.backupHostNative.nextLocal:=String($backupDate; ISO date; $backupTime)
+End if
+BACKUP INFO(Last backup status; $backupCode; $backupText)
+$backupDuration:=-1
+BACKUP INFO(Last backup information; $backupDuration; $backupBegin)
+$report.backupHostNative.statusCode:=$backupCode
+$report.backupHostNative.duration:=$backupDuration
+$report.backupHostNative.beginUTC:=$backupBegin
 While (($service.status#"failed") & (Milliseconds<$deadline) & Not($stopFile.exists) & ($workload.error=""))
 	$phase:=$workload.step()
 	$measure:=Database measures(New object("withHistory"; False))

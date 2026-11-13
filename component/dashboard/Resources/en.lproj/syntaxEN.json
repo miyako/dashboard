@@ -305,17 +305,6 @@
 			],
 			"Summary": ""
 		},
-		"licenseUsage()": {
-			"Syntax": "**.licenseUsage**()->metrics : Collection",
-			"Params": [
-				[
-					"metrics",
-					"Collection",
-					"<-"
-				]
-			],
-			"Summary": ""
-		},
 		"unavailable()": {
 			"Syntax": "**.unavailable**( *id* : Text; *label* : Text; *type* : Text; *unit* : Text; *kind* : Text; *status* : Text; *reason* : Text )->metric : Object",
 			"Params": [
@@ -357,6 +346,28 @@
 				[
 					"metric",
 					"Object",
+					"<-"
+				]
+			],
+			"Summary": ""
+		},
+		"licenseUsage()": {
+			"Syntax": "**.licenseUsage**()->metrics : Collection",
+			"Params": [
+				[
+					"metrics",
+					"Collection",
+					"<-"
+				]
+			],
+			"Summary": ""
+		},
+		"backup()": {
+			"Syntax": "**.backup**()->metrics : Collection",
+			"Params": [
+				[
+					"metrics",
+					"Collection",
 					"<-"
 				]
 			],
@@ -419,6 +430,9 @@
 			],
 			"Summary": ""
 		},
+		"backupReadAt": {
+			"Syntax": "backupReadAt : Real"
+		},
 		"licenseProducts": {
 			"Syntax": "licenseProducts : Object"
 		},
@@ -430,6 +444,9 @@
 		},
 		"sampleCount": {
 			"Syntax": "sampleCount : Integer"
+		},
+		"backupMetrics": {
+			"Syntax": "backupMetrics : Collection"
 		},
 		"info": {
 			"Syntax": "info : Object"

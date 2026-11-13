@@ -21,6 +21,8 @@ test('uptime is a readout while changing license usage stays graphed', () => {
   assert.equal(charts.hasGraph({ id: 'app.uptime', type: 'number', kind: 'gauge' }), false);
   assert.equal(charts.hasGraph({ id: 'license.usage.records', type: 'number', kind: 'gauge' }), true);
   assert.equal(charts.hasGraph({ id: 'system.cores', type: 'number', kind: 'static' }), false);
+  assert.equal(charts.hasGraph({ id: 'backup.duration', type: 'number', kind: 'static' }), false);
+  assert.equal(charts.hasGraph({ id: 'backup.statusCode', type: 'number', kind: 'static' }), false);
 });
 
 test('license counts use integer ticks and step traces without fractional interpolation', () => {

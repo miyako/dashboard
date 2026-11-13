@@ -36,6 +36,21 @@ Null datastore is unsupported. Counts exclude tables without a single primary
 key and say nothing about records, indexes or effective REST permissions.
 No names, primary keys, table numbers, paths, IDs or connection details are exported.
 Restart the monitor after schema changes; one-off `collect()` reads fresh metadata.
+Backup descriptors currently report unsupported even for an eligible local main
+datastore: `BACKUP INFO` normally runs in component context and its host data-file
+target has not been established. A local `ds` check is not proof of backup scope.
+Remote/client and dataless hosts are also unsupported. Eligibility outcomes are
+cached at least 60 seconds, including errors; `backup.observedAt` marks the check
+in UTC. No unverified component result is presented as host history.
+The cooperative read/normalization contract (fixture-tested only for positive
+metadata) labels last/next dates as host-local wall times; the separately
+validated begin timestamp is UTC. Duration is integer milliseconds; status is
+an uninterpreted integer code, not a success flag. Both require recorded backup
+evidence before zero or any other number is available. No history/schedule is
+unknown, not zero/disabled; command failures and malformed data remain errors.
+No raw status text, filenames, archive paths, records or identities are returned.
+These descriptors use `kind:"static"` so repeated cached numbers never form rate
+graphs. No backup/restore, arbitrary host-method bridge or configuration action is implemented.
 `License usage` is sampled only on 4D Server, yielding total/per-product
 retained-record gauges. Other contexts report unsupported. Session fields,
 tokens/callers and historical retention-time balances are not exported.

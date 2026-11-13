@@ -208,7 +208,7 @@ The [21 Backup theme](https://developer.4d.com/docs/21/commands/theme/Backup) co
 
 | Exact API / official source | Availability | Result / units and caveat | Execution | Semantics |
 |---|---|---|---|---|
-| [BACKUP INFO](https://developer.4d.com/docs/21/commands/backup-info) | 21 | Selector outputs: last/next backup Date+Time; last status integer+text; last duration **milliseconds** and begin timestamp. Redact status text if paths/details embedded. | ENGINE COOP; validate host/server backup config | R1, 60 seconds |
+| [BACKUP INFO](https://developer.4d.com/docs/21/commands/backup-info) | 21 | Implemented normalization subset: last/next host-local Date+Time, uninterpreted status integer, duration **milliseconds**, validated UTC begin timestamp. Status text never exported. Unknown history/schedule is not zero/success/disabled. Deployed host metrics unsupported until component-to-host data-file scope established. | ENGINE COOP; component command context is not proof of host target; positive/Server/client deployment unobserved | R1, >=60 seconds eligibility cache, static display with checked-at time |
 | [RESTORE INFO](https://developer.4d.com/docs/21/commands/restore-info) | 21 | Selector-dependent output parameters for restore state; exact selector shapes must be completed. | U | R1 |
 | [Log file](https://developer.4d.com/docs/21/commands/log-file) | 21 | Journal path text; derive configured/existence/size only. Not debug log path. | ENGINE U | R1 |
 | [Last update log path](https://developer.4d.com/docs/21/commands/last-update-log-path) | 21 | Update log path text; derive bounded scalar metadata, no contents. | HOST U | R1 |
