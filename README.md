@@ -125,6 +125,46 @@ authorization system. Do not expose it directly to the public internet.
 
 ## What measurements mean
 
+### Synthetic database preview
+
+To exercise the **Database** graphs without touching application data:
+
+```sh
+python3 scripts/preview_crud.py --root . \
+  --tool4d .tools/tool4d.app/Contents/MacOS/tool4d \
+  --component build/release-test/dashboard.4dbase --seconds 120
+```
+
+Use an already unpacked accepted component as above, or omit `--component`
+to use the current source component with its already-built CLI resources.
+The runner copies everything into a unique `build/crud-preview-...` directory
+and creates a **fresh** `Data/CrudSample.4DD`. It never opens existing user data.
+The sample project is `samples/crud/Project/CrudSample.4DProject`, with a
+single indexed `CrudRecords` table, an auto-increment primary key and no journal.
+Schema/project/ORDA guidance comes from
+[`miyako/skills` at e6b492f](https://github.com/miyako/skills/tree/e6b492fcb81e5e1a7f7db723594b420e63bf6eb9/4d-skills/skills).
+
+Every 16 seconds the workload creates 128 records with 8 KiB text payloads,
+reads them through an indexed query, updates and rereads them by primary key,
+then deletes them and verifies their absence. Save/drop status and exact
+payload/count invariants are checked. Idle phases produce quiet intervals.
+The table stays at most 128 records; normal completion leaves it empty.
+**Testing only:** explicit `FLUSH CACHE` and `FLUSH CACHE(*)` force writes and
+cache eviction to exercise disk-read counters. Never copy these flushes or the
+workload into a production database; they deliberately distort performance.
+The dashboard component and browser remain read-only.
+
+The runner reports the isolated directory and readiness without printing the
+access token. Its private `preview-status.json` contains the browser bootstrap
+URL, current phase, operation counts and real `Database measures`.
+Create the directory's `stop` file to finish the current CRUD cycle and stop.
+`--seconds` accepts 30..43200; the default is a two-minute finite check.
+`verification.json` requires successful CRUD round-trips, an empty final table,
+clean CLI shutdown and positive observed disk/cache byte and access-counter
+movement. Missing/reset counters fail rather than becoming zero.
+These are synthetic local tool4d measurements, not a production benchmark or
+4D Server/remote-client acceptance.
+
 Collectors execute **where you start the component**. A client monitor is not a
 server monitor. Run a separate monitor on 4D Server to collect server metrics;
 this version neither aggregates instances nor executes remote administration.
