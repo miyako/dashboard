@@ -151,6 +151,7 @@ class SigningTests(unittest.TestCase):
         fixture.write_config()
         library = component / "Libraries/lib4d-arm64.dylib"
         library.write_bytes(delivery.synthetic_universal()[80:112])
+        shutil.copy2(ROOT / "workflow-contract.json", self.root / "workflow-contract.json")
         fixture.write_status()
         self.fixture = fixture
         self.policy = self.root / "release-policy.json"
@@ -517,6 +518,37 @@ class SigningTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "unsigned ZIP does not match"):
             self.sign()
         self.assertEqual(self.tools.calls, [[signing.GIT, "rev-parse", "HEAD"]])
+
+    def test_signing_mirror_preserves_optional_contract_and_accepted_bytes(self):
+        contract = self.root / "workflow-contract.json"
+        for present in (True, False):
+            if not present:
+                contract.unlink()
+                self.fixture.write_status()
+            with self.subTest(contract_present=present), \
+                    signing.private_workspace(self.root / "build") as scratch:
+                package_component.validate_compile(self.root, self.fixture.component, "UuidTest")
+                signing.prepare_payload(self.root, scratch, self.fixture.config, self.unsigned)
+                mirror = scratch / "inputs"
+                self.assertEqual((mirror / "workflow-contract.json").exists(), present)
+                if present:
+                    self.assertEqual((mirror / "workflow-contract.json").read_bytes(), contract.read_bytes())
+                self.assertEqual(package_component.input_digest(mirror),
+                                 package_component.input_digest(self.root))
+                self.assertEqual(self.unsigned.read_bytes(), self.original_zip)
+                self.assertEqual(signing.snapshot(self.fixture.component), self.source_snapshot)
+
+    def test_real_contract_and_source_changes_still_reject_signing(self):
+        for path in (self.root / "workflow-contract.json",
+                     self.fixture.component / "Project/Sources/source.4dm"):
+            original = path.read_bytes()
+            path.write_bytes(original + b"\n")
+            with self.subTest(path=path.relative_to(self.root)), \
+                    self.assertRaisesRegex(ValueError, "input_sha256.*recompile"):
+                self.sign()
+            self.assertEqual(self.tools.calls, [])
+            self.assertEqual(self.unsigned.read_bytes(), self.original_zip)
+            path.write_bytes(original)
 
     def test_snapshot_checks_windows_docs_layout_and_permissions(self):
         before = {"a": (b"old", 0o755), "b": (b"stable", 0o644), "dir": (None, 0o755)}
