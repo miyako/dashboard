@@ -60,8 +60,23 @@ type deletions struct {
 }
 
 type point struct {
-	At    string  `json:"at"`
-	Value float64 `json:"value"`
+	At    string   `json:"at"`
+	Value *float64 `json:"value"`
+}
+
+type activityEntity struct {
+	State string   `json:"state"`
+	CPU   *float64 `json:"cpu,omitempty"`
+}
+
+type activity struct {
+	Entities map[string]activityEntity `json:"entities"`
+}
+
+type activitySample struct {
+	At        string   `json:"at"`
+	Processes activity `json:"processes"`
+	Sessions  activity `json:"sessions"`
 }
 
 type state struct {
@@ -74,6 +89,7 @@ type state struct {
 	Processes  map[string]entity  `json:"processes"`
 	Sessions   map[string]entity  `json:"sessions"`
 	History    map[string][]point `json:"history"`
+	Activity   []activitySample   `json:"activity"`
 	LastAction any                `json:"lastAction,omitempty"`
 }
 
@@ -276,8 +292,13 @@ func (s *service) apply(m message) error {
 			if _, exists := metrics[v.ID]; !exists {
 				continue
 			}
-			if v.Availability == "available" && v.Type == "number" && v.Kind != "static" {
-				h := append(s.current.History[v.ID], point{m.SampledAt, v.Value.(float64)})
+			if v.Type == "number" && v.Kind != "static" {
+				var value *float64
+				if v.Availability == "available" {
+					n := v.Value.(float64)
+					value = &n
+				}
+				h := append(s.current.History[v.ID], point{m.SampledAt, value})
 				if len(h) > 60 {
 					h = h[len(h)-60:]
 				}
@@ -287,6 +308,13 @@ func (s *service) apply(m message) error {
 			}
 		}
 		s.current.Metrics, s.current.Processes, s.current.Sessions = metrics, processes, sessions
+		s.current.Activity = append(s.current.Activity, activitySample{
+			At: m.SampledAt, Processes: sampleActivity(processes, metrics["process.count"]),
+			Sessions: sampleActivity(sessions, metrics["session.count"]),
+		})
+		if len(s.current.Activity) > 60 {
+			s.current.Activity = s.current.Activity[len(s.current.Activity)-60:]
+		}
 	case "result":
 		if m.ID == "" || m.OK == nil || (!*m.OK && m.Error == "") || len(m.Error) > 256 {
 			return errors.New("uncorrelated or invalid action result")
@@ -315,6 +343,19 @@ func (s *service) apply(m message) error {
 	s.last, s.current.Status = time.Now(), "connected"
 	s.broadcastLocked()
 	return nil
+}
+
+func sampleActivity(entities map[string]entity, count metric) activity {
+	result := activity{}
+	// A failed enumeration must not look like a known empty list.
+	if (count.ID != "" && count.Availability != "available") || (count.ID == "" && len(entities) == 0) {
+		return result
+	}
+	result.Entities = make(map[string]activityEntity, len(entities))
+	for id, e := range entities {
+		result.Entities[id] = activityEntity{State: e.State, CPU: e.CPU}
+	}
+	return result
 }
 
 func (s *service) broadcastLocked() {

@@ -105,7 +105,7 @@ func TestBoundedHistoryAndCoalescing(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if len(s.current.History["cpu"]) != 60 || len(client) != 1 {
+	if len(s.current.History["cpu"]) != 60 || len(s.current.Activity) != 60 || len(client) != 1 {
 		t.Fatal("unbounded history or queue")
 	}
 	var current state
@@ -157,6 +157,68 @@ func TestRefreshCorrelation(t *testing.T) {
 	late.Seq = 4
 	if err := s.apply(late); err == nil {
 		t.Fatal("late result was replayed")
+	}
+}
+
+func TestHistoryGapsAndActivitySnapshots(t *testing.T) {
+	s := newService("http://127.0.0.1", "token")
+	hello(t, s)
+	cpu := 0.15
+	sample := frame("snapshot", 2)
+	sample.Metrics = []metric{
+		{ID: "cpu", Label: "CPU", Type: "number", Kind: "gauge", Availability: "available", Value: float64(10)},
+		{ID: "process.count", Label: "Processes", Type: "number", Kind: "gauge", Availability: "available", Value: float64(1)},
+	}
+	sample.Processes = []entity{{ID: "p:1", State: "executing", CPU: &cpu}}
+	if err := s.apply(sample); err != nil {
+		t.Fatal(err)
+	}
+	update := frame("update", 3)
+	update.Metrics = []metric{{ID: "cpu", Label: "CPU", Type: "number", Kind: "gauge", Availability: "error", Reason: "Unavailable"}}
+	update.Processes = []entity{{ID: "p:1", State: "waiting"}}
+	if err := s.apply(update); err != nil {
+		t.Fatal(err)
+	}
+	if len(s.current.History["cpu"]) != 2 || *s.current.History["cpu"][0].Value != 10 || s.current.History["cpu"][1].Value != nil {
+		t.Fatal("unavailable sample erased history or became zero", s.current.History)
+	}
+	if s.current.Activity[0].Processes.Entities["p:1"].State != "executing" ||
+		s.current.Activity[1].Processes.Entities["p:1"].State != "waiting" ||
+		s.current.Activity[1].Processes.Entities["p:1"].CPU != nil {
+		t.Fatal("activity did not preserve distinct snapshots")
+	}
+	update = frame("update", 4)
+	update.Metrics = []metric{{ID: "process.count", Label: "Processes", Type: "number", Kind: "gauge", Availability: "available", Value: float64(0)}}
+	update.Delete = &deletions{Processes: []string{"p:1"}}
+	if err := s.apply(update); err != nil {
+		t.Fatal(err)
+	}
+	if current := s.current.Activity[2].Processes.Entities; current == nil || len(current) != 0 {
+		t.Fatal("known empty enumeration became unavailable")
+	}
+	update = frame("update", 5)
+	update.Metrics = []metric{{ID: "process.count", Label: "Processes", Type: "number", Kind: "gauge", Availability: "error", Reason: "Enumeration failed"}}
+	if err := s.apply(update); err != nil {
+		t.Fatal(err)
+	}
+	if s.current.Activity[3].Processes.Entities != nil {
+		t.Fatal("failed enumeration became zero")
+	}
+	id, err := s.request()
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, ok := frame("result", 6), true
+	result.ID, result.OK = id, &ok
+	if err := s.apply(result); err != nil {
+		t.Fatal(err)
+	}
+	if len(s.current.Activity) != 4 || len(s.current.History["cpu"]) != 2 {
+		t.Fatal("action result duplicated history")
+	}
+	body, err := json.Marshal(s.current)
+	if err != nil || !bytes.Contains(body, []byte(`"value":null`)) || !bytes.Contains(body, []byte(`"entities":null`)) {
+		t.Fatal("SSE state does not preserve unavailable gaps", err)
 	}
 }
 

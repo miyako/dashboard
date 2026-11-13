@@ -11,6 +11,21 @@ The mobile-aware interface uses system fonts, semantic HTML, keyboard-accessible
 controls, high-contrast themes and incremental SSE updates without page reloads.
 No CDN, JavaScript package manager or external runtime is needed.
 
+**Live graphs** is the default view: scrolling stock/seismic-style traces with
+time and value axes, actual sample dots and a rolling two-minute window.
+Static metadata lives in **Instance information**; **Database** has its own
+graphs and a rate-per-second / cumulative-total selector. Rates use elapsed
+sample time, not an assumed frequency; resets, unavailable data and pauses over
+15 seconds break the trace instead of inventing zero or interpolation.
+The latest scalar is secondary to the graph. Changing tabs never stops collection.
+
+**Processes & sessions** provides **Snapshot** tables and **Tracking** views:
+counts over time, summed visible process CPU, per-process CPU, and per-identity
+state/presence timelines, including recently disappeared identities. Missing
+CPU is not zero; summed CPU is unavailable if any visible process lacks CPU.
+An identity absent from a capped enumeration is not proof of termination.
+Tool4d's unsupported process/session enumeration remains explicitly unavailable.
+
 ## Use from 4D
 
 Install `dashboard.4dbase` in the host's `Components/` folder, or add the
@@ -183,7 +198,14 @@ Metric descriptors specify `type` (`number`, `text`, `boolean`), `unit`, `kind`
 `type`, `state` and optional process `cpu`.
 
 The normalized store allows 256 metrics, 512 processes and 512 sessions, and
-60 numeric history points per metric. At most 16 SSE viewers receive full
+60 timestamped history points per dynamic numeric metric (including explicit
+null gaps) and 60 activity samples, each bounded to 512 process and 512 session
+state/CPU entries. Activity enumeration is null when unavailable, distinct
+from a known empty Object. Snapshot/update frames record samples; action-result
+frames do not duplicate history. Histories survive browser reconnects but are
+in-memory only and reset with the CLI. The identity selector shows at most
+512 recent identities per kind, prioritizing the current snapshot.
+At most 16 SSE viewers receive full
 normalized state on connect/reconnect and subsequent updates; queued states
 coalesce to the latest for slow consumers. Stream writes have finite deadlines.
 HTTP POST `/api/refresh` emits a correlated read-only request; one request may
@@ -218,8 +240,8 @@ The original template's 20.7 compiler cannot validate the 21 LTS floor.
 ```sh
 python3 -m unittest discover -s tests -v
 python3 scripts/generate_icons.py --check
-cd cli && go test -race ./... && go vet ./... && node --check web/app.js
-# From repository root:
+(cd cli && go test -race ./... && go vet ./... && node --check web/app.js && node --check web/charts.js)
+node --test tests/test_charts.cjs
 python3 scripts/ci_config.py download-tool4d --root .
 python3 scripts/accept_local.py --root . --repository miyako/dashboard \
   --tool4d .tools/tool4d.app/Contents/MacOS/tool4d --cross

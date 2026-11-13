@@ -79,6 +79,8 @@ func (s *service) handler() http.Handler {
 			file, contentType = "index.html", "text/html; charset=utf-8"
 		case "/app.js":
 			file, contentType = "app.js", "text/javascript; charset=utf-8"
+		case "/charts.js":
+			file, contentType = "charts.js", "text/javascript; charset=utf-8"
 		case "/style.css":
 			file, contentType = "style.css", "text/css; charset=utf-8"
 		default:

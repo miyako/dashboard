@@ -40,3 +40,9 @@ Protocol/model/security/measurement scopes and examples are in the root
 [README](../../../../README.md). `_DashboardCollector` owns normalization;
 `_DashboardAgent` owns long-lived callbacks; `_CLI` and `_Process` remain generic.
 Underscore classes are internal by convention, not access control.
+
+The browser defaults to rolling time-series graphs, with separate static
+information and database tabs. Process/session views include current snapshots
+and bounded state/CPU tracking across the last 60 samples. Database graphs can
+show cumulative totals or elapsed-time rates; missing samples and counter
+resets create gaps. No change to the 4D methods or input protocol is required.
