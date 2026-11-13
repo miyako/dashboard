@@ -80,6 +80,7 @@ def validate_resources(component, cli):
 
 
 def validate_compile(root, component, repository):
+    from support_components import validate_evidence
     marker = root / "build" / "compile-status.json"
     if not marker.is_file() or marker.is_symlink():
         raise ValueError("successful compile-status.json is required; source-only releases are prohibited")
@@ -98,6 +99,7 @@ def validate_compile(root, component, repository):
         raise ValueError("compile marker project does not match configured project")
     if status.get("input_sha256") != input_digest(root):
         raise ValueError("compile marker input_sha256 does not match current component inputs; recompile")
+    validate_evidence(root, status)
     if not project.is_file():
         raise ValueError("configured .4DProject is missing")
     compiled = project.parent / "DerivedData" / "CompiledCode"

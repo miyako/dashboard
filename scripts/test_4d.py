@@ -9,6 +9,7 @@ import subprocess
 import sys
 import shutil
 import uuid
+from support_components import stage as stage_support
 
 
 def _pointer(value, path):
@@ -208,6 +209,7 @@ def test_4d(root, tool4d, component=None):
         if component is None:
             ignored.append("DerivedData")
         shutil.copytree(source, package, ignore=shutil.ignore_patterns(*ignored))
+        support = stage_support(root, host / "Components")
         platform = "Windows" if os.name == "nt" else "macOS"
         executable_name = config["cli"] + (".exe" if os.name == "nt" else "")
         native = package / "Resources/bin" / platform / executable_name
@@ -230,7 +232,11 @@ def test_4d(root, tool4d, component=None):
             raise ValueError("tool4d did not write host-status.json; host execution is unverified")
         output.write_bytes(staged_output.read_bytes())
         status = _read_json(output)
-        return validate_status(status, contract, component is not None)
+        validate_status(status, contract, component is not None)
+        if support:
+            status["support_components"] = support
+            output.write_text(json.dumps(status, indent=2) + "\n")
+        return status
     finally:
         shutil.rmtree(staging)
 

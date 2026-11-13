@@ -538,6 +538,28 @@ class SigningTests(unittest.TestCase):
                 self.assertEqual(self.unsigned.read_bytes(), self.original_zip)
                 self.assertEqual(signing.snapshot(self.fixture.component), self.source_snapshot)
 
+    def test_signing_mirror_preserves_optional_support_lock_and_compiler_binding(self):
+        from support_components import expected
+        lock = self.root / "support-components.json"
+        for present in (True, False):
+            if present:
+                shutil.copy2(ROOT / "support-components.json", lock)
+                self.fixture.status["support_components"] = expected(self.root)
+            else:
+                lock.unlink()
+                self.fixture.status.pop("support_components")
+            self.fixture.write_status()
+            with self.subTest(lock_present=present), \
+                    signing.private_workspace(self.root / "build") as scratch:
+                signing.prepare_payload(self.root, scratch, self.fixture.config, self.unsigned)
+                mirror = scratch / "inputs"
+                self.assertEqual((mirror / lock.name).exists(), present)
+                if present:
+                    self.assertEqual((mirror / lock.name).read_bytes(), lock.read_bytes())
+                self.assertEqual(package_component.input_digest(mirror),
+                                 package_component.input_digest(self.root))
+                self.assertEqual(self.unsigned.read_bytes(), self.original_zip)
+
     def test_real_contract_and_source_changes_still_reject_signing(self):
         for path in (self.root / "workflow-contract.json",
                      self.fixture.component / "Project/Sources/source.4dm"):

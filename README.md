@@ -47,6 +47,11 @@ Tool4d's unsupported process/session enumeration remains explicitly unavailable.
 
 Install `dashboard.4dbase` in the host's `Components/` folder, or add the
 `miyako/dashboard` GitHub dependency when an accepted release is available.
+This revision also requires separately installed **workers 20.0.23** and
+**tcp 20.0.14** components. Dependency Manager resolves the declared dependencies;
+manual `Components/` installation must include all three `.4dbase` packages.
+4D ignores nested dependency declarations for that manual installation path.
+These are components, not native 4D plug-ins or private Resources backends.
 The component, project, catalog and ZIP names are exactly `dashboard`.
 The independently chosen namespace is `Dashboard`; ensure it does not conflict
 with another component installed in your host.
@@ -63,27 +68,57 @@ that separate convention uses host-aligned tags such as `20.2.3` and `20R3.2`.
 Do not select Follow 4D for this component's ordinary SemVer releases.
 
 ```4d
-// Keep these in your application-owned controller, not transient local variables.
-var DashboardMonitor : cs.Dashboard.Dashboard
-var DashboardStatus : Object
+var $monitor : cs.Dashboard.Dashboard
+var $event : Object
 var $target : Text
 $target:="macOS-universal"
 If (Is Windows)
     $target:="Windows-x64"
 End if
-DashboardMonitor:=cs.Dashboard.Dashboard.new($target)
-DashboardStatus:=DashboardMonitor.start(New object)
+$monitor:=cs.Dashboard.Dashboard.new($target)
+$event:=New object("onStatus"; Formula(On_dashboard_status($1; $2)))
+$monitor.start(New object; $event)
 ```
 
-`start()` returns immediately with a shared status object:
-`{status:"starting",url:"",error:"",samples:0}`. A named `CALL WORKER` worker owns
-the SystemWorker, collection and callbacks. No sampling loop monopolizes that
-worker. The CLI asks for a sample every two seconds over stdout; the worker
-collects and posts NDJSON to stdin. `status` becomes `running` only when the CLI
-reports its listening URL. Observe the shared status from a form timer or your
-application event loop; **do not busy-wait on the UI process**.
+Define the host's `On_dashboard_status` method:
 
-When running, open `DashboardStatus.url` in your browser. This URL contains a
+```4d
+#DECLARE($status : Object; $monitor : cs.Dashboard.Dashboard)
+Case of
+    : ($status.kind="running")
+        // $status.url is now usable. Do not log its private token.
+    : ($status.kind="sample")
+        // Measurements have been sent; $status.samples has increased.
+    : ($status.kind="failed")
+        // Retain/report $status.error without disclosing the private URL.
+    : ($status.kind="stopped")
+        // The owned CLI has exited and its registration has been removed.
+End case
+```
+
+`start(options; event)` returns immediately. The callback receives immutable
+notification snapshots with `kind`, `status`, `url`, `error`, `samples`, `epoch`,
+`port` and `finished`. Kinds are `starting`, `running`, `sample`, `failed` and
+`stopped`. `running` requires the CLI's real readiness message **and** successful
+registration of that same SystemWorker in `cs.workers.worker`. The default
+remains authenticated `127.0.0.1:0`: the OS chooses the port; no fixed/fake
+registry port or check-then-bind reservation is used. TCP observation appears
+as `portCheck` on the running event, with explicit availability and listening
+status; it does not establish health or expose process inventory.
+
+The CLI/SystemWorker stays on `.workers`. Collection and custom host callbacks
+run on the deliberately **cooperative** `Dashboard.callbacks.<epoch>` worker,
+not on the UI process. `This` is the listener; ordinary listener/controller
+objects are copied across workers. Use shared objects/collections for results
+that must reach the original host owner, or deliberately dispatch UI work to
+your own host worker. Do not assume a copied listener mutates a form object.
+The callback's `$monitor` owns that specific generation and may call `stop()`
+or restart after a terminal notification. Stale handles cannot stop a replacement.
+Callback exceptions are contained and recorded separately in `callbackError`,
+with the primary CLI error preserved. A callback must return promptly; do not
+block collection, busy-wait, or manipulate UI from this background context.
+
+When running, open `$status.url` in your browser. This URL contains a
 private, randomly generated access token in its fragment. Treat it as a
 password; do not log it or include it in support reports. The page exchanges it
 for an HttpOnly, SameSite=Strict session cookie and removes it from the address
@@ -92,21 +127,31 @@ the browser automatically.
 
 ```4d
 // Call during your host's shutdown handling, and whenever monitoring ends.
-DashboardMonitor.stop()
+$monitor.stop()
 ```
 
 There is one active monitor per application instance. Duplicate starts fail
-explicitly. `stop()` closes stdin, allows a finite graceful shutdown, terminates
-a stuck child, clears owned state and kills the component worker/queued calls.
-An unexpected exit sets `status:"failed"` and `error`; call `stop()` before
-restarting. EOF on stdin also shuts the web server down. Do not retain orphaned
-monitor processes across database shutdown.
+explicitly. `stop()` requests stdin EOF, allows a finite graceful shutdown, then forcibly
+terminates a stuck child and drains its registration before allowing replacement.
+The callback/collector, startup watchdog and stop worker are pruned; the shared
+`.workers` support process is not killed because other components may use it.
+An unexpected exit retains meaningful stderr and clears the connection URL.
+Terminal notification follows cleanup; restarting needs no manual process-variable
+reset. Keep the facade in your application-owned controller for shutdown, or
+use the generation-bound facade passed to your callback.
+
+**Migration:** `start(options)` still returns shared `{status,url,error,samples,...}`
+state for existing callers, but polling it is no longer the only interface.
+It now includes `finished`, `port`, `epoch` and separate callback diagnostics.
+Repeated start on the same facade rejects without replacing its owned handle.
+`stop()` remains asynchronous and the private URL is cleared on every terminal
+transition. Internal `Dashboard.monitor`/`Dashboard_Agent` variables are not an API.
 
 For a one-off normalized measurement without starting HTTP:
 
 ```4d
 var $sample : Object
-$sample:=DashboardMonitor.collect()
+$sample:=$monitor.collect()
 // Check $sample.ok before using $sample.value.metrics / processes / sessions.
 ```
 
@@ -116,11 +161,11 @@ The default is `127.0.0.1` with an OS-assigned port and mandatory authentication
 For explicitly enabled LAN access:
 
 ```4d
-DashboardStatus:=DashboardMonitor.start(New object(\
+$monitor.start(New object(\
     "listen"; "192.168.1.20:8443"; \
     "allowLAN"; True; \
     "tls-cert"; "/absolute/path/server-cert.pem"; \
-    "tls-key"; "/absolute/path/server-key.pem"))
+    "tls-key"; "/absolute/path/server-key.pem"); $event)
 ```
 
 Use your machine's actual interface IP and a trusted certificate with that IP
@@ -370,6 +415,16 @@ feed live collected measurements, receive refresh requests and stop it.
 ## Build and acceptance
 
 Go standard library only, source minimum Go 1.23; CI pin remains 1.26.10.
+`support-components.json` pins the separately deployed helper release archives,
+source-tag revisions and SHA256 hashes. Acceptance downloads/verifies those
+archives, explicitly loads their compiled packages in both host stages, and
+passes their `.4DZ` files to the real compiler's `components` option. The helper
+lock and exact loaded identities are bound in compiler/host/package evidence
+and preserved in the isolated signing mirror. The dashboard ZIP does **not**
+bundle the helpers. Their MIT licenses remain upstream; tcp's own `procs` runtime
+and redistribution remain part of that separate published package, not this Go CLI.
+Verified local integration is tool4d 21.1 on Apple Silicon; upstream 20.7 compiler
+metadata alone is not evidence of other 21 LTS host/platform compatibility.
 The build embeds HTML/CSS/JavaScript via `go:embed`; there is no separate frontend
 dependency installation. macOS ships a universal executable; Windows ships x64.
 Native Windows ARM64 is unsupported. Follow the actual 4D host OS requirements.

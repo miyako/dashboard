@@ -8,6 +8,13 @@ $request:=JSON Parse(File($parameter; fk posix path).getText())
 $project:=File($request.project; fk posix path)
 $output:=File($request.status; fk posix path)
 $options:=New object("targets"; New collection("x86_64_generic"; "arm64_macOS_lib"); "generateSymbols"; False; "generateSyntaxFile"; True)
+If (Value type($request.components)=Is collection)
+	var $path : Text
+	$options.components:=New collection
+	For each ($path; $request.components)
+		$options.components.push(File($path; fk posix path))
+	End for each
+End if
 $status:=Compile project($project; $options)
 $status.project:=$project.path
 $status.targets:=$options.targets
