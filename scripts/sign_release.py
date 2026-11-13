@@ -326,6 +326,9 @@ def prepare_payload(root, scratch, config, unsigned):
     mirror.mkdir()
     for name in ("template.json", "package.json", "LICENSE"):
         shutil.copy2(root / name, mirror / name)
+    contract = root / "workflow-contract.json"
+    if contract.exists():
+        shutil.copy2(contract, mirror / contract.name)
     component = root / "component" / config["repository"]
     if component.is_symlink() or component.parent.is_symlink():
         raise SigningError("component directories must not be symlinks")

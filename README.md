@@ -422,7 +422,11 @@ All download bytes are checked before creating the new version tag and release.
 CI and Bump version never publish these assets.
 
 Signed Build additionally publishes the existing component DMG and signing
-proof. The standalone macOS CLI retains the accepted binary's Developer ID
+proof. Before signing, an isolated copy retains all compiler input metadata,
+including `workflow-contract.json` when present, and must reproduce the accepted
+unsigned ZIP byte-for-byte. Changed inputs still fail the original digest gate;
+the signing helper never recompiles or rewrites the original compile marker.
+The standalone macOS CLI retains the accepted binary's Developer ID
 signature; its ZIP is not a stapled container. The component DMG remains the
 notarized/stapled download. Windows Authenticode is not implemented.
 No tag, release, signing secret or publication is required for local acceptance.
