@@ -6,6 +6,7 @@ import json
 import math
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
@@ -41,6 +42,47 @@ def verify(report):
                 or metric["availability"] != "available"
                 or type(metric["value"]) is not type(value) or metric["value"] != value):
             raise ValueError("Invalid or private datastore metadata: " + field)
+    backup = report.get("backup", {})
+    fields = ("lastAt", "nextAt", "statusCode", "duration", "beginUTC", "observedAt")
+    if set(backup) != {"backup." + field for field in fields}:
+        raise ValueError("Backup metric inventory mismatch")
+    for field in fields:
+        metric = backup["backup." + field]
+        if (metric.get("kind") != "static" or metric.get("id") != "backup." + field
+                or metric.get("type") != ("number" if field in ("statusCode", "duration") else "text")
+                or metric.get("unit") != ("ms" if field == "duration" else "")):
+            raise ValueError("Invalid backup metadata: " + field)
+        if field == "observedAt":
+            if (metric.get("availability") != "available"
+                    or set(metric) != {"id", "label", "type", "unit", "kind", "availability", "value"}
+                    or not isinstance(metric.get("value"), str)
+                    or re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z", metric["value"]) is None):
+                raise ValueError("Missing backup observation time")
+        elif (metric.get("availability") != "unsupported" or "value" in metric
+              or metric.get("reason") != "BACKUP INFO component-to-host data-file scope is unverified; host backup metadata unsupported"
+              or set(metric) != {"id", "label", "type", "unit", "kind", "availability", "reason"}):
+            raise ValueError("Fresh no-backup host invented backup history or leaked metadata: " + field)
+    host_backup = report.get("backupHostNative", {})
+    if (set(host_backup) != {"lastLocal", "nextLocal", "statusCode", "duration", "beginUTC"}
+            or any(host_backup[field] != "" for field in ("lastLocal", "nextLocal", "beginUTC"))
+            or any(type(host_backup[field]) is not int or not -2147483648 <= host_backup[field] <= 2147483647
+                   for field in ("statusCode", "duration"))):
+        raise ValueError("Invalid fresh direct-host backup observation")
+    component_backup = report.get("backupComponentNative", {})
+    if set(component_backup) != {"last", "next", "status", "information"}:
+        raise ValueError("Invalid component-context backup observation")
+    for field, keys in (("last", {"local"}), ("next", {"local"}),
+                        ("status", {"code"}), ("information", {"duration", "begin"})):
+        reading = component_backup[field]
+        if (not isinstance(reading, dict) or set(reading) != {"ok", "data"} or reading["ok"] is not True
+                or not isinstance(reading["data"], dict) or set(reading["data"]) != keys):
+            raise ValueError("Invalid native backup read: " + field)
+        for key, value in reading["data"].items():
+            if key in ("local", "begin"):
+                if value != "":
+                    raise ValueError("Unexpected backup history in fresh component-context fixture")
+            elif type(value) is not int or not -2147483648 <= value <= 2147483647:
+                raise ValueError("Invalid native backup numeric observation")
     measures = [report.get("baseline"), *[
         sample.get("measures") for sample in report.get("samples", [])
     ], report.get("final")]
@@ -63,7 +105,9 @@ def verify(report):
             raise ValueError("No measured database activity: " + field)
         deltas[field] = delta
     return {"counts": counts, "rows": report["rows"], "counterDeltas": deltas,
-            "datastore": metadata, "componentCompiled": report.get("componentCompiled")}
+            "datastore": metadata, "backup": backup, "backupHostNative": host_backup,
+            "backupComponentNative": component_backup,
+            "componentCompiled": report.get("componentCompiled")}
 
 
 def stage(root, component):
@@ -77,8 +121,11 @@ def stage(root, component):
     ignored = shutil.ignore_patterns("DerivedData", "userPreferences.*", "Data", "Logs")
     shutil.copytree(root / "samples/crud", host, ignore=ignored)
     host.chmod(0o700)
+    component_ignored = ["userPreferences.*", "Data", "Logs"]
+    if (component / "Project/Sources/Classes/Dashboard.4dm").is_file():
+        component_ignored.append("DerivedData")
     shutil.copytree(component, host / "Components/dashboard.4dbase",
-                    ignore=shutil.ignore_patterns("userPreferences.*", "Data", "Logs"))
+                    ignore=shutil.ignore_patterns(*component_ignored))
     (host / "Data").mkdir()
     return host
 

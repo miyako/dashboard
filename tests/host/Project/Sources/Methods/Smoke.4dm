@@ -187,6 +187,70 @@ var $measurement : Object
 var $licenseCaseName : Text
 var $productIndex : Integer
 $collector:=cs.Dashboard._DashboardCollector.new()
+HOST_Phase:="backup normalization"
+var $backupCases; $backupRead; $backupCase; $backupPositive : Object
+$backupPositive:=New object("availability"; "available"; \
+	"last"; New object("ok"; True; "data"; New object("local"; String(!2026-11-14!; ISO date; ?00:00:00?))); \
+	"next"; New object("ok"; True; "data"; New object("local"; String(!2026-11-15!; ISO date; ?00:00:00?))); \
+	"status"; New object("ok"; True; "data"; New object("code"; 37; "text"; "/private/archive.4BK private-user")); \
+	"information"; New object("ok"; True; "data"; New object("duration"; 1200; "begin"; "2026-11-13T15:00:00.123Z"; "path"; "/private/archive.4BK")))
+$backupCases:=New object
+// Separate mutable copies; no fixture can approve the native backup observation.
+$backupCases.positive:=OB Copy($backupPositive)
+$backupCases.zeroDuration:=OB Copy($backupPositive)
+$backupCases.zeroDuration.information.data.duration:=0
+$backupCases.noBegin:=OB Copy($backupCases.zeroDuration)
+$backupCases.noBegin.information.data.begin:=""
+$backupCases.noBegin.status.data.code:=0
+$backupCases.beginOnly:=OB Copy($backupPositive)
+$backupCases.beginOnly.last.data.local:=""
+$backupCases.noHistory:=OB Copy($backupPositive)
+$backupCases.noHistory.last.data.local:=""
+$backupCases.noHistory.next.data.local:=""
+$backupCases.noHistory.information.data.begin:=""
+$backupCases.noHistory.information.data.duration:=0
+$backupCases.noHistory.status.data.code:=0
+$backupCases.failed:=OB Copy($backupPositive)
+$backupCases.failed.last.ok:=False
+$backupCases.failed.next.ok:=False
+$backupCases.failed.status.ok:=False
+$backupCases.failed.information.ok:=False
+$backupCases.invalid:=OB Copy($backupPositive)
+$backupCases.invalid.last.data.local:=False
+$backupCases.invalid.next.data.local:="2026-11-14T24:00:00"
+$backupCases.invalid.status.data.code:="0"
+$backupCases.invalid.information.data.duration:=-1
+$backupCases.invalid.information.data.begin:="/private/archive.4BK"
+$backupCases.badCalendar:=OB Copy($backupPositive)
+$backupCases.badCalendar.information.data.begin:="2026-02-31T15:00:00.123Z"
+$backupCases.fraction:=OB Copy($backupPositive)
+$backupCases.fraction.information.data.duration:=1.5
+$backupCases.invalidNumeric:=OB Copy($backupPositive)
+$backupCases.invalidNumeric.status.data.code:=True
+$backupCases.invalidNumeric.information.data.duration:=2147483648
+$backupCases.unsupported:=New object("availability"; "unsupported")
+$backupCases.scopeUnverified:=New object("availability"; "unsupported"; "scopeUnverified"; True)
+$backupCases.missing:=New object("availability"; "available")
+$report.backup:=New object
+For each ($name; OB Keys($backupCases))
+	$backupCase:=New object
+	For each ($measurement; $collector._backupMetrics($backupCases[$name]))
+		$backupCase[$measurement.id]:=$measurement
+	End for each
+	$report.backup[$name]:=$backupCase
+End for each
+$report.backup.native:=New object
+For each ($measurement; $collector.backup())
+	$report.backup.native[$measurement.id]:=$measurement
+End for each
+var $backupCachedAt : Real
+$backupCachedAt:=$collector.backupReadAt
+$result:=$collector.snapshot()
+$report.backup.cached:=($collector.backupReadAt=$backupCachedAt)
+$collector.backupReadAt:=Milliseconds-60000
+$backupCachedAt:=$collector.backupReadAt
+$normalized:=$collector.backup()
+$report.backup.refreshed:=($collector.backupReadAt-$backupCachedAt>=60000)
 HOST_Phase:="datastore normalization"
 var $metadataCases; $metadataCase : Object
 var $metadataEntries : Collection

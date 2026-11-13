@@ -193,6 +193,7 @@ this version neither aggregates instances nor executes remote administration.
 | [Is data file locked](https://developer.4d.com/docs/21/commands/is-data-file-locked) | Write protection, **not** record locks |
 | [Is macOS](https://developer.4d.com/docs/21/commands/is-macos), [Is Windows](https://developer.4d.com/docs/21/commands/is-windows) | Collecting platform |
 | [DataStore.getInfo()](https://developer.4d.com/docs/21/API/DataStoreClass#getinfo), [DataClass.getInfo()](https://developer.4d.com/docs/21/API/DataClassClass#getinfo) | Cached host main-datastore type/networked scalars and mapped/exposed/unexposed dataclass counts; no entities or schema names |
+| [BACKUP INFO](https://developer.4d.com/docs/21/commands/backup-info) | Cooperative normalization contract for last/next wall times, uninterpreted status code, milliseconds duration and UTC begin timestamp; host-target scope remains unverified, so deployed host metrics are unsupported |
 
 Every measurement has explicit `available`, `missing`, `unsupported` or `error`
 availability. **Missing is not zero.** Empty database counters do not imply
@@ -215,6 +216,59 @@ three counts, without publishing partial totals. A genuinely empty mapped model
 can report zero; an absent datastore reports unsupported, never zero.
 Restart monitoring after schema changes. Dataclass names, primary-key names,
 table numbers, connection details and local datastore IDs never leave the collector.
+
+Backup descriptors appear in **Instance information**, not rate graphs.
+**Host backup metadata currently reports unsupported even with a local datastore.**
+The [component command-scope rule](https://developer.4d.com/docs/21/Extensions/develop-components#scope-of-language-commands)
+normally executes commands in component context; `BACKUP INFO` documents no
+host-target override. A local main `ds` with `type:"4D"` and `networked:false`
+establishes datastore eligibility, **not** the command's data-file target.
+Until positive host-target evidence exists, the monitor does not read or present
+component-context results as host backup history. Remote clients and dataless
+hosts also report unsupported. No server delegation, arbitrary host-method bridge,
+backup/restore or settings changes occur. Eligibility outcomes, including
+failures, are cached for at least 60 seconds; manual refresh does not bypass
+the cache. `backup.observedAt` is the UTC time of that eligibility check,
+**not** the time of the current stream sample.
+
+The cooperative read/normalization contract uses the vendor's
+`String(date; ISO date; time)` for `backup.lastAt` / `.nextAt`, explicitly
+**host-local** wall time without a timezone suffix.
+Null dates stay missing; a present date with zero Time is valid midnight.
+`backup.beginUTC` accepts only the documented `yyyy-MM-ddTHH:mm:ss.SSSZ`
+Timestamp format with a valid calendar date; it is never derived by appending
+`Z` to local time. `backup.duration` is integer **milliseconds**, not seconds.
+A valid last date or begin timestamp establishes recorded-backup evidence before
+duration (including zero) or `backup.statusCode` can be displayed. Neither
+evidence nor any numeric status code proves a successful backup; the vendor
+does not document code meanings here. Absent history, failures and invalid
+outputs never become zero/success or a disabled schedule. Raw status text,
+paths, filenames, archive names and record/identity data are never exported.
+
+On the pinned 21.1 Apple Silicon tool4d, independent fresh-data source and
+compiled fixtures call `BACKUP INFO` both directly in the host and from the
+component. Both return empty last/next/begin dates, with uninterpreted numeric
+outputs. **Matching empty histories do not establish the command's target.**
+Deployed descriptors remain unsupported; the dataless fixture is unsupported
+independently. Positive metadata is exercised only by normalization fixtures,
+**not** an actual backup operation. Real positive host targeting/history,
+scheduled backup, IDE/Server/remote-client and native Intel/Windows behavior
+remain separate unobserved deployment boundaries.
+
+The opt-in `scripts/test_backup_scope.py --tool4d PATH --component PATH` probe
+stages a fresh synthetic host and creates **only its own** documented
+[21 XML backup settings](https://doc.4d.com/4Dv21/4D/21/4D-XML-Keys-Backup.100-7678272.en.html).
+It verifies native data/settings/log paths before making one data-only `BACKUP`
+attempt; archive destination uses 4D's native `.platformPath` and automatic
+restore/log integration/restart are disabled. It never opens existing data,
+starts the dashboard or modifies shared applications/settings. On 21.1 tool4d,
+the attempt stayed in `backup` until the **45-second timeout**, created no
+archive and produced no backup-specific error diagnostic. The process was
+stopped; this is **failed**, not passed target evidence. The
+[tool4d CLI reference](https://developer.4d.com/docs/21/Admin/cli#disabled-4d-features)
+also explicitly disables its backup scheduler. Positive host targeting therefore
+remains blocked on a separately verified supported runtime, not inferred from
+empty-history comparisons or lexical component context alone.
 
 License usage sends only product IDs/names and derived record counts. It never
 sends license tokens, reasons/callers, retention timestamps or session objects.

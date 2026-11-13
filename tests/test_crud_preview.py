@@ -2,9 +2,12 @@ import copy
 import sys
 from pathlib import Path
 import unittest
+import tempfile
+import xml.etree.ElementTree as ET
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 from preview_crud import verify
+from test_backup_scope import prepare, verify as verify_backup_scope
 
 
 class CrudEvidenceTests(unittest.TestCase):
@@ -26,7 +29,66 @@ class CrudEvidenceTests(unittest.TestCase):
                 for field, value in {"type": "4D", "networked": False, "classes": 1,
                                      "exposed": 0, "unexposed": 1}.items()
             },
+            "backup": {
+                "backup." + field: {"id": "backup." + field, "label": field,
+                    "type": "number" if field in ("statusCode", "duration") else "text",
+                    "unit": "ms" if field == "duration" else "", "kind": "static",
+                    "availability": "unsupported", "reason": "BACKUP INFO component-to-host data-file scope is unverified; host backup metadata unsupported"}
+                for field in ("lastAt", "nextAt", "statusCode", "duration", "beginUTC")
+            },
         }
+        self.report["backup"]["backup.observedAt"] = {
+            "id": "backup.observedAt", "label": "Observed", "type": "text", "unit": "",
+            "kind": "static", "availability": "available", "value": "2026-11-14T00:00:00.123Z"}
+        self.report["backupHostNative"] = {
+            "lastLocal": "", "nextLocal": "", "statusCode": 0, "duration": 0, "beginUTC": ""}
+        self.report["backupComponentNative"] = {
+            "last": {"ok": True, "data": {"local": ""}},
+            "next": {"ok": True, "data": {"local": ""}},
+            "status": {"ok": True, "data": {"code": 0}},
+            "information": {"ok": True, "data": {"duration": 0, "begin": ""}}}
+
+    def test_no_backup_observation_must_not_approve_zero_or_private_metadata(self):
+        for update in ({"value": 0}, {"availability": "available", "value": 0},
+                       {"availability": "missing"}, {"path": "/private/backup"},
+                       {"kind": "gauge"}):
+            bad = copy.deepcopy(self.report)
+            bad["backup"]["backup.duration"].update(update)
+            with self.subTest(update=update), self.assertRaisesRegex(ValueError, "backup"):
+                verify(bad)
+        for field in ("backupHostNative", "backupComponentNative"):
+            bad = copy.deepcopy(self.report)
+            del bad[field]
+            with self.subTest(field=field), self.assertRaisesRegex(ValueError, "backup"):
+                verify(bad)
+
+    def test_backup_probe_only_prepares_an_empty_isolated_data_directory(self):
+        with tempfile.TemporaryDirectory() as directory:
+            host = Path(directory).resolve()
+            (host / "Data").mkdir()
+            request = prepare(host)
+            self.assertTrue(request.is_file())
+            settings = ET.parse(host / "Settings/backup.4DSettings")
+            general = settings.find("Backup/Settings/General")
+            self.assertEqual(general.findtext("DestinationFolder"), str(host / "Archives") + "/")
+            self.assertEqual(general.findtext("IncludeDataFile"), "True")
+            self.assertEqual(general.findtext("IncludeStructureFile"), "False")
+            self.assertEqual(general.findtext("JournalFileEnabled"), "False")
+            self.assertIsNone(general.find("IncludesFiles"))
+        with tempfile.TemporaryDirectory() as directory:
+            host = Path(directory).resolve()
+            (host / "Data").mkdir()
+            (host / "Data/existing.4DD").write_bytes(b"do not touch")
+            with self.assertRaisesRegex(ValueError, "empty Data"):
+                prepare(host)
+            self.assertFalse((host / "Settings").exists())
+            self.assertEqual((host / "Data/existing.4DD").read_bytes(), b"do not touch")
+
+    def test_incomplete_backup_probe_is_failure_not_positive_target_evidence(self):
+        for report in ({"success": False, "finished": False, "phase": "backup"},
+                       {"success": True, "finished": True, "backupOK": True}):
+            with self.subTest(report=report), self.assertRaisesRegex(ValueError, "did not complete"):
+                verify_backup_scope(report, Path("unused"))
 
     def test_requires_genuine_host_schema_and_no_private_metadata(self):
         for update in ({"value": 0}, {"availability": "unsupported"},

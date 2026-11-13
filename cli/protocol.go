@@ -9,6 +9,7 @@ import (
 	"io"
 	"math"
 	"regexp"
+	"strings"
 	"sync"
 	"time"
 	"unicode/utf8"
@@ -171,6 +172,9 @@ func validMetric(m metric) bool {
 	if m.Type != "number" && m.Type != "text" && m.Type != "boolean" {
 		return false
 	}
+	if strings.HasPrefix(m.ID, "backup.") && !validBackupMetric(m) {
+		return false
+	}
 	switch m.Availability {
 	case "available":
 		switch m.Type {
@@ -197,6 +201,49 @@ func validMetric(m metric) bool {
 		return m.Value == nil && m.Reason != "" && len(m.Reason) <= 256
 	}
 	return false
+}
+
+func validBackupMetric(m metric) bool {
+	if m.Kind != "static" {
+		return false
+	}
+	switch m.ID {
+	case "backup.statusCode", "backup.duration":
+		unit := ""
+		if m.ID == "backup.duration" {
+			unit = "ms"
+		}
+		if m.Type != "number" || m.Unit != unit {
+			return false
+		}
+		if m.Availability == "available" {
+			value, ok := m.Value.(float64)
+			minimum := float64(-2147483648)
+			if m.ID == "backup.duration" {
+				minimum = 0
+			}
+			return ok && value >= minimum && value <= 2147483647 && math.Trunc(value) == value
+		}
+	case "backup.lastAt", "backup.nextAt", "backup.beginUTC", "backup.observedAt":
+		if m.Type != "text" || m.Unit != "" {
+			return false
+		}
+		if m.Availability == "available" {
+			value, ok := m.Value.(string)
+			if !ok {
+				return false
+			}
+			layout := "2006-01-02T15:04:05"
+			if m.ID == "backup.beginUTC" || m.ID == "backup.observedAt" {
+				layout += ".000Z"
+			}
+			parsed, err := time.Parse(layout, value)
+			return err == nil && parsed.Year() > 0 && parsed.Format(layout) == value
+		}
+	default:
+		return false
+	}
+	return true
 }
 
 func validEntities(items []entity) bool {
