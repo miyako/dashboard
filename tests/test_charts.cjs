@@ -68,6 +68,20 @@ test('mirrored counter rates are computed before flipping writes and retain rese
   assert.ok([0,1,2,3,4].every(i => Number.isInteger(totals.scale.hi - (totals.scale.hi-totals.scale.lo)*i/4)));
 });
 
+test('cache reads and misses overlay with disk reads rather than contributing to a stacked total', () => {
+  const series = [100,80,90,40].map(value=>[{at:at(0),value}]);
+  const mirror = charts.mirror(series, Date.parse(at(120)));
+  assert.equal(mirror.scale.hi, 100);
+  assert.equal(mirror.scale.lo, -100);
+  assert.deepEqual(mirror.plots.map(p=>p.path),
+    ['M56.00,20.00','M56.00,155.00','M56.00,27.50','M56.00,65.00']);
+  assert.deepEqual(mirror.series.map(s=>s[0].value), [100,-80,90,40]);
+  const missing = charts.mirror([series[0],series[1],[],[{at:at(0),value:null}]], Date.parse(at(120)));
+  assert.equal(missing.plots[2].count, 0);
+  assert.equal(missing.plots[3].count, 0);
+  assert.equal(missing.plots[1].path, mirror.plots[1].path);
+});
+
 test('identity tracking distinguishes disappearance from enumeration failure and missing CPU', () => {
   const samples = [
     { at: at(0), processes: { entities: { 'p:1': { state: 'executing', cpu: 0.1 } } } },

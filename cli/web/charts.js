@@ -15,13 +15,17 @@ const DashboardCharts = (() => {
     ] },
   ];
   const mirrors = [
-    { id: 'disk-bytes', label: 'Disk I/O (bytes)', unit: 'bytes', mirrored: true, metrics: [
-      { id: 'database.diskReadBytes', label: 'Read' },
-      { id: 'database.diskWriteBytes', label: 'Write' },
+    { id: 'disk-bytes', label: 'Database I/O (bytes)', unit: 'bytes', mirrored: true, metrics: [
+      { id: 'database.diskReadBytes', label: 'Disk read' },
+      { id: 'database.diskWriteBytes', label: 'Disk write' },
+      { id: 'database.cacheReadBytes', label: 'Cache read' },
+      { id: 'database.cacheMissBytes', label: 'Cache miss' },
     ] },
-    { id: 'disk-count', label: 'Disk I/O (operations)', unit: 'operations', mirrored: true, metrics: [
-      { id: 'database.diskReadCount', label: 'Read' },
-      { id: 'database.diskWriteCount', label: 'Write' },
+    { id: 'disk-count', label: 'Database I/O (operations)', unit: 'operations', mirrored: true, metrics: [
+      { id: 'database.diskReadCount', label: 'Disk read' },
+      { id: 'database.diskWriteCount', label: 'Disk write' },
+      { id: 'database.cacheReadCount', label: 'Cache read' },
+      { id: 'database.cacheMissCount', label: 'Cache miss' },
     ] },
   ];
   function integerUnit(unit) {

@@ -86,7 +86,7 @@ function drawOverlay(group, state) {
     return el('span', `${item.label}: ${value}`, 'series-key series-' + item.color);
   }));
   node.children[2].textContent = group.mirrored
-    ? `Read above / write below the centered time axis / shared ${unit} scale. Readouts are cumulative totals.`
+    ? `Cache read, cache miss and disk read overlap above / disk write below the centered time axis / shared ${unit} scale. Not summed; readouts are cumulative totals.`
     : `Overlapping traces / shared ${group.unit} scale`;
   const item = { graph: node.children[3], metric: { label: group.label }, series, unit, mirrored: group.mirrored };
   graphNodes.set(key, item); drawPlot(item);
@@ -99,7 +99,7 @@ function drawPlot({ graph, samples, metric, unit, series, mirrored }) {
   const { scale: plot, plots } = geometry;
   if (mirrored) lines = lines.map((line, i) => ({ ...line, samples: geometry.series[i] }));
   graph.setAttribute('aria-label', mirrored
-    ? `${metric.label}: reads above zero, writes below zero, centered time axis; ${plot.count} available samples, up to ${format(plot.hi)} ${unit} in either direction`
+    ? `${metric.label}: cache reads, cache misses and disk reads overlap above zero; disk writes below zero; centered time axis; ${plot.count} available samples, up to ${format(plot.hi)} ${unit} in either direction`
     : `${metric.label}: ${plot.count} available samples in the last two minutes, ${unit || 'value'} from ${format(plot.lo)} to ${format(plot.hi)}`);
   const nodes = [svgEl('title', {}, graph.getAttribute('aria-label'))];
   const divisions = mirrored ? 4 : 3;
@@ -123,8 +123,8 @@ function drawPlot({ graph, samples, metric, unit, series, mirrored }) {
   });
   if (mirrored) {
     nodes.push(svgEl('line', { x1: 56, x2: 580, y1: 95, y2: 95, class: 'zero-axis' }),
-      svgEl('text', { x: 580, y: 12, 'text-anchor': 'end', class: 'axis' }, 'Read'),
-      svgEl('text', { x: 580, y: 190, 'text-anchor': 'end', class: 'axis' }, 'Write'));
+      svgEl('text', { x: 580, y: 12, 'text-anchor': 'end', class: 'axis' }, 'Read / cache'),
+      svgEl('text', { x: 580, y: 190, 'text-anchor': 'end', class: 'axis' }, 'Disk write'));
   }
   for (let i = 0; i <= 2; i++) {
     const at = plot.start + i * DashboardCharts.windowMs / 2;

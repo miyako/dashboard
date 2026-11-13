@@ -26,9 +26,11 @@ The protocol rejects fractional/negative/unsafe record counts.
 Network inbound/outbound rates share one overlapping chart; cache used/capacity
 share another. Both use a common scale, separate colored/dashed traces and
 individual readouts, not a misleading sum of capacity and usage.
-Database disk reads/writes share mirrored graphs: reads above a centered
-horizontal time axis, writes below it, using equal scales on both sides.
-Bytes and operation counts have separate paired graphs. Rate/total switching,
+Database cache reads, cache misses and disk reads overlay above a centered
+horizontal time axis, with disk writes below it and equal scales on both sides.
+The three read-side measures are related, not disjoint: they are **not summed**
+or additively stacked. Each has its own color, line pattern and readout.
+Bytes and operation counts have separate combined graphs. Rate/total switching,
 missing-data gaps and counter resets are preserved; negative positioning is
 presentation only, and readouts/tooltips retain positive I/O magnitudes.
 
