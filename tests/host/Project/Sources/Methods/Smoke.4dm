@@ -232,6 +232,18 @@ $backupCases.unsupported:=New object("availability"; "unsupported")
 $backupCases.scopeUnverified:=New object("availability"; "unsupported"; "scopeUnverified"; True)
 $backupCases.missing:=New object("availability"; "available")
 $report.backup:=New object
+$report.backup.calendarContext:=New object("shortDate"; String(!2026-11-14!); "bareDateValid"; Date("2026-11-14")=!2026-11-14!)
+$report.backup.calendar:=New collection
+var $calendarCase : Object
+For each ($calendarCase; New collection(\
+	New object("input"; "2026-11-14T00:00:00"; "utc"; False); \
+	New object("input"; "2000-02-29T23:59:59"; "utc"; False); \
+	New object("input"; "2026-12-31T23:59:59.999Z"; "utc"; True); \
+	New object("input"; "1900-02-29T00:00:00"; "utc"; False); \
+	New object("input"; "2000-02-30T00:00:00.000Z"; "utc"; True); \
+	New object("input"; "2026-04-31T00:00:00"; "utc"; False)))
+	$report.backup.calendar.push(New object("input"; $calendarCase.input; "utc"; $calendarCase.utc; "valid"; $collector._backupTimestampValid($calendarCase.input; $calendarCase.utc)))
+End for each
 For each ($name; OB Keys($backupCases))
 	$backupCase:=New object
 	For each ($measurement; $collector._backupMetrics($backupCases[$name]))

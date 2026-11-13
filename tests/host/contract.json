@@ -93,6 +93,14 @@
       {"path": "/datastore/overflow/datastore.classes/reason", "equals": "Dataclass metadata limit exceeded (512)"},
       {"path": "/datastore/overflow/datastore.classes/value", "absent": true},
       {"path": "/datastore/cached", "equals": true},
+      {"path": "/backup/calendar", "equals": [
+        {"input":"2026-11-14T00:00:00","utc":false,"valid":true},
+        {"input":"2000-02-29T23:59:59","utc":false,"valid":true},
+        {"input":"2026-12-31T23:59:59.999Z","utc":true,"valid":true},
+        {"input":"1900-02-29T00:00:00","utc":false,"valid":false},
+        {"input":"2000-02-30T00:00:00.000Z","utc":true,"valid":false},
+        {"input":"2026-04-31T00:00:00","utc":false,"valid":false}
+      ]},
       {"path": "/backup/positive", "equals": {
         "backup.lastAt": {"id":"backup.lastAt","label":"Last backup (host-local)","type":"text","unit":"","kind":"static","availability":"available","value":"2026-11-14T00:00:00"},
         "backup.nextAt": {"id":"backup.nextAt","label":"Next scheduled backup (host-local)","type":"text","unit":"","kind":"static","availability":"available","value":"2026-11-15T00:00:00"},

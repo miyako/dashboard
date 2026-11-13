@@ -237,7 +237,10 @@ The cooperative read/normalization contract uses the vendor's
 Null dates stay missing; a present date with zero Time is valid midnight.
 `backup.beginUTC` accepts only the documented `yyyy-MM-ddTHH:mm:ss.SSSZ`
 Timestamp format with a valid calendar date; it is never derived by appending
-`Z` to local time. `backup.duration` is integer **milliseconds**, not seconds.
+`Z` to local time. Calendar validation passes a full ISO date/time to
+[`Date`](https://developer.4d.com/docs/21/commands/date): a bare `YYYY-MM-DD`
+would instead use regional short-date parsing and reject valid values on
+US-English hosts. `backup.duration` is integer **milliseconds**, not seconds.
 A valid last date or begin timestamp establishes recorded-backup evidence before
 duration (including zero) or `backup.statusCode` can be displayed. Neither
 evidence nor any numeric status code proves a successful backup; the vendor

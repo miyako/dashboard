@@ -348,7 +348,8 @@ Function _backupTimestampValid($value : Variant; $utc : Boolean)->$valid : Boole
 	$previous:=Method called on error(ek local)
 	CLI_LastErrors:=Null
 	ON ERR CALL("_CaptureError"; ek local)
-	$date:=Date(Substring($value; 1; 10))
+	// Date requires the full ISO date/time form to avoid regional parsing.
+	$date:=Date(Substring($value; 1; 19))
 	If ($date#!0000-00-00!)
 		$valid:=(Substring(String($date; ISO date); 1; 10)=Substring($value; 1; 10))
 	End if
