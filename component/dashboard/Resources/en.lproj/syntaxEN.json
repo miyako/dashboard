@@ -1,0 +1,509 @@
+{
+	"_method_": {},
+	"cs.Dashboard": {
+		"Dashboard": {
+			"new()": {
+				"Syntax": "**.new**( *target* : Text )",
+				"Params": [
+					[
+						"target",
+						"Text",
+						"->"
+					]
+				],
+				"Summary": ""
+			}
+		},
+		"_DashboardAgent": {
+			"new()": {
+				"Syntax": "**.new**( *target* : Text; *options* : Object; *state* : Object )",
+				"Params": [
+					[
+						"target",
+						"Text",
+						"->"
+					],
+					[
+						"options",
+						"Object",
+						"->"
+					],
+					[
+						"state",
+						"Object",
+						"->"
+					]
+				],
+				"Summary": ""
+			}
+		},
+		"_DashboardCollector": {
+			"new()": {
+				"Syntax": "**.new**()",
+				"Params": [],
+				"Summary": ""
+			}
+		},
+		"_CLI": {
+			"new()": {
+				"Syntax": "**.new**( *executableName* : Text; *target* : Text )",
+				"Params": [
+					[
+						"executableName",
+						"Text",
+						"->"
+					],
+					[
+						"target",
+						"Text",
+						"->"
+					]
+				],
+				"Summary": ""
+			}
+		}
+	},
+	"Dashboard": {
+		"version()": {
+			"Syntax": "**.version**()->result : Object",
+			"Params": [
+				[
+					"result",
+					"Object",
+					"<-"
+				]
+			],
+			"Summary": ""
+		},
+		"stop()": {
+			"Syntax": "**.stop**()",
+			"Params": [],
+			"Summary": ""
+		},
+		"start()": {
+			"Syntax": "**.start**( *options* : Object )->state : Object",
+			"Params": [
+				[
+					"options",
+					"Object",
+					"->"
+				],
+				[
+					"state",
+					"Object",
+					"<-"
+				]
+			],
+			"Summary": ""
+		},
+		"collect()": {
+			"Syntax": "**.collect**()->result : Object",
+			"Params": [
+				[
+					"result",
+					"Object",
+					"<-"
+				]
+			],
+			"Summary": ""
+		},
+		"inspect()": {
+			"Syntax": "**.inspect**( *text* : Text )->result : Object",
+			"Params": [
+				[
+					"text",
+					"Text",
+					"->"
+				],
+				[
+					"result",
+					"Object",
+					"<-"
+				]
+			],
+			"Summary": ""
+		}
+	},
+	"_DashboardAgent": {
+		"stop()": {
+			"Syntax": "**.stop**()",
+			"Params": [],
+			"Summary": ""
+		},
+		"fail()": {
+			"Syntax": "**.fail**( *message* : Text )",
+			"Params": [
+				[
+					"message",
+					"Text",
+					"->"
+				]
+			],
+			"Summary": ""
+		},
+		"onTerminate()": {
+			"Syntax": "**.onTerminate**( *worker* : 4D.SystemWorker; *event* : Object )",
+			"Params": [
+				[
+					"worker",
+					"4D.SystemWorker",
+					"->"
+				],
+				[
+					"event",
+					"Object",
+					"->"
+				]
+			],
+			"Summary": ""
+		},
+		"onError()": {
+			"Syntax": "**.onError**( *worker* : 4D.SystemWorker; *event* : Object )",
+			"Params": [
+				[
+					"worker",
+					"4D.SystemWorker",
+					"->"
+				],
+				[
+					"event",
+					"Object",
+					"->"
+				]
+			],
+			"Summary": ""
+		},
+		"onDataError()": {
+			"Syntax": "**.onDataError**( *worker* : 4D.SystemWorker; *event* : Object )",
+			"Params": [
+				[
+					"worker",
+					"4D.SystemWorker",
+					"->"
+				],
+				[
+					"event",
+					"Object",
+					"->"
+				]
+			],
+			"Summary": ""
+		},
+		"onData()": {
+			"Syntax": "**.onData**( *worker* : 4D.SystemWorker; *event* : Object )",
+			"Params": [
+				[
+					"worker",
+					"4D.SystemWorker",
+					"->"
+				],
+				[
+					"event",
+					"Object",
+					"->"
+				]
+			],
+			"Summary": ""
+		},
+		"get encoding()": {
+			"Syntax": "**.get encoding**()->value : Text",
+			"Params": [
+				[
+					"value",
+					"Text",
+					"<-"
+				]
+			],
+			"Summary": ""
+		},
+		"send()": {
+			"Syntax": "**.send**( *kind* : Text; *payload* : Object )",
+			"Params": [
+				[
+					"kind",
+					"Text",
+					"->"
+				],
+				[
+					"payload",
+					"Object",
+					"->"
+				]
+			],
+			"Summary": ""
+		},
+		"launch()": {
+			"Syntax": "**.launch**()",
+			"Params": [],
+			"Summary": ""
+		},
+		"get hideWindow()": {
+			"Syntax": "**.get hideWindow**()->value : Boolean",
+			"Params": [
+				[
+					"value",
+					"Boolean",
+					"<-"
+				]
+			],
+			"Summary": ""
+		},
+		"get dataType()": {
+			"Syntax": "**.get dataType**()->value : Text",
+			"Params": [
+				[
+					"value",
+					"Text",
+					"<-"
+				]
+			],
+			"Summary": ""
+		},
+		"diagnostic": {
+			"Syntax": "diagnostic : Text"
+		},
+		"buffer": {
+			"Syntax": "buffer : Text"
+		},
+		"closing": {
+			"Syntax": "closing : Boolean"
+		},
+		"target": {
+			"Syntax": "target : Text"
+		},
+		"sequence": {
+			"Syntax": "sequence : Real"
+		},
+		"state": {
+			"Syntax": "state : Object"
+		},
+		"collector": {
+			"Syntax": "collector : cs.Dashboard._DashboardCollector"
+		},
+		"options": {
+			"Syntax": "options : Object"
+		},
+		"currentDirectory": {
+			"Syntax": "currentDirectory : 4D.Folder"
+		},
+		"epoch": {
+			"Syntax": "epoch : Text"
+		},
+		"worker": {
+			"Syntax": "worker : 4D.SystemWorker"
+		}
+	},
+	"_DashboardCollector": {
+		"snapshot()": {
+			"Syntax": "**.snapshot**()->snapshot : Object",
+			"Params": [
+				[
+					"snapshot",
+					"Object",
+					"<-"
+				]
+			],
+			"Summary": ""
+		},
+		"unavailable()": {
+			"Syntax": "**.unavailable**( *id* : Text; *label* : Text; *type* : Text; *unit* : Text; *kind* : Text; *status* : Text; *reason* : Text )->metric : Object",
+			"Params": [
+				[
+					"id",
+					"Text",
+					"->"
+				],
+				[
+					"label",
+					"Text",
+					"->"
+				],
+				[
+					"type",
+					"Text",
+					"->"
+				],
+				[
+					"unit",
+					"Text",
+					"->"
+				],
+				[
+					"kind",
+					"Text",
+					"->"
+				],
+				[
+					"status",
+					"Text",
+					"->"
+				],
+				[
+					"reason",
+					"Text",
+					"->"
+				],
+				[
+					"metric",
+					"Object",
+					"<-"
+				]
+			],
+			"Summary": ""
+		},
+		"metric()": {
+			"Syntax": "**.metric**( *id* : Text; *label* : Text; *type* : Text; *unit* : Text; *kind* : Text; *value* : Variant )->metric : Object",
+			"Params": [
+				[
+					"id",
+					"Text",
+					"->"
+				],
+				[
+					"label",
+					"Text",
+					"->"
+				],
+				[
+					"type",
+					"Text",
+					"->"
+				],
+				[
+					"unit",
+					"Text",
+					"->"
+				],
+				[
+					"kind",
+					"Text",
+					"->"
+				],
+				[
+					"value",
+					"Variant",
+					"->"
+				],
+				[
+					"metric",
+					"Object",
+					"<-"
+				]
+			],
+			"Summary": ""
+		},
+		"read()": {
+			"Syntax": "**.read**( *command* : Text )->result : Object",
+			"Params": [
+				[
+					"command",
+					"Text",
+					"->"
+				],
+				[
+					"result",
+					"Object",
+					"<-"
+				]
+			],
+			"Summary": ""
+		},
+		"remote": {
+			"Syntax": "remote : Boolean"
+		},
+		"staticMetrics": {
+			"Syntax": "staticMetrics : Collection"
+		},
+		"sampleCount": {
+			"Syntax": "sampleCount : Integer"
+		},
+		"info": {
+			"Syntax": "info : Object"
+		}
+	},
+	"_CLI": {
+		"execute()": {
+			"Syntax": "**.execute**( *arguments* : Collection )->result : Object",
+			"Params": [
+				[
+					"arguments",
+					"Collection",
+					"->"
+				],
+				[
+					"result",
+					"Object",
+					"<-"
+				]
+			],
+			"Summary": ""
+		},
+		"resolve()": {
+			"Syntax": "**.resolve**()->result : Object",
+			"Params": [
+				[
+					"result",
+					"Object",
+					"<-"
+				]
+			],
+			"Summary": ""
+		},
+		"get compiled()": {
+			"Syntax": "**.get compiled**()->compiled : Boolean",
+			"Params": [
+				[
+					"compiled",
+					"Boolean",
+					"<-"
+				]
+			],
+			"Summary": ""
+		},
+		"target": {
+			"Syntax": "target : Text"
+		},
+		"executableName": {
+			"Syntax": "executableName : Text"
+		}
+	},
+	"_Process": {
+		"execute()": {
+			"Syntax": "**.execute**( *file* : 4D.File; *arguments* : Collection )->result : Object",
+			"Params": [
+				[
+					"file",
+					"4D.File",
+					"->"
+				],
+				[
+					"arguments",
+					"Collection",
+					"->"
+				],
+				[
+					"result",
+					"Object",
+					"<-"
+				]
+			],
+			"Summary": ""
+		},
+		"quote()": {
+			"Syntax": "**.quote**( *argument* : Text )->quoted : Text",
+			"Params": [
+				[
+					"argument",
+					"Text",
+					"->"
+				],
+				[
+					"quoted",
+					"Text",
+					"<-"
+				]
+			],
+			"Summary": ""
+		}
+	}
+}

@@ -1,15 +1,15 @@
 {
-  "name": "4d-component-template",
+  "name": "dashboard",
   "version": "0.1.0",
   "private": true,
-  "description": "Deterministic UTF-8 greeting example",
+  "description": "Read-only web dashboard for local 4D instance metrics over a versioned streaming protocol",
   "license": "MIT",
   "tool": {
     "platform": "macos",
-    "branch": "20.x",
-    "version": "20.7",
-    "build": "101905",
+    "branch": "21.x",
+    "version": "21.1",
+    "build": "100562",
     "arch": "arm",
-    "sha256": "40a5d177a4f73165f52abf6ec8000249d81411c41353ccf258cece8e74639261"
+    "sha256": "98c5ebfd20135ee0f2874344bd055aae39f5d84a542f14d385292bbaa5451cd4"
   }
 }

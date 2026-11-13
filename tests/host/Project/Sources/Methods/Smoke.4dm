@@ -3,7 +3,7 @@ var $ignored : Integer
 var $parameter; $name; $target : Text
 var $folderPath : Text
 var $request; $result; $report : Object
-var $tool : cs.TemplateCLI.Greeting
+var $tool : cs.Dashboard.Dashboard
 var $requestFile; $statusFile : 4D.File
 var $renamedExecutable : 4D.File
 var $cases : Collection
@@ -32,7 +32,7 @@ $target:="macOS-universal"
 If (Is Windows)
 	$target:="Windows-x64"
 End if
-$tool:=cs.TemplateCLI.Greeting.new($target)
+$tool:=cs.Dashboard.Dashboard.new($target)
 $cases:=New collection("world"; "path with spaces"; "quote \" and \\ slash"; "line\nbreak"; "日本語"; "$() ; & % !")
 $report:=New object("success"; True; "finished"; False; "cases"; New collection)
 $report.compiled:=$tool._cli.compiled
@@ -42,7 +42,7 @@ If (Is Windows)
 Else
 	$renamedExecutable:=File($request.executable; fk posix path)
 End if
-$report.renamedExecutable:=cs.TemplateCLI._Process.new().execute($renamedExecutable; New collection("--version"))
+$report.renamedExecutable:=cs.Dashboard._Process.new().execute($renamedExecutable; New collection("--version"))
 If (Not($report.renamedExecutable.ok))
 	$report.success:=False
 End if
@@ -51,17 +51,17 @@ If ($request.expectCompiled#$report.compiled)
 	$report.success:=False
 End if
 For each ($name; $cases)
-	$result:=$tool.greet($name)
+	$result:=$tool.inspect($name)
 	$report.cases.push($result)
 	If (Not($result.ok))
 		$report.success:=False
 	Else
-		If ($result.value.message#("Hello, "+$name+"!"))
+		If ($result.value.text#$name)
 			$report.success:=False
 		End if
 	End if
 End for each
-$result:=$tool.greet("")
+$result:=$tool.inspect("")
 $report.invalid:=$result
 If ($result.ok | ($result.exitCode#2))
 	$report.success:=False
@@ -76,18 +76,18 @@ Else
 	End if
 End if
 HOST_Phase:="missing executable"
-$result:=cs.TemplateCLI._CLI.new("missing-cli"; $target).execute(New collection("--version"))
+$result:=cs.Dashboard._CLI.new("missing-cli"; $target).execute(New collection("--version"))
 $report.missing:=$result
 If ($result.error.code#"missing_executable")
 	$report.success:=False
 End if
-$result:=cs.TemplateCLI.Greeting.new("unsupported-arm-target").version()
+$result:=cs.Dashboard.Dashboard.new("unsupported-arm-target").version()
 $report.unsupported:=$result
 If ($result.error.code#"unsupported_architecture")
 	$report.success:=False
 End if
 HOST_Phase:="launch failure"
-$result:=cs.TemplateCLI._Process.new().execute($requestFile; New collection)
+$result:=cs.Dashboard._Process.new().execute($requestFile; New collection)
 $report.launch:=$result
 If ($result.error.code#"launch_failed")
 	$report.success:=False
@@ -120,19 +120,19 @@ For each ($name; New collection("true"; "false"; "null"; "1"; "[]"))
 	End if
 End for each
 HOST_Phase:="File argument"
-$result:=cs.TemplateCLI._CLI.new("component-cli"; $target).execute(New collection("greet"; "--name"; $requestFile))
+$result:=cs.Dashboard._CLI.new("dashboard"; $target).execute(New collection("inspect"; "--text"; $requestFile))
 $report.fileArgument:=$result
 If (Not($result.ok))
 	$report.success:=False
 Else
-	If (JSON Parse($result.stdout).message#("Hello, "+$parameter+"!"))
+	If (JSON Parse($result.stdout).text#$parameter)
 		$report.success:=False
 	End if
 End if
 $report.rejectedArguments:=New collection
 HOST_Phase:="scalar arguments"
 For each ($invalid; New collection(123; 1.25; True; False; Null; Current date; Current time; New collection; New object))
-	$result:=cs.TemplateCLI._Process.new().execute($requestFile; New collection($invalid))
+	$result:=cs.Dashboard._Process.new().execute($requestFile; New collection($invalid))
 	$report.rejectedArguments.push(New object("type"; Value type($invalid); "result"; $result))
 	If ($result.ok | ($result.error.code#"invalid_argument"))
 		$report.success:=False
@@ -141,14 +141,14 @@ End for each
 $report.rejectedNul:=New collection
 HOST_Phase:="NUL arguments"
 For each ($name; New collection(Char(0)+"prefix"; "middle"+Char(0)+"suffix"; "trailing"+Char(0)))
-	$result:=cs.TemplateCLI._Process.new().execute($requestFile; New collection($name))
+	$result:=cs.Dashboard._Process.new().execute($requestFile; New collection($name))
 	$report.rejectedNul.push($result)
 	If ($result.ok | ($result.error.code#"invalid_argument"))
 		$report.success:=False
 	End if
 End for each
-$report.missingFile:=cs.TemplateCLI._Process.new().execute(Null; New collection)
-$report.missingArguments:=cs.TemplateCLI._Process.new().execute($requestFile; Null)
+$report.missingFile:=cs.Dashboard._Process.new().execute(Null; New collection)
+$report.missingArguments:=cs.Dashboard._Process.new().execute($requestFile; Null)
 If ($report.missingFile.ok | ($report.missingFile.error.code#"invalid_argument"))
 	$report.success:=False
 End if
@@ -156,7 +156,7 @@ If ($report.missingArguments.ok | ($report.missingArguments.error.code#"invalid_
 	$report.success:=False
 End if
 HOST_Phase:="Folder argument"
-$result:=cs.TemplateCLI._CLI.new("component-cli"; $target).execute(New collection("greet"; "--name"; $requestFile.parent))
+$result:=cs.Dashboard._CLI.new("dashboard"; $target).execute(New collection("inspect"; "--text"; $requestFile.parent))
 $report.folderArgument:=$result
 $folderPath:=$requestFile.parent.path
 If (Is Windows)
@@ -165,9 +165,57 @@ End if
 If (Not($result.ok))
 	$report.success:=False
 Else
-	If (JSON Parse($result.stdout).message#("Hello, "+$folderPath+"!"))
+	If (JSON Parse($result.stdout).text#$folderPath)
 		$report.success:=False
 	End if
+End if
+HOST_Phase:="real collector"
+$result:=$tool.collect()
+$report.collector:=$result
+If (Not($result.ok))
+	$report.success:=False
+Else
+	If ($result.value.metrics.length<15)
+		$report.success:=False
+	End if
+End if
+HOST_Phase:="async web service"
+var $service : Object
+var $deadline : Integer
+$service:=$tool.start(New object)
+$deadline:=Milliseconds+15000
+While (($service.samples<1) & ($service.status#"failed") & (Milliseconds<$deadline))
+	DELAY PROCESS(Current process; 6)
+End while
+$report.service:=New object("status"; $service.status; "samples"; $service.samples; "error"; $service.error)
+If (($service.status#"running") | ($service.samples<1))
+	$report.success:=False
+End if
+If ($service.status="running")
+	var $http : 4D.HTTPRequest
+	var $origin : Text
+	$origin:=Substring($service.url; 1; Position("/#token="; $service.url; *)-1)
+	$http:=4D.HTTPRequest.new($origin+"/"; New object("timeout"; 3; "dataType"; "text"))
+	$http.wait(4)
+	$report.service.httpStatus:=$http.response.status
+	If ($http.response.status#200)
+		$report.success:=False
+	End if
+	$http:=4D.HTTPRequest.new($origin+"/api/events"; New object("timeout"; 3; "dataType"; "text"))
+	$http.wait(4)
+	$report.service.unauthenticatedStatus:=$http.response.status
+	If ($http.response.status#401)
+		$report.success:=False
+	End if
+End if
+$tool.stop()
+$deadline:=Milliseconds+5000
+While (($service.status="running") & (Milliseconds<$deadline))
+	DELAY PROCESS(Current process; 6)
+End while
+$report.service.stopped:=($service.status="stopped")
+If (Not($report.service.stopped))
+	$report.success:=False
 End if
 $report.finished:=True
 ON ERR CALL(HOST_PreviousHandler; ek local)

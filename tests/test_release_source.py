@@ -24,6 +24,8 @@ class ReleaseSourceTests(unittest.TestCase):
     origin_url = "https://github.com/owner/CaseTools.git"
 
     def setUp(self):
+        if json.loads((ROOT / "template.json").read_text())["initialized"]:
+            self.skipTest("fresh-template initialization fixtures require retained cli-starters/")
         self.workspace = ROOT / (".release-source-test-" + uuid.uuid4().hex)
         self.root = self.workspace / "source"
         self.origin = self.workspace / "origin.git"

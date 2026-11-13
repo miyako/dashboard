@@ -20,7 +20,9 @@ def valid_status(compiled=False):
     status = {"success": True, "finished": True, "compiled": compiled,
               "cases": [{"ok": True, **copy.deepcopy(case)} for case in CONTRACT["feature"]["cases"]],
               "fileArgument": {"ok": True, "stdout": "file round trip", "stderr": "", "exitCode": 0},
-              "folderArgument": {"ok": True, "stdout": "folder round trip", "stderr": "", "exitCode": 0}}
+              "folderArgument": {"ok": True, "stdout": "folder round trip", "stderr": "", "exitCode": 0},
+              "collector": {"ok": True, "value": {"metrics": [{"id": "app.type", "availability": "available"}]}},
+              "service": {"status": "running", "error": "", "stopped": True}}
     def apply_assertions(value, assertions):
         for assertion in assertions:
             tokens = assertion["path"].split("/")[1:]

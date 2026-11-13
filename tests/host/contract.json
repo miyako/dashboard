@@ -3,18 +3,18 @@
   "feature": {
     "casesPath": "/cases",
     "cases": [
-      {"stdout": "{\"protocol\":1,\"message\":\"Hello, world!\"}\n", "stderr": "", "exitCode": 0, "value": {"protocol": 1, "message": "Hello, world!"}},
-      {"stdout": "{\"protocol\":1,\"message\":\"Hello, path with spaces!\"}\n", "stderr": "", "exitCode": 0, "value": {"protocol": 1, "message": "Hello, path with spaces!"}},
-      {"stdout": "{\"protocol\":1,\"message\":\"Hello, quote \\\" and \\\\ slash!\"}\n", "stderr": "", "exitCode": 0, "value": {"protocol": 1, "message": "Hello, quote \" and \\ slash!"}},
-      {"stdout": "{\"protocol\":1,\"message\":\"Hello, line\\nbreak!\"}\n", "stderr": "", "exitCode": 0, "value": {"protocol": 1, "message": "Hello, line\nbreak!"}},
-      {"stdout": "{\"protocol\":1,\"message\":\"Hello, 日本語!\"}\n", "stderr": "", "exitCode": 0, "value": {"protocol": 1, "message": "Hello, 日本語!"}},
-      {"stdout": "{\"protocol\":1,\"message\":\"Hello, $() ; & % !!\"}\n", "stderr": "", "exitCode": 0, "value": {"protocol": 1, "message": "Hello, $() ; & % !!"}}
+      {"stdout":"{\"protocol\":1,\"text\":\"world\"}\n","stderr":"","exitCode":0,"value":{"protocol":1,"text":"world"}},
+      {"stdout":"{\"protocol\":1,\"text\":\"path with spaces\"}\n","stderr":"","exitCode":0,"value":{"protocol":1,"text":"path with spaces"}},
+      {"stdout":"{\"protocol\":1,\"text\":\"quote \\\" and \\\\ slash\"}\n","stderr":"","exitCode":0,"value":{"protocol":1,"text":"quote \" and \\ slash"}},
+      {"stdout":"{\"protocol\":1,\"text\":\"line\\nbreak\"}\n","stderr":"","exitCode":0,"value":{"protocol":1,"text":"line\nbreak"}},
+      {"stdout":"{\"protocol\":1,\"text\":\"日本語\"}\n","stderr":"","exitCode":0,"value":{"protocol":1,"text":"日本語"}},
+      {"stdout":"{\"protocol\":1,\"text\":\"$() ; & % !\"}\n","stderr":"","exitCode":0,"value":{"protocol":1,"text":"$() ; & % !"}}
     ],
     "assertions": [
       {"path": "/invalid/ok", "equals": false},
       {"path": "/invalid/exitCode", "equals": 2},
       {"path": "/invalid/stdout", "equals": ""},
-      {"path": "/invalid/stderr", "equals": "{\"protocol\":1,\"error\":{\"code\":\"invalid_arguments\",\"message\":\"expected greet --name <non-empty UTF-8 name> or --version\"}}\n"},
+      {"path": "/invalid/stderr", "equals": "{\"error\":{\"code\":\"dashboard_error\",\"message\":\"expected serve [--listen IP:port] [--allow-lan --tls-cert file --tls-key file], inspect --text text, or --version\"},\"protocol\":1}\n"},
       {"path": "/invalid/error/code", "equals": "cli_error"},
       {"path": "/version/ok", "equals": true},
       {"path": "/version/stdout", "equals": "{\"protocol\":1,\"version\":\"0.1.0\"}\n"},
@@ -55,7 +55,17 @@
       {"path": "/protocolScalars/1/stdout", "equals": "false"},
       {"path": "/protocolScalars/2/stdout", "equals": "null"},
       {"path": "/protocolScalars/3/stdout", "equals": "1"},
-      {"path": "/protocolScalars/4/stdout", "equals": "[]"}
+      {"path": "/protocolScalars/4/stdout", "equals": "[]"},
+      {"path": "/collector/ok", "equals": true},
+      {"path": "/collector/value/metrics", "each": [
+        {"path": "/id", "matches": "[A-Za-z0-9_.:-]+"},
+        {"path": "/availability", "matches": "available|missing|unsupported|error"}
+      ]},
+      {"path": "/service/status", "equals": "running"},
+      {"path": "/service/error", "equals": ""},
+      {"path": "/service/httpStatus", "equals": 200},
+      {"path": "/service/unauthenticatedStatus", "equals": 401},
+      {"path": "/service/stopped", "equals": true}
     ]
   },
   "execution": {

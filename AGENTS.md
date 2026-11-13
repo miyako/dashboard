@@ -1,5 +1,18 @@
 # 4D CLI component: THINK / ASK → RUN playbook
 
+## Initialized destination: dashboard
+
+This repository is now the Go-only `miyako/dashboard` destination, namespace
+`Dashboard`, executable `dashboard`, public class `Dashboard`, with a **4D 21
+LTS** floor. Do not reinitialize it or restore greeting starters. Read the
+root README and current class/stream contracts before editing. The fixed
+compiler in `package.json.tool` is 21.1, not the historical 20.7 examples below.
+Keep `_Process` synchronous/generic; `_DashboardAgent` owns the long-lived
+CALL WORKER-based stream. Monitoring is read-only, local-instance scoped,
+authenticated loopback by default; LAN requires explicit opt-in and TLS.
+Preserve both the finite generic execution probes and the live streaming
+service/source/compiled-host assertions.
+
 This is the canonical implementation and acceptance guide. Read `README.md`,
 `template.json`, this file, class documentation, relevant scripts and host tests
 before editing. This is a **real 4D component**, not a native 4D plug-in: its

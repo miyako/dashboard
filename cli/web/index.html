@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="color-scheme" content="dark light"><title>4D Dashboard</title><link rel="stylesheet" href="/style.css"><script src="/app.js" defer></script></head>
+<body>
+<a class="skip" href="#metrics">Skip to measurements</a>
+<header><div><p class="eyebrow">INSTANCE OBSERVABILITY</p><h1>4D Dashboard</h1><p id="scope">Read-only monitoring of the collecting instance</p></div><div class="controls"><label>Appearance <select id="theme"><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select></label><button id="refresh" type="button" disabled>Refresh</button></div></header>
+<main><div class="statusline"><span id="status" role="status" aria-live="polite">Connecting...</span><span id="sample"></span></div>
+<section id="login" hidden><h2>Browser access</h2><p>Open the private URL returned by your 4D instance, or enter its access token.</p><form id="auth"><label>Access token <input id="token" type="password" autocomplete="off" required maxlength="64"></label><button>Connect</button></form></section>
+<section aria-labelledby="measure-title"><h2 id="measure-title">Measurements</h2><div id="metrics" class="grid" tabindex="-1"><p>Waiting for a 4D snapshot. Missing measurements are never treated as zero.</p></div></section>
+<section aria-labelledby="info-title"><h2 id="info-title">Instance information</h2><dl id="info"></dl></section>
+<div class="tables"><section><h2>Processes <span id="process-count"></span></h2><div class="scroll"><table><caption>Local process identities (names redacted)</caption><thead><tr><th>Identity</th><th>Type</th><th>State</th><th>CPU</th></tr></thead><tbody id="processes"></tbody></table></div></section><section><h2>Sessions <span id="session-count"></span></h2><div class="scroll"><table><caption>Visible session identities (personal fields redacted)</caption><thead><tr><th>Identity</th><th>Type</th><th>State</th></tr></thead><tbody id="sessions"></tbody></table></div></section></div>
+<p id="action" role="status" aria-live="polite"></p></main><footer>No administrative controls. Values describe where collection executes, not necessarily the server.</footer>
+</body></html>

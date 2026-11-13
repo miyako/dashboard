@@ -1,0 +1,265 @@
+package main
+
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+	"time"
+)
+
+func frame(kind string, seq uint64) message {
+	return message{Protocol: 1, Kind: kind, Epoch: "test-epoch", Seq: seq, SampledAt: time.Now().UTC().Format(time.RFC3339Nano)}
+}
+
+func hello(t *testing.T, s *service) {
+	t.Helper()
+	if err := s.apply(frame("hello", 1)); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestFramesAndState(t *testing.T) {
+	s := newService("http://127.0.0.1:8080", "token")
+	h := frame("hello", 1)
+	m := frame("snapshot", 2)
+	m.Metrics = []metric{{ID: "cpu", Label: "CPU", Type: "number", Unit: "%", Kind: "gauge", Availability: "available", Value: float64(0)}}
+	m.Processes = []entity{{ID: "process:1", State: "executing", Type: "worker"}}
+	var b bytes.Buffer
+	for _, value := range []message{h, m} {
+		if err := json.NewEncoder(&b).Encode(value); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// A byte-at-a-time reader models arbitrary pipe chunk boundaries.
+	if err := s.read(&singleByteReader{b.Bytes()}); err != nil {
+		t.Fatal(err)
+	}
+	if s.current.Metrics["cpu"].Value != float64(0) || len(s.current.Processes) != 1 {
+		t.Fatal(s.current)
+	}
+	update := frame("update", 3)
+	update.Delete = &deletions{Metrics: []string{"cpu"}, Processes: []string{"process:1"}}
+	if err := s.apply(update); err != nil {
+		t.Fatal(err)
+	}
+	if len(s.current.Processes) != 0 || len(s.current.Metrics) != 0 || len(s.current.History) != 0 {
+		t.Fatal(s.current)
+	}
+	if err := s.apply(update); err == nil {
+		t.Fatal("accepted replay")
+	}
+}
+
+type singleByteReader struct{ bytes []byte }
+
+func (r *singleByteReader) Read(b []byte) (int, error) {
+	if len(r.bytes) == 0 {
+		return 0, io.EOF
+	}
+	b[0] = r.bytes[0]
+	r.bytes = r.bytes[1:]
+	return 1, nil
+}
+
+func TestInvalidFrames(t *testing.T) {
+	for _, raw := range []string{
+		`{"protocol":2}`, `{"protocol":1} {}`, `[]`, "null", "{\"kind\":\"\xff\"}",
+		strings.Repeat("x", maxFrame+1), `{"protocol":1,"unexpected":true}`,
+	} {
+		s := newService("http://127.0.0.1", "token")
+		if err := s.read(strings.NewReader(raw + "\n")); err == nil {
+			t.Fatalf("accepted %q", raw[:min(len(raw), 80)])
+		}
+	}
+	s := newService("http://127.0.0.1", "token")
+	hello(t, s)
+	m := frame("snapshot", 2)
+	m.Metrics = []metric{{ID: "missing", Label: "Missing", Type: "number", Kind: "gauge", Availability: "missing", Value: float64(0)}}
+	if err := s.apply(m); err == nil {
+		t.Fatal("unavailable became zero")
+	}
+	if s.current.Seq != 1 {
+		t.Fatal("invalid update mutated state")
+	}
+	m.Metrics[0].Value = nil
+	m.Metrics[0].Reason = "not provided"
+	if err := s.apply(m); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestBoundedHistoryAndCoalescing(t *testing.T) {
+	s := newService("http://127.0.0.1", "token")
+	hello(t, s)
+	client := make(chan []byte, 1)
+	s.clients[client] = true
+	for i := uint64(2); i < 202; i++ {
+		m := frame("snapshot", i)
+		m.Metrics = []metric{{ID: "cpu", Label: "CPU", Type: "number", Kind: "gauge", Availability: "available", Value: float64(i)}}
+		if err := s.apply(m); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(s.current.History["cpu"]) != 60 || len(client) != 1 {
+		t.Fatal("unbounded history or queue")
+	}
+	var current state
+	if err := json.Unmarshal(<-client, &current); err != nil || current.Seq != 201 {
+		t.Fatal(current, err)
+	}
+	s.last = time.Now().Add(-16 * time.Second)
+	s.expire()
+	if s.current.Status != "stale" {
+		t.Fatal("not stale")
+	}
+}
+
+func TestRefreshCorrelation(t *testing.T) {
+	s := newService("http://127.0.0.1", "token")
+	hello(t, s)
+	id, err := s.request()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.request(); err != errBusy {
+		t.Fatal("duplicate refresh admitted")
+	}
+	m := frame("result", 2)
+	ok := true
+	m.ID, m.OK = "wrong", &ok
+	if err := s.apply(m); err == nil {
+		t.Fatal("uncorrelated result accepted")
+	}
+	m.ID = id
+	if err := s.apply(m); err != nil {
+		t.Fatal(err)
+	}
+	s.lastRequest = time.Time{}
+	lateID, err := s.request()
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.requestAt = time.Now().Add(-11 * time.Second)
+	s.expire()
+	if s.pending != "" {
+		t.Fatal("request did not expire")
+	}
+	late := frame("result", 3)
+	late.ID, late.OK = lateID, &ok
+	if err := s.apply(late); err != nil {
+		t.Fatalf("late result should be consumed, not crash: %v", err)
+	}
+	late.Seq = 4
+	if err := s.apply(late); err == nil {
+		t.Fatal("late result was replayed")
+	}
+}
+
+func TestIncompleteFrameAndOutputBackpressure(t *testing.T) {
+	s := newService("http://127.0.0.1", "token")
+	raw, _ := json.Marshal(frame("hello", 1))
+	if err := s.read(bytes.NewReader(raw)); err == nil {
+		t.Fatal("accepted unterminated frame")
+	}
+	for i := 0; i < cap(s.out); i++ {
+		if err := s.emit(i); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := s.emit("overflow"); err == nil {
+		t.Fatal("unbounded output")
+	}
+}
+
+func TestAuthHostOriginAndReadOnlyRoutes(t *testing.T) {
+	s := newService("http://127.0.0.1:8123", strings.Repeat("a", 64))
+	hello(t, s)
+	tests := []struct {
+		method, path, host, origin, body string
+		cookie                           bool
+		status                           int
+	}{
+		{"GET", "/", "evil.example", "", "", false, 403},
+		{"GET", "/api/events", "127.0.0.1:8123", "", "", false, 401},
+		{"POST", "/api/session", "127.0.0.1:8123", "http://evil.example", s.token, false, 403},
+		{"POST", "/api/session", "127.0.0.1:8123", s.origin, "wrong", false, 401},
+		{"POST", "/api/session", "127.0.0.1:8123", s.origin, s.token, false, 204},
+		{"POST", "/api/refresh", "127.0.0.1:8123", "", "", true, 403},
+		{"POST", "/api/delete", "127.0.0.1:8123", s.origin, "", true, 404},
+		{"POST", "/api/refresh", "127.0.0.1:8123", s.origin, "", true, 202},
+		{"GET", "/app.js", "127.0.0.1:8123", "", "", false, 200},
+	}
+	for _, tt := range tests {
+		t.Run(fmt.Sprint(tt.method, tt.path, tt.status), func(t *testing.T) {
+			r := httptest.NewRequest(tt.method, s.origin+tt.path, strings.NewReader(tt.body))
+			r.Host = tt.host
+			r.Header.Set("Origin", tt.origin)
+			r.Header.Set("X-Dashboard-Action", "refresh")
+			if tt.cookie {
+				r.AddCookie(&http.Cookie{Name: "dashboard", Value: s.cookie})
+			}
+			w := httptest.NewRecorder()
+			s.handler().ServeHTTP(w, r)
+			if w.Code != tt.status {
+				t.Fatalf("%d: %s", w.Code, w.Body)
+			}
+			if tt.path == "/api/session" && w.Code == 204 {
+				cookie := w.Result().Cookies()[0]
+				if !cookie.HttpOnly || cookie.SameSite != http.SameSiteStrictMode {
+					t.Fatal(cookie)
+				}
+			}
+		})
+	}
+}
+
+func TestSSEInitialResnapshot(t *testing.T) {
+	s := newService("http://placeholder", "token")
+	hello(t, s)
+	server := httptest.NewServer(s.handler())
+	defer server.Close()
+	s.origin = server.URL
+	request, _ := http.NewRequest("GET", server.URL+"/api/events", nil)
+	request.AddCookie(&http.Cookie{Name: "dashboard", Value: s.cookie})
+	response, err := server.Client().Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	defer response.Body.Close()
+	buffer := make([]byte, 2048)
+	n, err := response.Body.Read(buffer)
+	if err != nil || !bytes.Contains(buffer[:n], []byte(`"epoch":"test-epoch"`)) {
+		t.Fatal(string(buffer[:n]), err)
+	}
+}
+
+func TestCrossSiteNavigationDoesNotBlockPrivateURL(t *testing.T) {
+	s := newService("http://127.0.0.1:8123", "token")
+	for path, status := range map[string]int{"/": 200, "/api/events": 403} {
+		r := httptest.NewRequest("GET", s.origin+path, nil)
+		r.Header.Set("Sec-Fetch-Site", "cross-site")
+		r.Header.Set("Sec-Fetch-Mode", "navigate")
+		w := httptest.NewRecorder()
+		s.handler().ServeHTTP(w, r)
+		if w.Code != status {
+			t.Fatalf("%s: %d", path, w.Code)
+		}
+	}
+}
+
+func TestLANAndEOF(t *testing.T) {
+	for _, args := range [][]string{{"serve", "--listen", "0.0.0.0:0"}, {"serve", "--listen", "192.0.2.1:0"}, {"serve", "--listen", "127.0.0.1:0", "--tls-cert", "only"}, {"serve", "--listen", "127.0.0.1:0", "extra"}} {
+		if err := run(args, strings.NewReader(""), io.Discard, io.Discard); err == nil {
+			t.Fatal(args)
+		}
+	}
+	if err := run([]string{"serve"}, strings.NewReader(""), io.Discard, io.Discard); err != nil {
+		t.Fatal(err)
+	}
+}

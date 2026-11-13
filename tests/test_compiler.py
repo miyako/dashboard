@@ -92,7 +92,10 @@ class CompilerTests(unittest.TestCase):
         outside.mkdir()
         sentinel = outside / "keep"
         sentinel.write_text("not compiler output")
-        (self.project.parent / "DerivedData").symlink_to(outside)
+        derived = self.project.parent / "DerivedData"
+        if derived.exists():
+            shutil.rmtree(derived)
+        derived.symlink_to(outside)
         with self.assertRaisesRegex(ValueError, "symlinks"):
             compiler.compile_component(self.root, "/fake/tool4d")
         self.assertEqual(sentinel.read_text(), "not compiler output")
