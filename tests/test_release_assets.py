@@ -5,6 +5,7 @@ from pathlib import Path
 import sys
 import unittest
 from unittest.mock import patch
+import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
@@ -220,6 +221,85 @@ class ReleaseAssetsTests(unittest.TestCase):
         self.assertNotIn("shell", run.call_args.kwargs)
         self.assertNotIn("*.zip", arguments)
 
+    def publish_cli(self, signed=False):
+        with patch.object(release_assets, "commit", return_value=self.revision), patch.object(
+                release_assets, "create_release_tag") as tag, patch.object(
+                release_assets.subprocess, "run") as run:
+            release_assets.publish(self.root, "owner/example-component", "0.1.0", self.revision,
+                                   signed, create_tag=True, include_cli=True)
+        tag.assert_called_once_with(self.root, "owner/example-component", "0.1.0", self.revision)
+        return run.call_args.args[0]
+
+    def check_cli_archives(self, expected_mac, signed):
+        path = self.root / "dist/example-component-cli.json"
+        manifest = json.loads(path.read_text())
+        self.assertEqual(manifest["commit"], self.revision)
+        self.assertEqual(manifest["version"], "0.1.0")
+        self.assertIs(manifest["apple_signing"], signed)
+        self.assertEqual(manifest["component"], self.report["artifact"])
+        self.assertEqual(manifest["acceptance"]["sha256"], release_assets.sha256(self.evidence))
+        for entry, binary in zip(manifest["archives"], (expected_mac, test_delivery.synthetic_pe())):
+            archive = self.root / entry["path"]
+            self.assertEqual(entry["sha256"], release_assets.sha256(archive))
+            self.assertEqual(entry["bytes"], archive.stat().st_size)
+            with zipfile.ZipFile(archive) as packed:
+                executable = packed.getinfo(entry["executable"])
+                self.assertEqual(packed.read(executable), binary)
+                self.assertEqual((executable.external_attr >> 16) & 0o777, 0o755)
+                basename = entry["executable"].split("/")[0]
+                self.assertEqual(packed.read(basename + "/LICENSE"), (self.root / "LICENSE").read_bytes())
+                self.assertEqual(packed.read(basename + "/licenses/Go-LICENSE.txt"),
+                                 (self.fixture.component / "Resources/licenses/Go-LICENSE.txt").read_bytes())
+                self.assertFalse(any("Libraries" in name or name.endswith(".4DZ")
+                                     for name in packed.namelist()))
+        return manifest
+
+    def test_standalone_archives_use_accepted_not_working_binaries_and_ship_licenses(self):
+        self.fixture.mac.write_bytes(b"changed working binary must never be released")
+        arguments = self.publish_cli()
+        manifest = self.check_cli_archives(test_delivery.synthetic_universal(), False)
+        self.assertEqual([entry["target"] for entry in manifest["archives"]],
+                         ["macos-universal", "windows-x64"])
+        for entry in manifest["archives"]:
+            self.assertIn(str(self.root / entry["path"]), arguments)
+        self.assertIn(str(self.root / "dist/example-component-cli.json"), arguments)
+        self.assertIn(str(self.evidence), arguments)
+        self.assertIn(str(self.root / self.report["artifact"]["path"]), arguments)
+
+    def test_signed_cli_is_byte_identical_to_final_accepted_signed_component(self):
+        binary = test_delivery.synthetic_universal() + b"synthetic signed bytes, not Apple evidence"
+        self.fixture.mac.write_bytes(binary)
+        self.fixture.write_status()
+        archive = self.fixture.package()
+        self.report["assets"][0].update(sha256=release_assets.sha256(archive), bytes=archive.stat().st_size)
+        self.signed_assets()
+        self.publish_cli(signed=True)
+        self.check_cli_archives(binary, True)
+
+    def test_cli_packaging_corruption_stops_before_tag_or_release(self):
+        writer = release_assets.write_zip
+
+        def corrupt(destination, entries):
+            name, content, mode = entries[0]
+            writer(destination, [(name, content + b"tampered", mode), *entries[1:]])
+
+        with patch.object(release_assets, "write_zip", side_effect=corrupt), patch.object(
+                release_assets, "commit", return_value=self.revision), patch.object(
+                release_assets, "create_release_tag") as tag, patch.object(
+                release_assets.subprocess, "run") as run:
+            with self.assertRaisesRegex(ValueError, "changed accepted bytes"):
+                release_assets.publish(self.root, "owner/example-component", "0.1.0", self.revision,
+                                       create_tag=True, include_cli=True)
+        tag.assert_not_called()
+        run.assert_not_called()
+
+    def test_existing_standalone_output_is_not_overwritten(self):
+        output = self.root / "dist/example-component-cli-macos-universal.zip"
+        output.write_bytes(b"existing output")
+        with self.assertRaisesRegex(ValueError, "unvalidated assets"):
+            self.publish_cli()
+        self.assertEqual(output.read_bytes(), b"existing output")
+
     def test_release_secret_gate_and_manual_escalation_are_explicit(self):
         workflow = (ROOT / ".github/workflows/build.yml").read_text()
         unsigned = workflow.split("name: Build and accept unsigned component without Apple secrets")[1].split(
@@ -239,11 +319,12 @@ class ReleaseAssetsTests(unittest.TestCase):
         order = []
         with patch.object(release_assets, "verify_assets", side_effect=lambda *args: order.append("assets") or [
                 self.evidence]), patch.object(
+                release_assets, "package_cli_assets", side_effect=lambda *args: order.append("cli") or []), patch.object(
                 release_assets, "create_release_tag", side_effect=lambda *args: order.append("tag")), patch.object(
                 release_assets.subprocess, "run", side_effect=lambda *args, **kwargs: order.append("release")):
             release_assets.publish(self.root, "owner/example-component", "0.1.0",
-                                   self.revision, create_tag=True)
-        self.assertEqual(order, ["assets", "tag", "release"])
+                                   self.revision, create_tag=True, include_cli=True)
+        self.assertEqual(order, ["assets", "cli", "tag", "release"])
 
     def test_failed_or_unexecuted_acceptance_never_mutates_refs_or_releases(self):
         baseline = copy.deepcopy(self.report)
@@ -259,7 +340,7 @@ class ReleaseAssetsTests(unittest.TestCase):
                         release_assets.subprocess, "run") as run:
                     with self.assertRaisesRegex(ValueError, "did not pass"):
                         release_assets.publish(self.root, "owner/example-component", "0.1.0",
-                                               self.revision, create_tag=True)
+                                               self.revision, create_tag=True, include_cli=True)
                     tag.assert_not_called()
                     run.assert_not_called()
 

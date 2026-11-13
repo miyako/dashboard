@@ -1,12 +1,16 @@
 #!/usr/bin/env python3
-"""Verify downloaded accepted assets before creating a release tag and publication."""
+"""Verify accepted assets and optional standalone CLI downloads before tag/publication."""
 import argparse
-from pathlib import Path
+import hashlib
+import json
+from pathlib import Path, PurePosixPath
 import re
 import subprocess
+import zipfile
 
 from build_provenance import commit, sha256, source_digest
 from ci_config import ROOT, TARGETS, load_config
+from package_component import RUNTIME_NOTICES, unpack_for_test, validate_resources, write_zip
 from release_ref import create_tag as create_release_tag, verify as verify_tag
 from sign_release import release_policy, submission_uuid
 from test_4d import _read_json, validate_status
@@ -139,8 +143,86 @@ def verify_assets(root, repository, tag, revision, apple_signing=False):
     return [*paths, evidence]
 
 
-def publish(root, repository, tag, revision, apple_signing=False, *, create_tag=False):
+def package_cli_assets(root, config, revision, archive, evidence, apple_signing):
+    """Derive portable CLI downloads from the already verified final component bytes."""
+    root = Path(root).resolve()
+    bindings = [
+        {"path": path.relative_to(root).as_posix(), "sha256": sha256(path),
+         "bytes": path.stat().st_size} for path in (archive, evidence)]
+    accepted = _read_json(evidence)
+    artifact = accepted["artifact"]
+    if (artifact.get("sha256") != bindings[0]["sha256"] or artifact.get("bytes") != bindings[0]["bytes"]
+            or accepted.get("commit") != revision or accepted.get("configuration") != config):
+        raise ValueError("CLI packaging requires the exact accepted component ZIP")
+    unpacked = unpack_for_test(root, archive)
+    mac, windows = validate_resources(unpacked, config["cli"])
+    license_file = root / "LICENSE"
+    if not license_file.is_file() or any(path.is_symlink() for path in (license_file, *license_file.parents)):
+        raise ValueError("standalone CLI requires the regular project LICENSE")
+    notices = unpacked / "Resources/licenses"
+    required = RUNTIME_NOTICES.get(config["language"])
+    if required and not (notices / required).is_file():
+        raise ValueError("standalone CLI is missing its bundled runtime notice")
+    licenses = [("LICENSE", license_file.read_bytes(), 0o644)]
+    for path in sorted(notices.rglob("*")):
+        if path.is_file():
+            licenses.append(("licenses/" + path.relative_to(notices).as_posix(), path.read_bytes(), 0o644))
+    if any(not content for _, content, _ in licenses):
+        raise ValueError("standalone CLI license notices must not be empty")
+    report = {
+        "schema": 1, "version": config["version"], "commit": revision,
+        "component": bindings[0], "acceptance": bindings[1], "apple_signing": apple_signing,
+        "archives": [],
+    }
+    outputs = []
+    for target, executable in (("macos-universal", mac), ("windows-x64", windows)):
+        basename = config["repository"] + "-cli-" + target
+        path = archive.parent / (basename + ".zip")
+        if any(item.is_symlink() for item in (path, *path.parents)):
+            raise ValueError("standalone CLI output must not traverse symlinks")
+        binary = executable.read_bytes()
+        entries = [(basename + "/" + name, content, mode)
+                   for name, content, mode in [(executable.name, binary, 0o755), *licenses]]
+        with path.open("xb") as destination:
+            write_zip(destination, entries)
+        directories = {parent.as_posix() + "/" for name, _, _ in entries
+                       for parent in PurePosixPath(name).parents if parent.as_posix() != "."}
+        with zipfile.ZipFile(path) as packed:
+            members = packed.infolist()
+            if (len(members) != len(entries) + len(directories)
+                    or {entry.filename for entry in members} != directories | {name for name, _, _ in entries}):
+                raise ValueError("standalone CLI ZIP contains unexpected entries")
+            for name, content, mode in entries:
+                entry = packed.getinfo(name)
+                if (packed.read(entry) != content or (entry.external_attr >> 16) & 0o777 != mode):
+                    raise ValueError("standalone CLI ZIP changed accepted bytes or executable permissions")
+        report["archives"].append({
+            "path": path.relative_to(root).as_posix(), "sha256": sha256(path), "bytes": path.stat().st_size,
+            "target": target, "executable": basename + "/" + executable.name,
+            "binary_sha256": hashlib.sha256(binary).hexdigest(),
+        })
+        outputs.append(path)
+    for path, binding in zip((archive, evidence), bindings):
+        if sha256(path) != binding["sha256"]:
+            raise ValueError("accepted component or evidence changed during CLI packaging")
+    manifest = archive.parent / (config["repository"] + "-cli.json")
+    if any(item.is_symlink() for item in (manifest, *manifest.parents)):
+        raise ValueError("standalone CLI manifest must not traverse symlinks")
+    with manifest.open("x", encoding="utf-8") as destination:
+        destination.write(json.dumps(report, indent=2) + "\n")
+    if _read_json(manifest) != report:
+        raise ValueError("standalone CLI manifest changed during packaging")
+    for path, binding in zip(outputs, report["archives"]):
+        if path.stat().st_size != binding["bytes"] or sha256(path) != binding["sha256"]:
+            raise ValueError("standalone CLI ZIP changed after verification")
+    return [*outputs, manifest]
+
+
+def publish(root, repository, tag, revision, apple_signing=False, *, create_tag=False, include_cli=False):
     assets = verify_assets(root, repository, tag, revision, apple_signing)
+    if include_cli:
+        config = load_config(root, initialized=True, repository=repository, tag=tag)
+        assets += package_cli_assets(root, config, revision, assets[0], assets[-1], apple_signing)
     if create_tag:
         create_release_tag(root, repository, tag, revision)
     else:
@@ -153,6 +235,13 @@ def publish(root, repository, tag, revision, apple_signing=False, *, create_tag=
            if apple_signing else "Unsigned release; no Apple credentials were used. ")
         + "Adjacent acceptance evidence binds the assets, source revision, native manifests and host reports. "
         "Native Intel/Windows 4D and installed-release download checks remain separate observations.")
+    if include_cli:
+        notes += (
+            " Standalone macOS universal and Windows x64 CLI ZIPs include license notices; "
+            "their hash manifest binds the unchanged binaries to that accepted component ZIP and evidence. "
+            "CLI ZIPs are not stapled containers; when signing is enabled, the macOS binary retains its "
+            "accepted Developer ID signature and the component DMG remains the notarized/stapled container. "
+            "Windows Authenticode is not implemented.")
     subprocess.run(["gh", "release", "create", tag, *(str(path) for path in assets),
                     "--repo", repository, "--verify-tag", "--title", tag, "--notes", notes],
                    cwd=root, check=True)
@@ -169,18 +258,22 @@ def main():
                         help="publish verified assets; default only verifies without creating tags/releases")
     parser.add_argument("--create-tag", action="store_true",
                         help="create a new main-only version tag after asset verification; requires --publish")
+    parser.add_argument("--include-cli", action="store_true",
+                        help="also package and publish standalone CLI ZIPs from accepted component bytes")
     args = parser.parse_args()
     try:
         if args.create_tag and not args.publish:
             raise ValueError("--create-tag requires --publish")
+        if args.include_cli and not args.publish:
+            raise ValueError("--include-cli requires --publish")
         if args.publish:
             publish(args.root, args.repository, args.tag, args.sha, args.require_apple_signing,
-                    create_tag=args.create_tag)
+                    create_tag=args.create_tag, include_cli=args.include_cli)
         else:
             for asset in verify_assets(args.root, args.repository, args.tag, args.sha,
                                        args.require_apple_signing):
                 print(asset)
-    except (ValueError, OSError, TypeError, KeyError, subprocess.SubprocessError) as error:
+    except (ValueError, OSError, TypeError, KeyError, zipfile.BadZipFile, subprocess.SubprocessError) as error:
         parser.exit(2, f"release asset verification/publication failed: {error}\n")
 
 

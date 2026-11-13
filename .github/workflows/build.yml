@@ -160,7 +160,7 @@ jobs:
         with:
           name: compiled-release
           path: dist
-      - name: Create the tag and release only after final asset validation
+      - name: Package standalone CLI downloads and publish only after final asset validation
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
@@ -171,4 +171,4 @@ jobs:
           signing=()
           if [ "$APPLE_SIGNING" = "true" ]; then signing+=(--require-apple-signing); fi
           python scripts/release_assets.py --repository "$GH_REPO" --tag "$RELEASE_TAG" \
-            --sha "$RELEASE_SHA" "${signing[@]}" --create-tag --publish
+            --sha "$RELEASE_SHA" "${signing[@]}" --create-tag --publish --include-cli

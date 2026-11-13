@@ -327,6 +327,30 @@ removed; destination-specific version surfaces are checked separately.
 CI is nonpublishing. **Bump version** updates synchronized source metadata on
 the selected branch; **Build** publishes only after separate authorization,
 main-only immutable-SHA acceptance and the existing provenance/signing gates.
+Use **Actions → Bump version → Run workflow**, select the source branch and
+patch/minor/major, then separately run **Actions → Build → Run workflow** on
+main after the version and implementation are merged. Build does not bump the
+version or follow a newer main commit; it builds/tests all three native CLI
+targets and accepts the compiled component at the exact dispatch SHA.
+`FOURD_ENABLED=true` must be configured as an Actions variable for Build's
+required hosted component checks.
+
+Build publishes `dashboard.zip` and `dashboard.acceptance.json`, plus standalone
+`dashboard-cli-macos-universal.zip`, `dashboard-cli-windows-x64.zip` and
+`dashboard-cli.json`. Extract the appropriate CLI archive to get `dashboard`
+or `dashboard.exe`, the MIT license and bundled runtime notices; no 4D installation
+is needed to run the CLI itself. A producer must still supply the
+[stdin protocol](#protocol-1); the CLI does not collect 4D metrics by itself.
+The CLI archives are derived from the exact accepted component ZIP, not rebuilt
+or substituted after host acceptance. Their manifest records archive/binary
+hashes, shared version, source revision and original component/evidence hashes.
+All download bytes are checked before creating the new version tag and release.
+CI and Bump version never publish these assets.
+
+Signed Build additionally publishes the existing component DMG and signing
+proof. The standalone macOS CLI retains the accepted binary's Developer ID
+signature; its ZIP is not a stapled container. The component DMG remains the
+notarized/stapled download. Windows Authenticode is not implemented.
 No tag, release, signing secret or publication is required for local acceptance.
 The inherited `workflow-contract.json` is checked with
 `python3 scripts/workflow_contract.py --root .`; install its development-only

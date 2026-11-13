@@ -31,7 +31,7 @@ COMMANDS = {
 signing=()
 if [ "$APPLE_SIGNING" = "true" ]; then signing+=(--require-apple-signing); fi
 python scripts/release_assets.py --repository "$GH_REPO" --tag "$RELEASE_TAG" \\
-  --sha "$RELEASE_SHA" "${signing[@]}" --create-tag --publish
+  --sha "$RELEASE_SHA" "${signing[@]}" --create-tag --publish --include-cli
 ''',
 }
 POLICY_PROGRAM = '''

@@ -142,6 +142,7 @@ class WorkflowTests(unittest.TestCase):
             ("ref: ${{ needs.preflight.outputs.source_sha }}", "ref: main"),
             ("ref: ${{ github.sha }}", "ref: main"),
             ("--create-tag --publish", "--publish"),
+            ("--include-cli", ""),
             ("apple_signing == 'true'", "apple_signing == 'false'"),
             ("name: compiled-release", "name: unvalidated-release"),
             ("dist/*.acceptance.json", "dist/*.other.json"),

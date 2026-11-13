@@ -12,6 +12,11 @@ CALL WORKER-based stream. Monitoring is read-only, local-instance scoped,
 authenticated loopback by default; LAN requires explicit opt-in and TLS.
 Preserve both the finite generic execution probes and the live streaming
 service/source/compiled-host assertions.
+Destination Build also publishes standalone macOS universal and Windows x64
+CLI ZIPs plus `dashboard-cli.json`, derived from the exact accepted component
+ZIP by `release_assets.py --include-cli` before tag/publication. Preserve the
+separate source-only Bump version action and all original acceptance/signing
+gates; do not rebuild or substitute CLI bytes for those downloads.
 
 This is the canonical implementation and acceptance guide. Read `README.md`,
 `template.json`, this file, class documentation, relevant scripts and host tests
