@@ -85,7 +85,7 @@
       },
       {
         "path": "/version/stdout",
-        "equals": "{\"protocol\":1,\"version\":\"0.1.1\"}\n"
+        "equals": "{\"protocol\":1,\"version\":\"0.1.2\"}\n"
       },
       {
         "path": "/version/stderr",
@@ -99,7 +99,7 @@
         "path": "/version/value",
         "equals": {
           "protocol": 1,
-          "version": "0.1.1"
+          "version": "0.1.2"
         }
       },
       {
@@ -820,11 +820,24 @@
       },
       {
         "path": "/callbackSequence",
-        "equals": ["starting", "running", "sample"]
+        "equals": [
+          "starting",
+          "running",
+          "sample"
+        ]
       },
       {
         "path": "/callbackEvents",
-        "each": [{"path": "/process", "matches": "Dashboard\\.callbacks\\.[A-F0-9]{32}"}, {"path":"/preemptive","equals":false}]
+        "each": [
+          {
+            "path": "/process",
+            "matches": "Dashboard\\.callbacks\\.[A-F0-9]{32}"
+          },
+          {
+            "path": "/preemptive",
+            "equals": false
+          }
+        ]
       },
       {
         "path": "/callbackEvents/1/portObserved",
@@ -836,15 +849,28 @@
       },
       {
         "path": "/cancelled",
-        "equals": {"status":"stopped","finished":true,"clearedURL":true}
+        "equals": {
+          "status": "stopped",
+          "finished": true,
+          "clearedURL": true
+        }
       },
       {
         "path": "/callbackFailure",
-        "equals": {"status":"failed","finished":true,"diagnostic":true,"clearedURL":true}
+        "equals": {
+          "status": "failed",
+          "finished": true,
+          "diagnostic": true,
+          "clearedURL": true
+        }
       },
       {
         "path": "/staleHandle",
-        "equals": {"oldFinished":true,"restarted":true,"pruned":true}
+        "equals": {
+          "oldFinished": true,
+          "restarted": true,
+          "pruned": true
+        }
       },
       {
         "path": "/sameFacadeRejected",
@@ -856,11 +882,23 @@
       },
       {
         "path": "/occupiedPort",
-        "equals": {"status":"failed","finished":true,"diagnostic":true,"clearedURL":true,"blockerStopped":true}
+        "equals": {
+          "status": "failed",
+          "finished": true,
+          "diagnostic": true,
+          "clearedURL": true,
+          "blockerStopped": true
+        }
       },
       {
         "path": "/ipv6",
-        "equals": {"running":true,"url":true,"owned":true,"unexpectedExit":true,"pruned":true}
+        "equals": {
+          "running": true,
+          "url": true,
+          "owned": true,
+          "unexpectedExit": true,
+          "pruned": true
+        }
       },
       {
         "path": "/callbackWorkerPruned",
@@ -868,7 +906,11 @@
       },
       {
         "path": "/forcedStop",
-        "equals": {"terminated":true,"finished":true,"status":"stopped"}
+        "equals": {
+          "terminated": true,
+          "finished": true,
+          "status": "stopped"
+        }
       },
       {
         "path": "/callbackStopped",
@@ -876,11 +918,23 @@
       },
       {
         "path": "/delayedFinalizer",
-        "equals": {"oldFinished":true,"replacementOwned":true,"replacementRunning":true,"replacementSampled":true}
+        "equals": {
+          "oldFinished": true,
+          "replacementOwned": true,
+          "replacementRunning": true,
+          "replacementSampled": true
+        }
       },
       {
         "path": "/failureWatchdog",
-        "equals": {"running":true,"watchdog":true,"terminated":true,"finished":true,"diagnostic":true,"pruned":true}
+        "equals": {
+          "running": true,
+          "watchdog": true,
+          "terminated": true,
+          "finished": true,
+          "diagnostic": true,
+          "pruned": true
+        }
       }
     ]
   },
@@ -895,7 +949,7 @@
         "path": "/renamedExecutable",
         "equals": {
           "ok": true,
-          "stdout": "{\"protocol\":1,\"version\":\"0.1.1\"}\n",
+          "stdout": "{\"protocol\":1,\"version\":\"0.1.2\"}\n",
           "stderr": "",
           "exitCode": 0
         }
