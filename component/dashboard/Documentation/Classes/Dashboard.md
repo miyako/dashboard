@@ -29,8 +29,15 @@ not overwritten. Callbacks must return promptly.
 Returns shared `{status,url,error,samples,epoch,port,finished,callbackError,...}`
 for compatibility; polling is optional, not the required callback interface.
 Options: `listen` (IP:port), `allowLAN` (Boolean), `tls-cert`, `tls-key`
-(absolute paths). Default authenticated `127.0.0.1:0`; LAN requires explicit
-opt-in and valid TLS. Unknown/invalid options fail explicitly.
+(absolute paths), `operator` (object). Default authenticated `127.0.0.1:0`; LAN
+requires explicit opt-in and valid TLS. Unknown/invalid options fail explicitly.
+
+`operator` is off unless given, as `New object("actions"; New collection("operator.noop"))`:
+1 to 8 unique IDs from the closed catalog, whose only entry is a no-op. When it
+is enabled, the status and shared state carry a separate secret `operatorUrl`
+(cleared on stop). Each dispatched action is audited in the host's
+`Logs/dashboard/audit.jsonl`, and nothing runs if that write fails. See
+`docs/operator-actions.md` in the repository.
 
 `stop()` queues graceful shutdown, closes stdin, then uses a finite 3.5-second
 grace period and forced fallback if needed. Registration drainage precedes

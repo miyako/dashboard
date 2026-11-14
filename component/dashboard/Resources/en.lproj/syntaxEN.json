@@ -34,26 +34,6 @@
 				"Summary": ""
 			}
 		},
-		"_DashboardServer": {
-			"new()": {
-				"Syntax": "**.new**()",
-				"Params": [],
-				"Summary": ""
-			}
-		},
-		"Dashboard": {
-			"new()": {
-				"Syntax": "**.new**( *target* : Text )",
-				"Params": [
-					[
-						"target",
-						"Text",
-						"->"
-					]
-				],
-				"Summary": ""
-			}
-		},
 		"_DashboardCollector": {
 			"new()": {
 				"Syntax": "**.new**()",
@@ -101,16 +81,54 @@
 				],
 				"Summary": ""
 			}
+		},
+		"_DashboardServer": {
+			"new()": {
+				"Syntax": "**.new**()",
+				"Params": [],
+				"Summary": ""
+			}
+		},
+		"_DashboardOperator": {
+			"new()": {
+				"Syntax": "**.new**( *actions* : Collection; *epoch* : Text; *folder* : 4D.Folder )",
+				"Params": [
+					[
+						"actions",
+						"Collection",
+						"->"
+					],
+					[
+						"epoch",
+						"Text",
+						"->"
+					],
+					[
+						"folder",
+						"4D.Folder",
+						"->"
+					]
+				],
+				"Summary": ""
+			}
+		},
+		"Dashboard": {
+			"new()": {
+				"Syntax": "**.new**( *target* : Text )",
+				"Params": [
+					[
+						"target",
+						"Text",
+						"->"
+					]
+				],
+				"Summary": ""
+			}
 		}
 	},
 	"_DashboardAgent": {
 		"finish()": {
 			"Syntax": "**.finish**()",
-			"Params": [],
-			"Summary": ""
-		},
-		"stop()": {
-			"Syntax": "**.stop**()",
 			"Params": [],
 			"Summary": ""
 		},
@@ -120,38 +138,6 @@
 				[
 					"message",
 					"Text",
-					"->"
-				]
-			],
-			"Summary": ""
-		},
-		"onData()": {
-			"Syntax": "**.onData**( *worker* : 4D.SystemWorker; *event* : Object )",
-			"Params": [
-				[
-					"worker",
-					"4D.SystemWorker",
-					"->"
-				],
-				[
-					"event",
-					"Object",
-					"->"
-				]
-			],
-			"Summary": ""
-		},
-		"onTerminate()": {
-			"Syntax": "**.onTerminate**( *worker* : 4D.SystemWorker; *event* : Object )",
-			"Params": [
-				[
-					"worker",
-					"4D.SystemWorker",
-					"->"
-				],
-				[
-					"event",
-					"Object",
 					"->"
 				]
 			],
@@ -171,6 +157,11 @@
 					"->"
 				]
 			],
+			"Summary": ""
+		},
+		"stop()": {
+			"Syntax": "**.stop**()",
+			"Params": [],
 			"Summary": ""
 		},
 		"get hideWindow()": {
@@ -254,6 +245,38 @@
 			],
 			"Summary": ""
 		},
+		"onTerminate()": {
+			"Syntax": "**.onTerminate**( *worker* : 4D.SystemWorker; *event* : Object )",
+			"Params": [
+				[
+					"worker",
+					"4D.SystemWorker",
+					"->"
+				],
+				[
+					"event",
+					"Object",
+					"->"
+				]
+			],
+			"Summary": ""
+		},
+		"onData()": {
+			"Syntax": "**.onData**( *worker* : 4D.SystemWorker; *event* : Object )",
+			"Params": [
+				[
+					"worker",
+					"4D.SystemWorker",
+					"->"
+				],
+				[
+					"event",
+					"Object",
+					"->"
+				]
+			],
+			"Summary": ""
+		},
 		"notify()": {
 			"Syntax": "**.notify**( *kind* : Text )",
 			"Params": [
@@ -279,17 +302,14 @@
 		"sequence": {
 			"Syntax": "sequence : Real"
 		},
-		"worker": {
-			"Syntax": "worker : 4D.SystemWorker"
-		},
-		"callbackWorker": {
-			"Syntax": "callbackWorker : Text"
-		},
 		"diagnostic": {
 			"Syntax": "diagnostic : Text"
 		},
 		"target": {
 			"Syntax": "target : Text"
+		},
+		"operator": {
+			"Syntax": "operator : cs.Dashboard._DashboardOperator"
 		},
 		"buffer": {
 			"Syntax": "buffer : Text"
@@ -314,123 +334,12 @@
 		},
 		"epoch": {
 			"Syntax": "epoch : Text"
-		}
-	},
-	"_DashboardServer": {
-		"isReady()": {
-			"Syntax": "**.isReady**( *port* : Integer )->ready : Boolean",
-			"Params": [
-				[
-					"port",
-					"Integer",
-					"->"
-				],
-				[
-					"ready",
-					"Boolean",
-					"<-"
-				]
-			],
-			"Summary": ""
 		},
-		"start()": {
-			"Syntax": "**.start**( *params* : Object )->worker : 4D.SystemWorker",
-			"Params": [
-				[
-					"params",
-					"Object",
-					"->"
-				],
-				[
-					"worker",
-					"4D.SystemWorker",
-					"<-"
-				]
-			],
-			"Summary": ""
+		"callbackWorker": {
+			"Syntax": "callbackWorker : Text"
 		},
-		"agent": {
-			"Syntax": "agent : cs.Dashboard._DashboardAgent"
-		}
-	},
-	"Dashboard": {
-		"version()": {
-			"Syntax": "**.version**()->result : Object",
-			"Params": [
-				[
-					"result",
-					"Object",
-					"<-"
-				]
-			],
-			"Summary": ""
-		},
-		"stop()": {
-			"Syntax": "**.stop**()",
-			"Params": [],
-			"Summary": ""
-		},
-		"terminate()": {
-			"Syntax": "**.terminate**()->terminated : Boolean",
-			"Params": [
-				[
-					"terminated",
-					"Boolean",
-					"<-"
-				]
-			],
-			"Summary": ""
-		},
-		"start()": {
-			"Syntax": "**.start**( *options* : Object; *event* : Object )->state : Object",
-			"Params": [
-				[
-					"options",
-					"Object",
-					"->"
-				],
-				[
-					"event",
-					"Object",
-					"->"
-				],
-				[
-					"state",
-					"Object",
-					"<-"
-				]
-			],
-			"Summary": ""
-		},
-		"collect()": {
-			"Syntax": "**.collect**()->result : Object",
-			"Params": [
-				[
-					"result",
-					"Object",
-					"<-"
-				]
-			],
-			"Summary": ""
-		},
-		"inspect()": {
-			"Syntax": "**.inspect**( *text* : Text )->result : Object",
-			"Params": [
-				[
-					"text",
-					"Text",
-					"->"
-				],
-				[
-					"result",
-					"Object",
-					"<-"
-				]
-			],
-			"Summary": ""
-		},
-		"state": {
-			"Syntax": "state : Object"
+		"worker": {
+			"Syntax": "worker : 4D.SystemWorker"
 		}
 	},
 	"_DashboardCollector": {
@@ -779,6 +688,244 @@
 		},
 		"event": {
 			"Syntax": "event : Object"
+		},
+		"state": {
+			"Syntax": "state : Object"
+		}
+	},
+	"_DashboardServer": {
+		"isReady()": {
+			"Syntax": "**.isReady**( *port* : Integer )->ready : Boolean",
+			"Params": [
+				[
+					"port",
+					"Integer",
+					"->"
+				],
+				[
+					"ready",
+					"Boolean",
+					"<-"
+				]
+			],
+			"Summary": ""
+		},
+		"start()": {
+			"Syntax": "**.start**( *params* : Object )->worker : 4D.SystemWorker",
+			"Params": [
+				[
+					"params",
+					"Object",
+					"->"
+				],
+				[
+					"worker",
+					"4D.SystemWorker",
+					"<-"
+				]
+			],
+			"Summary": ""
+		},
+		"agent": {
+			"Syntax": "agent : cs.Dashboard._DashboardAgent"
+		}
+	},
+	"_DashboardOperator": {
+		"complete()": {
+			"Syntax": "**.complete**( *message* : Object; *record* : Object )->frame : Object",
+			"Params": [
+				[
+					"message",
+					"Object",
+					"->"
+				],
+				[
+					"record",
+					"Object",
+					"->"
+				],
+				[
+					"frame",
+					"Object",
+					"<-"
+				]
+			],
+			"Summary": ""
+		},
+		"begin()": {
+			"Syntax": "**.begin**( *message* : Object )->result : Object",
+			"Params": [
+				[
+					"message",
+					"Object",
+					"->"
+				],
+				[
+					"result",
+					"Object",
+					"<-"
+				]
+			],
+			"Summary": ""
+		},
+		"enabled()": {
+			"Syntax": "**.enabled**( *id* : Text )->enabled : Boolean",
+			"Params": [
+				[
+					"id",
+					"Text",
+					"->"
+				],
+				[
+					"enabled",
+					"Boolean",
+					"<-"
+				]
+			],
+			"Summary": ""
+		},
+		"audit()": {
+			"Syntax": "**.audit**( *record* : Object )->ok : Boolean",
+			"Params": [
+				[
+					"record",
+					"Object",
+					"->"
+				],
+				[
+					"ok",
+					"Boolean",
+					"<-"
+				]
+			],
+			"Summary": ""
+		},
+		"validate()": {
+			"Syntax": "**.validate**( *value* : Variant )->result : Object",
+			"Params": [
+				[
+					"value",
+					"Variant",
+					"->"
+				],
+				[
+					"result",
+					"Object",
+					"<-"
+				]
+			],
+			"Summary": ""
+		},
+		"defaultFolder()": {
+			"Syntax": "**.defaultFolder**()->folder : 4D.Folder",
+			"Params": [
+				[
+					"folder",
+					"4D.Folder",
+					"<-"
+				]
+			],
+			"Summary": ""
+		},
+		"catalog()": {
+			"Syntax": "**.catalog**()->catalog : Object",
+			"Params": [
+				[
+					"catalog",
+					"Object",
+					"<-"
+				]
+			],
+			"Summary": ""
+		},
+		"folder": {
+			"Syntax": "folder : 4D.Folder"
+		},
+		"epoch": {
+			"Syntax": "epoch : Text"
+		},
+		"seen": {
+			"Syntax": "seen : Collection"
+		},
+		"actions": {
+			"Syntax": "actions : Collection"
+		}
+	},
+	"Dashboard": {
+		"version()": {
+			"Syntax": "**.version**()->result : Object",
+			"Params": [
+				[
+					"result",
+					"Object",
+					"<-"
+				]
+			],
+			"Summary": ""
+		},
+		"stop()": {
+			"Syntax": "**.stop**()",
+			"Params": [],
+			"Summary": ""
+		},
+		"terminate()": {
+			"Syntax": "**.terminate**()->terminated : Boolean",
+			"Params": [
+				[
+					"terminated",
+					"Boolean",
+					"<-"
+				]
+			],
+			"Summary": ""
+		},
+		"start()": {
+			"Syntax": "**.start**( *options* : Object; *event* : Object )->state : Object",
+			"Params": [
+				[
+					"options",
+					"Object",
+					"->"
+				],
+				[
+					"event",
+					"Object",
+					"->"
+				],
+				[
+					"state",
+					"Object",
+					"<-"
+				]
+			],
+			"Summary": ""
+		},
+		"collect()": {
+			"Syntax": "**.collect**()->result : Object",
+			"Params": [
+				[
+					"result",
+					"Object",
+					"<-"
+				]
+			],
+			"Summary": ""
+		},
+		"inspect()": {
+			"Syntax": "**.inspect**( *text* : Text )->result : Object",
+			"Params": [
+				[
+					"text",
+					"Text",
+					"->"
+				],
+				[
+					"result",
+					"Object",
+					"<-"
+				]
+			],
+			"Summary": ""
 		},
 		"state": {
 			"Syntax": "state : Object"

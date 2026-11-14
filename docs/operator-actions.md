@@ -114,7 +114,7 @@ sample. A confirmation issued before another action finished cannot be used.
   `completed`, `failed`) to `Logs/dashboard/audit.jsonl` in the **host**'s Logs
   folder. When the file reaches 1 MiB it rotates to `audit.1.jsonl` ..
   `audit.3.jsonl`, and the oldest is deleted.
-- Record: `{"v":1,"at":<UTC>,"epoch","action","id":<sha256(id) 16 hex>,"actor","args":<sha256(canonical args) 16 hex>,"state","error"}`.
+- Record: `{"v":1,"at":<UTC>,"epoch","action","id":<sha256(id) 16 hex>,"actor","args":<sha256(canonical args) 16 hex>,"state"}`.
   No tokens, cookies, nonces, URLs, raw arguments or native payloads.
 - **Fail closed:** if the `running` record cannot be written, the action is not
   executed and fails with `audit_unavailable`. If the final record cannot be

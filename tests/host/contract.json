@@ -2278,6 +2278,306 @@
         "equals": true
       },
       {
+        "path": "/operator/validate/null",
+        "equals": {
+          "ok": false,
+          "error": "operator must be an object with only an actions collection"
+        }
+      },
+      {
+        "path": "/operator/validate/text",
+        "equals": {
+          "ok": false,
+          "error": "operator must be an object with only an actions collection"
+        }
+      },
+      {
+        "path": "/operator/validate/extraKey",
+        "equals": {
+          "ok": false,
+          "error": "operator must be an object with only an actions collection"
+        }
+      },
+      {
+        "path": "/operator/validate/empty",
+        "equals": {
+          "ok": false,
+          "error": "operator actions must list 1 to 8 catalog IDs"
+        }
+      },
+      {
+        "path": "/operator/validate/unknown",
+        "equals": {
+          "ok": false,
+          "error": "operator actions must be unique catalog IDs"
+        }
+      },
+      {
+        "path": "/operator/validate/duplicate",
+        "equals": {
+          "ok": false,
+          "error": "operator actions must be unique catalog IDs"
+        }
+      },
+      {
+        "path": "/operator/validate/nonText",
+        "equals": {
+          "ok": false,
+          "error": "operator actions must be unique catalog IDs"
+        }
+      },
+      {
+        "path": "/operator/validate/caseVariant",
+        "equals": {
+          "ok": false,
+          "error": "operator actions must be unique catalog IDs"
+        }
+      },
+      {
+        "path": "/operator/validate/valid",
+        "equals": {
+          "ok": true,
+          "actions": [
+            "operator.noop"
+          ]
+        }
+      },
+      {
+        "path": "/operator/violations/wrongEpoch",
+        "equals": {
+          "ok": false,
+          "error": "Dashboard action for another epoch"
+        }
+      },
+      {
+        "path": "/operator/violations/extraField",
+        "equals": {
+          "ok": false,
+          "error": "Invalid dashboard action frame"
+        }
+      },
+      {
+        "path": "/operator/violations/badId",
+        "equals": {
+          "ok": false,
+          "error": "Invalid dashboard action frame"
+        }
+      },
+      {
+        "path": "/operator/violations/upperId",
+        "equals": {
+          "ok": false,
+          "error": "Invalid dashboard action frame"
+        }
+      },
+      {
+        "path": "/operator/violations/badActor",
+        "equals": {
+          "ok": false,
+          "error": "Invalid dashboard action frame"
+        }
+      },
+      {
+        "path": "/operator/violations/disabled",
+        "equals": {
+          "ok": false,
+          "error": "Dashboard action not enabled"
+        }
+      },
+      {
+        "path": "/operator/violations/extraArg",
+        "equals": {
+          "ok": false,
+          "error": "Invalid dashboard action arguments"
+        }
+      },
+      {
+        "path": "/operator/violations/unsafeNote",
+        "equals": {
+          "ok": false,
+          "error": "Invalid dashboard action arguments"
+        }
+      },
+      {
+        "path": "/operator/violations/longNote",
+        "equals": {
+          "ok": false,
+          "error": "Invalid dashboard action arguments"
+        }
+      },
+      {
+        "path": "/operator/violations/nonTextNote",
+        "equals": {
+          "ok": false,
+          "error": "Invalid dashboard action arguments"
+        }
+      },
+      {
+        "path": "/operator/violations/nonObjectArgs",
+        "equals": {
+          "ok": false,
+          "error": "Invalid dashboard action frame"
+        }
+      },
+      {
+        "path": "/operator/violations/duplicate",
+        "equals": {
+          "ok": false,
+          "error": "Duplicate dashboard action"
+        }
+      },
+      {
+        "path": "/operator/violations/missingField",
+        "equals": {
+          "ok": false,
+          "error": "Invalid dashboard action frame"
+        }
+      },
+      {
+        "path": "/operator/begin",
+        "equals": {
+          "ok": true,
+          "frame": {
+            "id": "620278d49d71c3d5454da29a7dad7c8cde631e16325f103d46fdd8ce970756e1",
+            "state": "running"
+          },
+          "idLength": 64
+        }
+      },
+      {
+        "path": "/operator/complete",
+        "equals": {
+          "id": "620278d49d71c3d5454da29a7dad7c8cde631e16325f103d46fdd8ce970756e1",
+          "state": "completed"
+        }
+      },
+      {
+        "path": "/operator/audit",
+        "equals": {
+          "lines": 2,
+          "states": [
+            "running",
+            "completed"
+          ],
+          "keys": [
+            "v",
+            "at",
+            "epoch",
+            "action",
+            "id",
+            "actor",
+            "args",
+            "state"
+          ],
+          "private": false,
+          "idDigest": true,
+          "argsDigest": true,
+          "actor": "0123456789abcdef",
+          "utc": true
+        }
+      },
+      {
+        "path": "/operator/auditUnavailable",
+        "equals": {
+          "ok": true,
+          "frame": {
+            "id": "6000da1511cfbd7a797053b8a485cb37b4551c990d86df76fc5aee7e870d256d",
+            "state": "failed",
+            "error": "audit_unavailable"
+          }
+        }
+      },
+      {
+        "path": "/operator/auditIncomplete",
+        "equals": {
+          "begin": "running",
+          "complete": {
+            "id": "b00b1f6256eb51bba3864b3f24b07afe5b9b86f39ea29c44d50f109bc7b67f49",
+            "state": "completed",
+            "error": "audit_incomplete"
+          }
+        }
+      },
+      {
+        "path": "/operator/rotation",
+        "equals": {
+          "first": 1048576,
+          "second": "one",
+          "third": "two",
+          "fourth": false,
+          "current": 2
+        }
+      },
+      {
+        "path": "/operator/folder",
+        "equals": {
+          "matchesHost": true,
+          "notComponent": true
+        }
+      },
+      {
+        "path": "/operatorLive/status",
+        "equals": "running"
+      },
+      {
+        "path": "/operatorLive/sampled",
+        "equals": true
+      },
+      {
+        "path": "/operatorLive/error",
+        "equals": ""
+      },
+      {
+        "path": "/operatorLive/urlShape",
+        "equals": true
+      },
+      {
+        "path": "/operatorLive/viewerPrefix",
+        "equals": true
+      },
+      {
+        "path": "/operatorLive/http",
+        "equals": {
+          "viewerSession": 204,
+          "viewerOnly": 401,
+          "viewerTokenAsOperator": 401,
+          "operatorSession": 204,
+          "request": 201,
+          "argumentMismatch": {
+            "status": 409,
+            "error": "argument_mismatch"
+          },
+          "confirm": 202,
+          "final": {
+            "state": "completed",
+            "error": ""
+          },
+          "replay": 409,
+          "logout": 204,
+          "afterLogout": 401
+        }
+      },
+      {
+        "path": "/operatorLive/audit",
+        "equals": {
+          "lines": 2,
+          "states": [
+            "running",
+            "completed"
+          ],
+          "matchesAction": true,
+          "private": false
+        }
+      },
+      {
+        "path": "/operatorLive/stopped",
+        "equals": {
+          "finished": true,
+          "urlCleared": true,
+          "operatorUrlCleared": true
+        }
+      },
+      {
         "path": "/backup/calendar",
         "equals": [
           {
