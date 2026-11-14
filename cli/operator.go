@@ -19,7 +19,6 @@ const (
 	operatorIdle        = 15 * time.Minute
 	operatorAbsolute    = 60 * time.Minute
 	confirmationTTL     = 60 * time.Second
-	actionTimeout       = 30 * time.Second
 	maxOperatorSessions = 4
 	maxConfirmations    = 4
 	actionRequestRate   = 6
@@ -29,22 +28,11 @@ const (
 	operatorProtocol    = 1
 )
 
-var noopNote = regexp.MustCompile(`^[A-Za-z0-9 _.-]{1,32}$`)
 var errorCode = regexp.MustCompile(`^[a-z_]{1,64}$`)
 var hex64 = regexp.MustCompile(`^[a-f0-9]{64}$`)
 
-// operatorCatalog is the closed action list. Each entry returns canonical JSON arguments.
-var operatorCatalog = map[string]func(json.RawMessage) (json.RawMessage, error){
-	"operator.noop": func(raw json.RawMessage) (json.RawMessage, error) {
-		var args struct {
-			Note *string `json:"note"`
-		}
-		if err := strictDecode(raw, &args); err != nil || args.Note == nil || !noopNote.MatchString(*args.Note) {
-			return nil, errors.New("operator.noop requires note: 1..32 of A-Z a-z 0-9 space _ . -")
-		}
-		return json.Marshal(map[string]string{"note": *args.Note})
-	},
-}
+// operatorCatalog maps each catalog action to its argument canonicalizer; it is filled from actions.json.
+var operatorCatalog = map[string]func(json.RawMessage) (json.RawMessage, error){}
 
 type operatorCaps struct {
 	Version int      `json:"version"`
@@ -64,16 +52,18 @@ type confirmation struct {
 }
 
 type actionRecord struct {
-	ID        string `json:"id"`
-	Action    string `json:"action"`
-	State     string `json:"state"`
-	Error     string `json:"error,omitempty"`
-	LateState string `json:"lateState,omitempty"`
-	Result    any    `json:"result,omitempty"`
-	Requested string `json:"requestedAt"`
-	Updated   string `json:"updatedAt"`
-	actor     string
-	args      json.RawMessage
+	ID         string        `json:"id"`
+	Action     string        `json:"action"`
+	State      string        `json:"state"`
+	Error      string        `json:"error,omitempty"`
+	LateState  string        `json:"lateState,omitempty"`
+	Result     any           `json:"result,omitempty"`
+	Progress   *progressInfo `json:"progress,omitempty"`
+	Unverified bool          `json:"unverified,omitempty"`
+	Requested  string        `json:"requestedAt"`
+	Updated    string        `json:"updatedAt"`
+	actor      string
+	args       json.RawMessage
 }
 
 type operator struct {
@@ -224,7 +214,7 @@ func (o *operator) expire(now time.Time, stale bool) {
 			o.withdraw(c, "stale_target", now)
 		}
 	}
-	if o.inflight != nil && now.Sub(o.dispatchedAt) > actionTimeout {
+	if o.inflight != nil && now.Sub(o.dispatchedAt) > entryFor(o.inflight.Action).deadline() {
 		// It may still have run: the outcome is unknown, never assumed failed or retried.
 		o.finish(o.inflight, "failed", "outcome_unknown", now)
 	}
@@ -246,17 +236,28 @@ func (s *service) applyActionStateLocked(m message) error {
 	o := s.op
 	if o.inflight != nil && o.inflight.ID == m.ID {
 		r := o.inflight
+		if err := validateDeclaredFields(entryFor(r.Action), m); err != nil {
+			return err
+		}
 		switch {
 		case m.State == "running" && r.State == "accepted":
 			o.transition(r, "running", "", now)
+			r.Progress = m.Progress
+			if m.Exclusive {
+				s.pauseLocked(now)
+			}
+		case m.State == "running" && m.Progress != nil:
+			r.Progress, r.Updated = m.Progress, stamp(now)
 		case m.State == "running":
 			o.late++ // duplicate running frame; no state change
 		default:
 			o.finish(r, m.State, m.Error, now)
+			r.Unverified = m.Unverified
 			if m.State == "completed" {
 				// Only an in-time completion is applied; a late one never is.
 				s.applyCompletedLocked(r, now)
 			}
+			s.settleLocked(now)
 		}
 		return nil
 	}
@@ -271,6 +272,31 @@ func (s *service) applyActionStateLocked(m message) error {
 		}
 	}
 	return errors.New("uncorrelated actionState")
+}
+
+var phaseCode = regexp.MustCompile(`^[a-z_]{1,32}$`)
+
+// validateDeclaredFields enforces that optional actionState fields appear only where the catalog declares them.
+func validateDeclaredFields(e *catalogEntry, m message) error {
+	switch m.State {
+	case "running":
+		if m.Exclusive != e.Exclusive || m.Unverified {
+			return errors.New("running frame does not match the catalog")
+		}
+		if m.Progress != nil && (!e.Progress || !phaseCode.MatchString(m.Progress.Phase) ||
+			m.Progress.Percent == nil || *m.Progress.Percent < 0 || *m.Progress.Percent > 100) {
+			return errors.New("invalid or undeclared progress")
+		}
+	case "completed":
+		if m.Exclusive || m.Progress != nil || m.Unverified != (e.Verify == "none") {
+			return errors.New("completed frame does not match the catalog")
+		}
+	case "failed":
+		if m.Exclusive || m.Progress != nil || m.Unverified {
+			return errors.New("failed frame carries undeclared fields")
+		}
+	}
+	return nil
 }
 
 func operatorError(w http.ResponseWriter, status int, code string) {
@@ -315,6 +341,7 @@ func (s *service) operatorRoute(w http.ResponseWriter, r *http.Request) {
 	defer s.mu.Unlock()
 	now := time.Now()
 	s.op.expire(now, s.current.Status == "stale")
+	s.settleLocked(now)
 	if route == "session" {
 		s.operatorSessionLocked(w, body, now)
 		return
@@ -412,7 +439,12 @@ func (s *service) operatorStatusLocked(w http.ResponseWriter, session *operatorS
 	if absolute := session.created.Add(operatorAbsolute); absolute.Before(expires) {
 		expires = absolute
 	}
-	operatorJSON(w, 200, map[string]any{"actions": s.op.caps().Actions, "generation": s.op.generation, "cadence": s.cadenceLocked(),
+	catalog := []map[string]any{}
+	for _, id := range s.op.caps().Actions {
+		e := entryFor(id)
+		catalog = append(catalog, map[string]any{"id": id, "tier": e.Tier, "exclusive": e.Exclusive, "args": e.Args})
+	}
+	operatorJSON(w, 200, map[string]any{"actions": s.op.caps().Actions, "catalog": catalog, "generation": s.op.generation, "cadence": s.cadenceLocked(),
 		"busy": s.op.inflight != nil, "target": s.current.Status, "sessionExpiresAt": stamp(expires),
 		"confirmations": confirmations, "records": records})
 }
@@ -454,6 +486,10 @@ func (s *service) operatorRequestLocked(w http.ResponseWriter, body []byte, sess
 	args, err := canonical(*req.Args)
 	if err != nil {
 		operatorError(w, 400, "invalid_arguments")
+		return
+	}
+	if entryFor(*req.Action).Transport == "tls_or_loopback_only" && !s.secureOrLoopback() {
+		operatorError(w, 403, "transport_not_allowed")
 		return
 	}
 	if !s.targetReadyLocked() {

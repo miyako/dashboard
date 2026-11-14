@@ -41,10 +41,57 @@ type series struct {
 	previous              *rawPoint
 }
 
+type maintenanceBand struct {
+	from, to time.Time
+	open     bool
+}
+
+const maxMaintenanceBands = 64
+
 type history struct {
-	series   map[string]*series
-	newest   time.Time
-	requests []time.Time
+	series      map[string]*series
+	newest      time.Time
+	requests    []time.Time
+	maintenance []maintenanceBand
+}
+
+// Maintenance bands are anonymous time spans: no action, actor or arguments.
+func (h *history) openMaintenance(at time.Time) {
+	h.maintenance = append(h.maintenance, maintenanceBand{from: at, open: true})
+	cut := at.Add(-minuteRetention)
+	keep := h.maintenance[:0]
+	for _, b := range h.maintenance {
+		if b.open || b.to.After(cut) {
+			keep = append(keep, b)
+		}
+	}
+	h.maintenance = keep
+	if len(h.maintenance) > maxMaintenanceBands {
+		h.maintenance = h.maintenance[len(h.maintenance)-maxMaintenanceBands:]
+	}
+}
+
+func (h *history) closeMaintenance(at time.Time) {
+	for i := range h.maintenance {
+		if h.maintenance[i].open {
+			h.maintenance[i].to, h.maintenance[i].open = at, false
+		}
+	}
+}
+
+func (h *history) maintenanceIn(from, to time.Time) []map[string]any {
+	bands := []map[string]any{}
+	for _, b := range h.maintenance {
+		if b.from.After(to) || (!b.open && b.to.Before(from)) {
+			continue
+		}
+		band := map[string]any{"from": stamp(b.from), "to": nil}
+		if !b.open {
+			band["to"] = stamp(b.to)
+		}
+		bands = append(bands, band)
+	}
+	return bands
 }
 
 func newHistory() *history { return &history{series: map[string]*series{}} }
@@ -203,5 +250,6 @@ func (s *service) historyRoute(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	operatorJSON(w, 200, map[string]any{"metric": map[string]string{"id": series.id, "label": series.label, "unit": series.unit, "kind": series.kind},
-		"resolution": resolution, "from": stamp(from), "to": stamp(to), "coverage": coverage, "points": points})
+		"resolution": resolution, "from": stamp(from), "to": stamp(to), "coverage": coverage, "points": points,
+		"maintenance": s.hist.maintenanceIn(from, to)})
 }

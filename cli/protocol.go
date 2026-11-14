@@ -19,6 +19,7 @@ const maxFrame = 256 * 1024
 
 var identifier = regexp.MustCompile(`^[A-Za-z0-9_.:-]{1,96}$`)
 var errBusy = errors.New("refresh already pending or rate limited")
+var errMaintenance = errors.New("sampling is paused for a maintenance action")
 
 type metric struct {
 	ID           string `json:"id"`
@@ -54,6 +55,15 @@ type message struct {
 	Error     string            `json:"error,omitempty"`
 	State     string            `json:"state,omitempty"`
 	Operator  *operatorCaps     `json:"operator,omitempty"`
+	// actionState only: declared per catalog entry (exclusive and progress on running, unverified on completed).
+	Exclusive  bool          `json:"exclusive,omitempty"`
+	Progress   *progressInfo `json:"progress,omitempty"`
+	Unverified bool          `json:"unverified,omitempty"`
+}
+
+type progressInfo struct {
+	Phase   string `json:"phase"`
+	Percent *int   `json:"percent"`
 }
 
 type deletions struct {
@@ -378,8 +388,8 @@ func (s *service) apply(m message) error {
 			return errors.New("sample timestamp moved backwards")
 		}
 	}
-	if m.State != "" && m.Kind != "actionState" {
-		return errors.New("state is only valid in actionState")
+	if (m.State != "" || m.Exclusive || m.Progress != nil || m.Unverified) && m.Kind != "actionState" {
+		return errors.New("state, exclusive, progress and unverified are only valid in actionState")
 	}
 	switch m.Kind {
 	case "hello":
@@ -472,6 +482,10 @@ func (s *service) apply(m message) error {
 		if m.ID == s.pending {
 			s.pending = ""
 			s.mon.refreshResults++
+			if !*m.OK && m.Error == "collector_busy" {
+				// 4D answered a refresh it could not collect in time; the monitor stays up.
+				s.mon.collectorBusy++
+			}
 			s.current.LastAction = map[string]any{"id": m.ID, "ok": *m.OK, "error": m.Error}
 		} else {
 			index := -1
@@ -497,6 +511,9 @@ func (s *service) apply(m message) error {
 	}
 	s.current.Seq, s.current.SampledAt = m.Seq, m.SampledAt
 	s.last, s.current.Status = time.Now(), "connected"
+	if s.mon.paused {
+		s.current.Status = "maintenance"
+	}
 	s.broadcastLocked()
 	return nil
 }
@@ -528,6 +545,9 @@ func (s *service) broadcastLocked() {
 func (s *service) request() (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.mon.paused {
+		return "", errMaintenance
+	}
 	if s.current.Epoch == "" || s.pending != "" || time.Since(s.lastRequest) < time.Second {
 		return "", errBusy
 	}
@@ -552,7 +572,7 @@ func (s *service) expire() {
 		s.pending = ""
 		s.broadcastLocked()
 	}
-	if !s.last.IsZero() && time.Since(s.last) > 15*time.Second && s.current.Status != "stale" {
+	if !s.last.IsZero() && time.Since(s.last) > 15*time.Second && s.current.Status != "stale" && !s.mon.paused {
 		s.current.Status = "stale"
 		if s.op != nil {
 			// A stale target invalidates every outstanding confirmation.
@@ -562,5 +582,6 @@ func (s *service) expire() {
 	}
 	if s.op != nil {
 		s.op.expire(time.Now(), s.current.Status == "stale")
+		s.settleLocked(time.Now())
 	}
 }

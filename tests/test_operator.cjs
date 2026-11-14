@@ -44,3 +44,12 @@ test('cadence and diagnostics are described without overstating', () => {
   const rows = operator.diagnosticRows({ cadence: { seconds: 5 }, actionStates: { completed: 2 }, viewers: 1 });
   assert.deepEqual(rows, [['cadence', '5 s'], ['actionStates', 'completed 2'], ['viewers', '1']]);
 });
+
+test('catalog specs drive argument building for any action', () => {
+  const sleep = { id: 'operator.sleep', args: { seconds: { type: 'integer', min: 1, max: 20 } } };
+  assert.deepEqual(operator.argsFor('operator.sleep', { seconds: '4' }, sleep), { seconds: 4 });
+  for (const bad of ['0', '21', '2.5', '', 'x']) assert.throws(() => operator.argsFor('operator.sleep', { seconds: bad }, sleep));
+  assert.throws(() => operator.argsFromSpec({ args: { p: { type: 'path' } } }, { p: '/etc' }));
+  assert.match(operator.describe({ action: 'operator.sleep', state: 'running', progress: { phase: 'sleeping', percent: 50 } }), /sleeping 50%/);
+  assert.match(operator.describe({ action: 'operator.noop', state: 'completed', unverified: true }), /unverified/);
+});

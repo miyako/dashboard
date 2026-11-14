@@ -584,6 +584,42 @@ For each ($name; OB Keys($operatorCases))
 End for each
 $report.operator.monitor.expectedDigests:=New object("cadence5"; Substring(Generate digest("{\"seconds\":5}"; SHA256 digest); 1; 16); "diagnostics"; Substring(Generate digest("{}"; SHA256 digest); 1; 16))
 $operator.folder.delete(Delete with contents)
+HOST_Phase:="admin foundation units"
+var $adminOperator : cs.Dashboard._DashboardOperator
+var $adminFolder : 4D.Folder
+var $adminMessage; $adminBegun; $adminCatalog : Object
+var $adminCase : Text
+var $adminAuthorizers : Object
+$adminCatalog:=$operator.catalog()
+$report.admin:=New object("catalogIds"; OB Keys($adminCatalog).orderBy(); "validate"; New object; "execute"; New object)
+$report.admin.validate.authorizeNotFormula:=$operator.validate(New object("actions"; New collection("operator.noop"); "authorize"; "yes"))
+$report.admin.validate.withAuthorize:=$operator.validate(New object("actions"; New collection("operator.noop"); "authorize"; Formula(True))).ok
+$report.admin.validate.unknownKey:=$operator.validate(New object("actions"; New collection("operator.noop"); "policy"; "allow"))
+$adminCatalog["test.tierB"]:=New object("id"; "test.tierB"; "tier"; "B"; "approval"; "operator+host"; "transport"; "tls_or_loopback_only"; "args"; New object)
+$report.admin.validate.tierBWithout:=$operator.validate(New object("actions"; New collection("test.tierB")); $adminCatalog)
+$report.admin.validate.tierBWith:=$operator.validate(New object("actions"; New collection("test.tierB"); "authorize"; Formula(True)); $adminCatalog).ok
+$adminFolder:=Folder(Temporary folder; fk platform path).folder("dashboard-admin-"+Generate UUID)
+$adminOperator:=cs.Dashboard._DashboardOperator.new(New collection("operator.exclusiveSleep"; "operator.noop"; "operator.sleep"); "admin-epoch"; $adminFolder)
+$adminOperator.relay:=False
+For each ($adminCase; New collection("operator.sleep"; "operator.exclusiveSleep"))
+	$adminOperator.progressLog:=New collection
+	$adminMessage:=New object("protocol"; 1; "kind"; "action"; "epoch"; "admin-epoch"; "id"; Generate digest("admin "+$adminCase; SHA256 digest); "action"; $adminCase; "args"; New object("seconds"; 2); "actor"; "0123456789abcdef")
+	$adminBegun:=$adminOperator.begin($adminMessage)
+	$report.admin.execute[$adminCase]:=New object("begin"; $adminBegun.frame; "canonical"; $adminBegun.canonical; \
+		"final"; $adminOperator.execute($adminMessage; $adminBegun.record; $adminBegun.entry; $adminBegun.canonical; Null); "progress"; $adminOperator.progressLog)
+End for each
+$adminAuthorizers:=New object("deny"; Formula(False); "nonBoolean"; Formula("yes"); "throws"; Formula(JSON Parse("not json")); "allow"; Formula(True))
+For each ($adminCase; OB Keys($adminAuthorizers))
+	$adminMessage:=New object("protocol"; 1; "kind"; "action"; "epoch"; "admin-epoch"; "id"; Generate digest("authorize "+$adminCase; SHA256 digest); "action"; "operator.noop"; "args"; New object("note"; "x"); "actor"; "0123456789abcdef")
+	$adminBegun:=$adminOperator.begin($adminMessage)
+	$report.admin.execute["authorize_"+$adminCase]:=$adminOperator.execute($adminMessage; $adminBegun.record; $adminBegun.entry; $adminBegun.canonical; $adminAuthorizers[$adminCase])
+End for each
+$report.admin.auditStates:=New collection
+For each ($operatorRaw; Split string($adminFolder.file("audit.jsonl").getText(); Char(10); sk ignore empty strings))
+	$operatorLine:=JSON Parse($operatorRaw)
+	$report.admin.auditStates.push($operatorLine.action+":"+$operatorLine.state+":"+String($operatorLine.error))
+End for each
+$adminFolder.delete(Delete with contents)
 For each ($operatorFolder; New collection($operatorFolder; $brokenFolder; $rotationFolder))
 	$operatorFolder.delete(Delete with contents)
 End for each
@@ -1049,6 +1085,124 @@ While ((Not($mcService.finished)) & (Milliseconds<$deadline))
 	DELAY PROCESS(Current process; 6)
 End while
 $report.monitorLive.stopped:=New object("finished"; $mcService.finished; "operatorUrlCleared"; ($mcService.operatorUrl=""))
+HOST_Phase:="admin foundations live"
+var $afTool : cs.Dashboard.Dashboard
+var $afLog; $afEvent; $afService; $afHeaders; $afWait; $afHistory : Object
+var $afOrigin; $afViewer; $afToken; $afCookie; $afId; $afStatusCookie; $afAudit : Text
+var $afSamples; $afPaused; $afResumed : Integer
+var $afCall : Object
+var $afSecrets : Text
+Use (Storage)
+	Storage.adminCalls:=New shared collection
+End use
+$afLog:=New shared object("events"; New shared collection; "action"; "")
+$afEvent:=New object("log"; $afLog; "onStatus"; Formula(Dashboard_callback($1; $2)))
+$afTool:=cs.Dashboard.Dashboard.new($target)
+$afService:=$afTool.start(New object("operator"; New object("actions"; New collection("operator.sleep"; "operator.exclusiveSleep"; "monitor.diagnostics"); "authorize"; Formula(Admin_authorize($1)))); $afEvent)
+$deadline:=Milliseconds+15000
+While (($afService.samples<1) & ($afService.status#"failed") & (Milliseconds<$deadline))
+	DELAY PROCESS(Current process; 6)
+End while
+$report.adminLive:=New object("status"; $afService.status; "error"; $afService.error)
+If ($afService.status="running")
+	$afOrigin:=Substring($afService.url; 1; Position("/#token="; $afService.url; *)-1)
+	$afViewer:=Substring($afService.url; Position("/#token="; $afService.url; *)+8; 64)
+	$afToken:=Substring($afService.operatorUrl; Position("&operator="; $afService.operatorUrl; *)+10; 64)
+	$afCookie:=String(Operator_http("POST"; $afOrigin+"/api/session"; New object("Origin"; $afOrigin); $afViewer).cookies.dashboard)
+	$afHeaders:=New object("Origin"; $afOrigin; "Cookie"; "dashboard="+$afCookie; "X-Dashboard-Action"; "operator"; "Content-Type"; "application/json")
+	$afHeaders.Cookie:="dashboard="+$afCookie+"; dashboard_operator="+String(Operator_http("POST"; $afOrigin+"/api/operator/session"; $afHeaders; JSON Stringify(New object("token"; $afToken))).cookies.dashboard_operator)
+	$afStatusCookie:=$afHeaders.Cookie
+	// Non-exclusive: the executor runs it while .workers keeps sampling.
+	$afSamples:=$afService.samples
+	$afId:=Operator_action($afOrigin; $afHeaders; "operator.sleep"; New object("seconds"; 4))
+	$afWait:=Operator_wait($afOrigin; $afStatusCookie; $afId; New collection("running"); 5000)
+	DELAY PROCESS(Current process; 150)
+	$afWait:=Operator_wait($afOrigin; $afStatusCookie; $afId; New collection("running"; "completed"); 2000)
+	$report.adminLive.sleep:=New object("progressPhase"; String($afWait.record.progress.phase))
+	$afWait:=Operator_wait($afOrigin; $afStatusCookie; $afId; New collection("completed"; "failed"); 10000)
+	$report.adminLive.sleep.state:=String($afWait.record.state)
+	$report.adminLive.sleep.unverified:=($afWait.record.unverified=True)
+	$report.adminLive.sleep.sampledDuring:=($afService.samples>=($afSamples+1))
+	// Exclusive: sampling pauses and viewers see maintenance, then it resumes.
+	$afId:=Operator_action($afOrigin; $afHeaders; "operator.exclusiveSleep"; New object("seconds"; 4))
+	$afWait:=Operator_wait($afOrigin; $afStatusCookie; $afId; New collection("running"); 5000)
+	DELAY PROCESS(Current process; 60)
+	$afPaused:=$afService.samples
+	$afWait:=Operator_wait($afOrigin; $afStatusCookie; $afId; New collection("running"); 2000)
+	$report.adminLive.exclusive:=New object("target"; String($afWait.status.target))
+	$afWait:=Operator_wait($afOrigin; $afStatusCookie; $afId; New collection("completed"; "failed"); 10000)
+	$report.adminLive.exclusive.state:=String($afWait.record.state)
+	$report.adminLive.exclusive.pausedSamples:=($afService.samples=$afPaused)
+	$deadline:=Milliseconds+8000
+	While (($afService.samples<=$afPaused) & (Milliseconds<$deadline))
+		DELAY PROCESS(Current process; 6)
+	End while
+	$report.adminLive.exclusive.resumed:=($afService.samples>$afPaused)
+	// Fresh window: the last 30 minutes to one minute ahead (Time + Number is a Number; roll the date).
+	$hsDate:=Current date
+	$hsSeconds:=Current time+60
+	If ($hsSeconds>=86400)
+		$hsDate:=$hsDate+1
+		$hsSeconds:=$hsSeconds-86400
+	End if
+	$hsTo:=String($hsDate; ISO date GMT; Time($hsSeconds))
+	$hsDate:=Current date
+	$hsSeconds:=Current time-1800
+	If ($hsSeconds<0)
+		$hsDate:=$hsDate-1
+		$hsSeconds:=$hsSeconds+86400
+	End if
+	$hsFrom:=String($hsDate; ISO date GMT; Time($hsSeconds))
+	$afHistory:=JSON Parse(Operator_http("GET"; $afOrigin+"/api/history?metric=process.count&resolution=minute&from="+$hsFrom+"&to="+$hsTo; New object("Cookie"; "dashboard="+$afCookie); "").body)
+	$report.adminLive.exclusive.bands:=$afHistory.maintenance.length
+	$report.adminLive.exclusive.bandClosed:=False
+	If ($afHistory.maintenance.length>0)
+		$report.adminLive.exclusive.bandClosed:=(Value type($afHistory.maintenance[0].to)=Is text) & (OB Keys($afHistory.maintenance[0]).length=2)
+	End if
+	// A blocked collector is answered collector_busy instead of ending the monitor.
+	CALL WORKER("Dashboard.callbacks."+$afService.epoch; Formula(DELAY PROCESS(Current process; 480)))
+	DELAY PROCESS(Current process; 720)
+	$afSamples:=$afService.samples
+	$deadline:=Milliseconds+8000
+	While (($afService.samples<=$afSamples) & (Milliseconds<$deadline))
+		DELAY PROCESS(Current process; 6)
+	End while
+	$report.adminLive.busy:=New object("status"; $afService.status; "sampledAfter"; ($afService.samples>$afSamples))
+	$afId:=Operator_action($afOrigin; $afHeaders; "monitor.diagnostics"; New object)
+	$afWait:=Operator_wait($afOrigin; $afStatusCookie; $afId; New collection("completed"; "failed"); 10000)
+	$report.adminLive.busy.collectorBusy:=(Num($afWait.record.result.collectorBusy)>=1)
+	$report.adminLive.busy.pauses:=Num($afWait.record.result.maintenancePauses)
+	// Orphan: the dashboard stops while an action runs; its result is audited, never sent to a newer instance.
+	$afId:=Operator_action($afOrigin; $afHeaders; "operator.sleep"; New object("seconds"; 5))
+	$afWait:=Operator_wait($afOrigin; $afStatusCookie; $afId; New collection("running"); 5000)
+End if
+$afTool.stop()
+$deadline:=Milliseconds+15000
+While ((Not($afService.finished)) & (Milliseconds<$deadline))
+	DELAY PROCESS(Current process; 6)
+End while
+$report.adminLive.stopped:=New object("finished"; $afService.finished; "operatorUrlCleared"; ($afService.operatorUrl=""))
+$deadline:=Milliseconds+10000
+$afAudit:=""
+Repeat
+	DELAY PROCESS(Current process; 30)
+	If ($opAuditFile.exists)
+		$afAudit:=$opAuditFile.getText()
+	End if
+Until ((Position("\"state\":\"orphaned\""; $afAudit; *)>0) | (Milliseconds>$deadline))
+$report.adminLive.audit:=New collection
+For each ($operatorRaw; Split string($afAudit; Char(10); sk ignore empty strings))
+	$operatorLine:=JSON Parse($operatorRaw)
+	If ($operatorLine.epoch=$afService.epoch)
+		$report.adminLive.audit.push($operatorLine.action+":"+$operatorLine.state+":"+String($operatorLine.error))
+	End if
+End for each
+$report.adminLive.authorize:=New object("calls"; Storage.adminCalls.length; "actions"; Storage.adminCalls.extract("action"); "keys"; Null; "private"; False)
+If (Storage.adminCalls.length>0)
+	$report.adminLive.authorize.keys:=OB Keys(Storage.adminCalls[0]).orderBy()
+	$afSecrets:=JSON Stringify(Storage.adminCalls)
+	$report.adminLive.authorize.private:=(Position($afToken; $afSecrets; *)>0) | (Position($afViewer; $afSecrets; *)>0) | (Position($afCookie; $afSecrets; *)>0)
+End if
 HOST_Phase:="running failure watchdog"
 $lifecycle:=New signal
 CALL WORKER(".workers"; "Dashboard_lifecycle"; "failure"; $target; New object; $lifecycle)

@@ -208,12 +208,17 @@
 			"Summary": ""
 		},
 		"sample()": {
-			"Syntax": "**.sample**( *initial* : Boolean )",
+			"Syntax": "**.sample**( *initial* : Boolean )->ok : Boolean",
 			"Params": [
 				[
 					"initial",
 					"Boolean",
 					"->"
+				],
+				[
+					"ok",
+					"Boolean",
+					"<-"
 				]
 			],
 			"Summary": ""
@@ -323,17 +328,23 @@
 		"monitor": {
 			"Syntax": "monitor : Object"
 		},
+		"busy": {
+			"Syntax": "busy : Integer"
+		},
 		"transportError": {
 			"Syntax": "transportError : Text"
 		},
 		"event": {
 			"Syntax": "event : Object"
 		},
-		"currentDirectory": {
-			"Syntax": "currentDirectory : 4D.Folder"
-		},
 		"epoch": {
 			"Syntax": "epoch : Text"
+		},
+		"authorize": {
+			"Syntax": "authorize : 4D.Function"
+		},
+		"currentDirectory": {
+			"Syntax": "currentDirectory : 4D.Folder"
 		},
 		"callbackWorker": {
 			"Syntax": "callbackWorker : Text"
@@ -752,6 +763,42 @@
 			],
 			"Summary": ""
 		},
+		"execute()": {
+			"Syntax": "**.execute**( *message* : Object; *record* : Object; *entry* : Object; *canonical* : Text; *authorize* : 4D.Function )->frame : Object",
+			"Params": [
+				[
+					"message",
+					"Object",
+					"->"
+				],
+				[
+					"record",
+					"Object",
+					"->"
+				],
+				[
+					"entry",
+					"Object",
+					"->"
+				],
+				[
+					"canonical",
+					"Text",
+					"->"
+				],
+				[
+					"authorize",
+					"4D.Function",
+					"->"
+				],
+				[
+					"frame",
+					"Object",
+					"<-"
+				]
+			],
+			"Summary": ""
+		},
 		"begin()": {
 			"Syntax": "**.begin**( *message* : Object )->result : Object",
 			"Params": [
@@ -801,11 +848,16 @@
 			"Summary": ""
 		},
 		"validate()": {
-			"Syntax": "**.validate**( *value* : Variant )->result : Object",
+			"Syntax": "**.validate**( *value* : Variant; *catalog* : Object )->result : Object",
 			"Params": [
 				[
 					"value",
 					"Variant",
+					"->"
+				],
+				[
+					"catalog",
+					"Object",
 					"->"
 				],
 				[
@@ -843,6 +895,12 @@
 		},
 		"epoch": {
 			"Syntax": "epoch : Text"
+		},
+		"relay": {
+			"Syntax": "relay : Boolean"
+		},
+		"progressLog": {
+			"Syntax": "progressLog : Collection"
 		},
 		"seen": {
 			"Syntax": "seen : Collection"

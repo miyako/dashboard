@@ -1,6 +1,7 @@
 # Administrative actions: design for the next phase
 
-Status: **proposal for review**. Nothing here is implemented or enabled. This
+Status: **A0 (foundations) implemented**; phases A1–A3 are not started, and no
+administrative action is enabled. See section 8 of `docs/operator-actions.md`. This
 builds on the operator pipeline from M3/M4 (`docs/operator-actions.md`) and keeps
 every existing guarantee: off by default, closed catalog, single-use bound
 confirmation, fail-closed audit and no automatic retry.

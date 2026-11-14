@@ -3,6 +3,7 @@ const $ = id => document.getElementById(id);
 let stream, lastSample, currentState, connected = false;
 let view = DashboardCharts.view('live', Date.now()), historyGeneration = 0;
 const historyCache = new Map(), historyCoverage = new Map();
+let maintenanceBands = [];
 // Samples for a graph: the live SSE window, or the fetched history window for other ranges.
 function seriesFor(state, id, kind, rateMode) {
   if (view.range === 'live') {
@@ -33,6 +34,7 @@ async function loadHistory() {
         const body = await response.json();
         if (generation !== historyGeneration) return;
         historyCache.set(id, body.points);
+        maintenanceBands = body.maintenance || [];
         historyCoverage.set(id, view.resolution === 'raw' ? body.coverage.rawSince : body.coverage.minuteSince);
       } catch { /* A failed window stays empty: shown as a gap, never as zero. */ }
     }
@@ -182,6 +184,14 @@ function drawPlot({ graph, samples, metric, unit, series, mirrored }) {
       dot.append(svgEl('title', {}, `${line.label} / ${new Date(at).toLocaleTimeString()}: ${format(mirrored ? Math.abs(sample.value) : sample.value)} ${unit}`)); nodes.push(dot);
     }
   });
+  // Anonymous maintenance spans (history ranges only): shaded, never interpolated across.
+  if (view.range !== 'live') for (const band of maintenanceBands) {
+    const from = Math.max(plot.start, Date.parse(band.from)), to = Math.min(plot.end, band.to ? Date.parse(band.to) : plot.end);
+    if (to <= from) continue;
+    const rect = svgEl('rect', { x: 56 + (from - plot.start) * 524 / plot.windowMs, y: 20, width: Math.max(1, (to - from) * 524 / plot.windowMs), height: 150, class: 'maintenance-band' });
+    rect.append(svgEl('title', {}, `Maintenance ${new Date(from).toLocaleTimeString()} – ${band.to ? new Date(to).toLocaleTimeString() : 'ongoing'}`));
+    nodes.splice(1, 0, rect);
+  }
   if (mirrored) {
     nodes.push(svgEl('line', { x1: 56, x2: 580, y1: 95, y2: 95, class: 'zero-axis' }),
       svgEl('text', { x: 580, y: 12, 'text-anchor': 'end', class: 'axis' }, 'Read / cache'),
@@ -266,7 +276,8 @@ function timelines(state) {
 }
 function render(state) {
   currentState = state; connected = state.status === 'connected'; lastSample = state.sampledAt;
-  $('status').textContent = state.status === 'connected' ? 'Connected to collecting instance' : state.status;
+  $('status').textContent = state.status === 'connected' ? 'Connected to collecting instance'
+    : state.status === 'maintenance' ? 'Paused for a maintenance action (sampling resumes when it ends)' : state.status;
   $('refresh').disabled = !connected;
   $('sample').textContent = state.sampledAt ? `Sample ${state.seq} / ${new Date(state.sampledAt).toLocaleTimeString()}` : 'Waiting for first sample';
   const groups = { metrics: [], 'static-metrics': [], 'database-metrics': [], 'process-trends': [], 'session-trends': [] };
@@ -331,7 +342,7 @@ $('refresh').addEventListener('click', async () => {
 });
 setInterval(() => {
   redrawGraphs();
-  if (lastSample && Date.now() - Date.parse(lastSample) > 15000) { $('status').textContent = 'Stale / no recent measurements'; $('refresh').disabled = true; }
+  if (lastSample && currentState?.status !== 'maintenance' && Date.now() - Date.parse(lastSample) > 15000) { $('status').textContent = 'Stale / no recent measurements'; $('refresh').disabled = true; }
 }, 1000);
 let operatorTimer, operatorPending;
 function operatorMessage(text) { $('operator-message').textContent = text; }
@@ -347,16 +358,31 @@ async function operatorCall(route, body) {
   if (!response.ok) throw new Error(DashboardOperator.reason(data.error) || `HTTP ${response.status}`);
   return data;
 }
+let operatorCatalog = [];
+// Inputs come from the catalog specs the CLI publishes; nothing is hand-coded per action.
 function operatorFields() {
-  const action = $('operator-action').value;
-  $('operator-note-field').hidden = action !== 'operator.noop';
-  $('operator-seconds-field').hidden = action !== 'monitor.cadence';
+  const entry = operatorCatalog.find(item => item.id === $('operator-action').value);
+  const nodes = Object.entries(entry?.args || {}).map(([name, spec]) => {
+    const label = el('label', name + ' ');
+    let input;
+    if (spec.type === 'integer' && spec.enum) {
+      input = el('select');
+      input.replaceChildren(...spec.enum.map(v => { const option = el('option', String(v)); option.value = String(v); return option; }));
+    } else {
+      input = el('input');
+      if (spec.type === 'integer') Object.assign(input, { type: 'number', min: spec.min, max: spec.max, step: 1, value: spec.min });
+      else Object.assign(input, { autocomplete: 'off', maxLength: 64 });
+    }
+    input.dataset.arg = name; label.append(input); return label;
+  });
+  $('operator-fields').replaceChildren(...nodes);
 }
 $('operator-action').addEventListener('change', operatorFields);
 function renderOperator(status) {
   $('operator').hidden = false;
   const select = $('operator-action');
   if (select.options.length !== status.actions.length) {
+    operatorCatalog = status.catalog || [];
     select.replaceChildren(...status.actions.map(id => { const option = el('option', DashboardOperator.labels[id] || id); option.value = id; return option; }));
     operatorFields();
   }
@@ -390,8 +416,10 @@ $('operator-request').addEventListener('submit', async event => {
   event.preventDefault();
   try {
     const action = $('operator-action').value;
-    await operatorCall('request', { action, args: DashboardOperator.argsFor(action, { note: $('operator-note').value, seconds: $('operator-seconds').value }) });
-    $('operator-note').value = ''; operatorMessage('Review and confirm the action below.');
+    const fields = Object.fromEntries([...$('operator-fields').querySelectorAll('[data-arg]')].map(input => [input.dataset.arg, input.value]));
+    const entry = operatorCatalog.find(item => item.id === action);
+    await operatorCall('request', { action, args: DashboardOperator.argsFor(action, fields, entry) });
+    operatorFields(); operatorMessage('Review and confirm the action below.');
   } catch (error) { operatorMessage(`Request rejected: ${error.message}`); }
   operatorRefresh();
 });

@@ -1,6 +1,7 @@
 //%attributes = {"invisible":true,"preemptive":"capable"}
 #DECLARE($operation : Text; $target : Text; $options : Object; $state : Object; $event : Object; $monitor : Object; $signal : 4D.Signal)
 var Dashboard_Pending : cs._DashboardAgent
+var Dashboard_Live : cs._DashboardAgent
 var Dashboard_State : Object
 var $stopping : Boolean
 Case of
@@ -16,6 +17,8 @@ Case of
 		End if
 		Dashboard_State:=$state
 		Dashboard_Pending:=cs._DashboardAgent.new($target; $options; $state; $event; $monitor)
+		// Kept after adoption so executor results can reach the agent of the same epoch.
+		Dashboard_Live:=Dashboard_Pending
 		Dashboard_Pending.launch()
 	: ($operation="adopted")
 		If (Dashboard_State#Null)
@@ -33,6 +36,7 @@ Case of
 					If (Dashboard_State.epoch=$state.epoch)
 						If (Not($state.forceDrain))
 							Dashboard_Pending:=Null
+							Dashboard_Live:=Null
 							Dashboard_State:=Null
 						End if
 					End if
@@ -43,6 +47,7 @@ Case of
 		If (Dashboard_State#Null)
 			If (Dashboard_State.epoch=$state.epoch)
 				Dashboard_Pending:=Null
+				Dashboard_Live:=Null
 				Dashboard_State:=Null
 				Use ($state)
 					$state.finished:=True

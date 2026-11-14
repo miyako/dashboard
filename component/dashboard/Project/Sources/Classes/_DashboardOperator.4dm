@@ -1,57 +1,107 @@
-// Operator actions: closed catalog, strict validation and fail-closed audit. See docs/operator-actions.md.
+// Operator actions: shared closed catalog (Resources/actions.json), strict validation, fail-closed audit.
+// See docs/operator-actions.md and docs/admin-actions-design.md.
 property actions : Collection
 property epoch : Text
 property folder : 4D.Folder
 property seen : Collection
+property relay : Boolean
+property progressLog : Collection
 
 Class constructor($actions : Collection; $epoch : Text; $folder : 4D.Folder)
 	This.actions:=$actions
 	This.epoch:=$epoch
 	This.folder:=$folder
 	This.seen:=New collection
+	// Tests set relay to False and read progressLog instead of reaching a live agent.
+	This.relay:=True
+	This.progressLog:=New collection
 
 Function catalog()->$catalog : Object
-	// Object keys compare case-sensitively, unlike Collection.indexOf on Text.
-	$catalog:=New object("operator.noop"; True; "monitor.cadence"; True; "monitor.diagnostics"; True)
+	// Keyed by action ID; object keys compare case-sensitively, unlike Collection.indexOf on Text.
+	var $file : 4D.File
+	var $parsed : Variant
+	var $entry : Object
+	$catalog:=New object
+	$file:=Folder(fk resources folder).file("actions.json")
+	If (Not($file.exists))
+		return
+	End if
+	$parsed:=JSON Parse($file.getText())
+	If (Value type($parsed)#Is object)
+		return
+	End if
+	If (Value type($parsed.actions)#Is collection)
+		return
+	End if
+	For each ($entry; $parsed.actions)
+		$catalog[$entry.id]:=$entry
+	End for each
 
 Function defaultFolder()->$folder : 4D.Folder
 	// The host's Logs folder (*), never the component's.
 	$folder:=Folder(fk logs folder; *).folder("dashboard")
 
-Function validate($value : Variant)->$result : Object
-	var $catalog; $seen : Object
+Function validate($value : Variant; $catalog : Object)->$result : Object
+	var $seen : Object
 	var $id : Variant
+	var $key : Text
 	var $actions : Collection
-	$result:=New object("ok"; False; "error"; "operator must be an object with only an actions collection")
+	var $hostRequired : Boolean
+	If ($catalog=Null)
+		$catalog:=This.catalog()
+	End if
+	$result:=New object("ok"; False; "error"; "operator must be an object with an actions collection and an optional authorize formula")
 	If (Value type($value)#Is object)
 		return
 	End if
-	If (OB Keys($value).length#1)
-		return
-	End if
+	For each ($key; OB Keys($value))
+		If (($key#"actions") & ($key#"authorize"))
+			return
+		End if
+	End for each
 	If (Value type($value.actions)#Is collection)
 		return
+	End if
+	If (Value type($value.authorize)#Is undefined)
+		If (Value type($value.authorize)#Is object)
+			$result.error:="operator authorize must be a Formula or function"
+			return
+		End if
+		If (Not(OB Instance of($value.authorize; 4D.Function)))
+			$result.error:="operator authorize must be a Formula or function"
+			return
+		End if
 	End if
 	If (($value.actions.length<1) | ($value.actions.length>8))
 		$result.error:="operator actions must list 1 to 8 catalog IDs"
 		return
 	End if
-	$catalog:=This.catalog()
 	$seen:=New object
 	$actions:=New collection
+	$hostRequired:=False
 	For each ($id; $value.actions)
 		If (Value type($id)#Is text)
 			$result.error:="operator actions must be unique catalog IDs"
 			return
 		End if
-		If (($catalog[$id]#True) | ($seen[$id]=True))
+		If ((Value type($catalog[$id])#Is object) | ($seen[$id]=True))
 			$result.error:="operator actions must be unique catalog IDs"
 			return
+		End if
+		If ($catalog[$id].approval="operator+host")
+			$hostRequired:=True
 		End if
 		$seen[$id]:=True
 		$actions.push($id)
 	End for each
+	If ($hostRequired & (Value type($value.authorize)=Is undefined))
+		$result.error:="tier B and C actions require an authorize callback"
+		return
+	End if
 	$result:=New object("ok"; True; "actions"; $actions.orderBy())
+	If (Value type($value.authorize)#Is undefined)
+		$result.authorize:=$value.authorize
+	End if
 
 Function enabled($id : Text)->$enabled : Boolean
 	var $action : Text
@@ -64,45 +114,59 @@ Function enabled($id : Text)->$enabled : Boolean
 		End if
 	End for each
 
-Function _arguments($message : Object)->$canonical : Text
-	// Returns the canonical JSON of valid arguments, or "" when invalid.
+Function _arguments($message : Object; $entry : Object)->$canonical : Text
+	// Generic catalog validation; returns sorted-key canonical JSON, or "" when invalid.
+	var $name : Text
+	var $names : Collection
+	var $spec : Object
+	var $value : Variant
+	var $out : Object
 	$canonical:=""
-	Case of
-		: ($message.action="operator.noop")
-			If (OB Keys($message.args).length#1)
+	$names:=OB Keys($entry.args).orderBy()
+	If (JSON Stringify(OB Keys($message.args).orderBy())#JSON Stringify($names))
+		return
+	End if
+	$out:=New object
+	For each ($name; $names)
+		$spec:=$entry.args[$name]
+		$value:=$message.args[$name]
+		Case of
+			: ($spec.type="text")
+				If (Value type($value)#Is text)
+					return
+				End if
+				If (Not(Match regex($spec.pattern; $value)))
+					return
+				End if
+			: ($spec.type="integer")
+				If ((Value type($value)#Is real) & (Value type($value)#Is longint))
+					return
+				End if
+				If (Int($value)#$value)
+					return
+				End if
+				If (Value type($spec.enum)=Is collection)
+					If ($spec.enum.indexOf($value)<0)
+						return
+					End if
+				Else
+					If (($value<$spec.min) | ($value>$spec.max))
+						return
+					End if
+				End if
+			Else
 				return
-			End if
-			If (Value type($message.args.note)#Is text)
-				return
-			End if
-			If (Not(Match regex("^[A-Za-z0-9 _.-]{1,32}$"; $message.args.note)))
-				return
-			End if
-			$canonical:=JSON Stringify(New object("note"; $message.args.note))
-		: ($message.action="monitor.cadence")
-			// Never faster than the 2-second default: 2, 5 or 10 seconds only.
-			If (OB Keys($message.args).length#1)
-				return
-			End if
-			If ((Value type($message.args.seconds)#Is real) & (Value type($message.args.seconds)#Is longint))
-				return
-			End if
-			If (New collection(2; 5; 10).indexOf($message.args.seconds)<0)
-				return
-			End if
-			$canonical:=JSON Stringify(New object("seconds"; $message.args.seconds))
-		: ($message.action="monitor.diagnostics")
-			If (OB Keys($message.args).length#0)
-				return
-			End if
-			$canonical:="{}"
-	End case
+		End case
+		$out[$name]:=$value
+	End for each
+	$canonical:=JSON Stringify($out)
 
 Function begin($message : Object)->$result : Object
 	// Validates an action frame and writes its running audit record before anything executes.
 	var $field : Text
 	var $keys : Collection
 	var $canonical : Text
+	var $entry : Object
 	$result:=New object("ok"; False; "error"; "Invalid dashboard action frame")
 	$keys:=OB Keys($message).orderBy()
 	If (JSON Stringify($keys)#JSON Stringify(New collection("action"; "actor"; "args"; "epoch"; "id"; "kind"; "protocol")))
@@ -135,7 +199,12 @@ Function begin($message : Object)->$result : Object
 		$result.error:="Duplicate dashboard action"
 		return
 	End if
-	$canonical:=This._arguments($message)
+	$entry:=This.catalog()[$message.action]
+	If ($entry=Null)
+		$result.error:="Dashboard action not in catalog"
+		return
+	End if
+	$canonical:=This._arguments($message; $entry)
 	If ($canonical="")
 		$result.error:="Invalid dashboard action arguments"
 		return
@@ -144,28 +213,98 @@ Function begin($message : Object)->$result : Object
 	If (This.seen.length>64)
 		This.seen.shift()
 	End if
-	$result:=New object("ok"; True; "record"; New object("v"; 1; "at"; ""; "epoch"; This.epoch; "action"; $message.action; \
+	$result:=New object("ok"; True; "entry"; $entry; "canonical"; $canonical; "record"; New object("v"; 1; "at"; ""; "epoch"; This.epoch; "action"; $message.action; \
 		"id"; Substring(Generate digest($message.id; SHA256 digest); 1; 16); "actor"; $message.actor; \
 		"args"; Substring(Generate digest($canonical; SHA256 digest); 1; 16); "state"; "running"))
 	If (This.audit($result.record))
 		$result.frame:=New object("id"; $message.id; "state"; "running")
+		If ($entry.exclusive=True)
+			$result.frame.exclusive:=True
+		End if
 	Else
 		// Fail closed: nothing runs without its audit record.
 		$result.frame:=New object("id"; $message.id; "state"; "failed"; "error"; "audit_unavailable")
 	End if
 
-Function complete($message : Object; $record : Object)->$frame : Object
+Function execute($message : Object; $record : Object; $entry : Object; $canonical : Text; $authorize : 4D.Function)->$frame : Object
+	// Runs on the cooperative executor worker, never on .workers. Returns the final actionState frame.
+	var $previous; $code : Text
+	var $answer : Variant
+	var $started; $index : Integer
+	var CLI_LastErrors : Collection
+	$frame:=New object("id"; $message.id; "state"; "failed"; "error"; "host_denied")
+	If (($authorize#Null) | ($entry.approval="operator+host"))
+		$answer:=False
+		If ($authorize#Null)
+			$started:=Milliseconds
+			// Try, like the onStatus callback: a component's error handler does not cover host code.
+			$answer:=Try($authorize.call(Null; New object("action"; $message.action; "args"; JSON Parse($canonical); "actor"; $message.actor; "tier"; $entry.tier)))
+			If ((Last errors#Null) | ((Milliseconds-$started)>5000))
+				$answer:=False
+			End if
+		End if
+		If (Value type($answer)#Is boolean)
+			$answer:=False
+		End if
+		If (Not($answer))
+			$record.state:="failed"
+			$record.error:="host_denied"
+			This.audit($record)
+			return
+		End if
+	End if
+	$previous:=Method called on error(ek local)
+	CLI_LastErrors:=Null
+	ON ERR CALL("_CaptureError"; ek local)
 	Case of
 		: ($message.action="operator.noop")
 			// Changes nothing by design: proves the pipeline without a mutator.
+		: (($message.action="operator.sleep") | ($message.action="operator.exclusiveSleep"))
+			// Harmless timed work: proves the executor, progress, pause and deadlines.
+			For ($index; 1; $message.args.seconds)
+				DELAY PROCESS(Current process; 60)
+				This._progress($message.id; "sleeping"; Int(100*$index/$message.args.seconds); $entry)
+			End for
 		: (($message.action="monitor.cadence") | ($message.action="monitor.diagnostics"))
 			// Owner approval and audit only: the Go CLI applies these after this completed state.
 	End case
+	ON ERR CALL($previous; ek local)
+	If (CLI_LastErrors#Null)
+		// Closed code only: native messages can contain private paths.
+		$code:=String(Abs(Num(CLI_LastErrors[0].errCode)))
+		CLI_LastErrors:=Null
+		$record.state:="failed"
+		$record.error:="native_error_"+$code
+		$frame:=New object("id"; $message.id; "state"; "failed"; "error"; $record.error)
+		This.audit($record)
+		return
+	End if
 	$record.state:="completed"
 	$frame:=New object("id"; $message.id; "state"; "completed")
+	If ($entry.verify="none")
+		$frame.unverified:=True
+	End if
 	If (Not(This.audit($record)))
 		$frame.error:="audit_incomplete"
 	End if
+
+Function _progress($id : Text; $phase : Text; $percent : Integer; $entry : Object)
+	var $frame : Object
+	$frame:=New object("id"; $id; "state"; "running"; "progress"; New object("phase"; $phase; "percent"; $percent))
+	If ($entry.exclusive=True)
+		$frame.exclusive:=True
+	End if
+	If (This.relay)
+		CALL WORKER(".workers"; "_DashboardRelay"; "progress"; This.epoch; $frame)
+	Else
+		This.progressLog.push($frame)
+	End if
+
+Function complete($message : Object; $record : Object)->$frame : Object
+	// Synchronous path kept for unit tests of the M3/M4 actions; live actions use execute on the executor.
+	var $entry : Object
+	$entry:=This.catalog()[$message.action]
+	$frame:=This.execute($message; $record; $entry; This._arguments($message; $entry); Null)
 
 Function audit($record : Object)->$ok : Boolean
 	var $previous : Text
