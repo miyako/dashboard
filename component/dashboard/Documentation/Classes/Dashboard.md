@@ -98,7 +98,7 @@ retained-record gauges. Other contexts report unsupported. Session fields,
 tokens/callers and historical retention-time balances are not exported.
 
 `version() : Object` runs the finite CLI version command and decodes
-`{"protocol":1,"version":"0.1.4"}`.
+`{"protocol":1,"version":"0.1.5"}`.
 
 `inspect(text : Text) : Object` is a finite transport/quoting probe, returning
 `{ok:true,stdout,stderr,exitCode:0,value:{protocol:1,text}}` for nonempty UTF-8

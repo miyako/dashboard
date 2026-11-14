@@ -430,7 +430,7 @@ the browser distinguishes stale, waiting and disconnected states.
 | Invocation | Result |
 | --- | --- |
 | `dashboard serve` | Authenticated loopback server; lifecycle tied to stdin |
-| `dashboard --version` | `{"protocol":1,"version":"0.1.4"}` + LF |
+| `dashboard --version` | `{"protocol":1,"version":"0.1.5"}` + LF |
 | `dashboard inspect --text "literal"` | Protocol/argument probe: `{"protocol":1,"text":"literal"}` + LF |
 | Invalid arguments/protocol | Exit 2; structured error diagnostics on stderr |
 
