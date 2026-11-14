@@ -169,6 +169,32 @@ def extract_tar(archive, tools):
             raise
 
 
+def tool4d_version(tool, *, runner=None, pause=None):
+    """Return (version text, attempts) from `tool4d --version`.
+
+    tool4d occasionally dies with a signal (SIGSEGV) on hosted macOS runners before any project
+    code runs. Only that case is retried, once, after a short pause; any other failure (a normal
+    error exit, a timeout, empty output) fails at once, and a second crash still fails.
+    """
+    if runner is None:
+        runner = subprocess.run  # looked up at call time so existing test patches still apply
+    if pause is None:
+        import time
+        pause = time.sleep
+    for attempt in (1, 2):
+        try:
+            version = runner([str(tool), "--version"], check=True, capture_output=True, text=True, timeout=30)
+        except subprocess.CalledProcessError as error:
+            if error.returncode < 0 and attempt == 1:
+                pause(2)
+                continue
+            raise
+        text = (version.stdout or "").strip()
+        if not text:
+            raise ValueError("tool4d --version produced no version text; compiler identity is unverified")
+        return text, attempt
+
+
 def require_tool4d_host():
     if platform.system() != "Darwin" or platform.machine().lower() not in {"arm64", "aarch64"}:
         raise ValueError("pinned tool4d is macOS ARM64 only; use a matching Apple Silicon host")

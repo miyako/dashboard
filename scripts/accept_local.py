@@ -10,7 +10,7 @@ import sys
 
 from build_cli import build, native_target, smoke_test
 from build_provenance import commit, sha256
-from ci_config import ROOT, TARGETS, assemble, load_config, require_tool4d_host
+from ci_config import ROOT, TARGETS, assemble, load_config, require_tool4d_host, tool4d_version
 from compile_component import compile_component
 from doctor import doctor
 from package_component import package, unpack_for_test, validate_resources
@@ -50,11 +50,8 @@ def accept(root, repository, tool4d, cross=False):
         require_tool4d_host()
         if not Path(tool4d).is_file():
             raise ValueError("tool4d executable is missing")
-        version = subprocess.run([str(Path(tool4d).resolve()), "--version"],
-                                 check=True, capture_output=True, text=True, timeout=30)
-        if not version.stdout.strip():
-            raise ValueError("tool4d --version produced no version text; compiler identity is unverified")
-        report["tool4d"] = {"version": version.stdout.strip(), "binary_sha256": sha256(tool4d)}
+        version, attempts = tool4d_version(Path(tool4d).resolve())
+        report["tool4d"] = {"version": version, "binary_sha256": sha256(tool4d), "version_attempts": attempts}
         native = native_target()
         def run(arguments):
             environment = os.environ.copy()
