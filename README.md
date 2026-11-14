@@ -130,6 +130,16 @@ the browser automatically.
 $monitor.stop()
 ```
 
+To shut down from code that does not hold the facade, such as `On Exit`, use a
+fresh one. `terminate()` stops whichever dashboard is active in this instance
+and waits until it is released:
+
+```4d
+var $monitor : cs.Dashboard.Dashboard
+$monitor:=cs.Dashboard.Dashboard.new()
+$monitor.terminate()
+```
+
 There is one active monitor per application instance. Duplicate starts fail
 explicitly. `stop()` requests stdin EOF, allows a finite graceful shutdown, then forcibly
 terminates a stuck child and drains its registration before allowing replacement.
