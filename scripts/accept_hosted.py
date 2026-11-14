@@ -9,7 +9,7 @@ import subprocess
 import sys
 
 from build_provenance import commit, sha256, verify
-from ci_config import ROOT, TARGETS, assemble, load_config, require_tool4d_host
+from ci_config import ROOT, TARGETS, assemble, load_config, require_tool4d_host, tool4d_version
 from compile_component import compile_component
 from package_component import package, unpack_for_test, validate_compile
 from release_assets import verify_signing_proof
@@ -52,11 +52,8 @@ def accept(root, repository, tool4d, tag=None, require_apple_signing=False):
         report["configuration"] = config
         require_tool4d_host()
         tool = Path(tool4d).resolve()
-        version = subprocess.run([str(tool), "--version"], check=True, capture_output=True,
-                                 text=True, timeout=30)
-        if not version.stdout.strip():
-            raise ValueError("tool4d version is unverified")
-        report["tool4d"] = {"version": version.stdout.strip(), "binary_sha256": sha256(tool)}
+        version, attempts = tool4d_version(tool)
+        report["tool4d"] = {"version": version, "binary_sha256": sha256(tool), "version_attempts": attempts}
         for target in TARGETS:
             executable = root / "build" / target / (config["cli"] + (
                 ".exe" if target == "windows-x64" else ""))
