@@ -7,7 +7,7 @@ import tempfile
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
-VERSION_RESPONSE = b'{"protocol":1,"version":"0.1.6"}\n'
+VERSION_RESPONSE = b'{"protocol":1,"version":"0.1.7"}\n'
 sys.path.insert(0, str(ROOT / "scripts"))
 from build_cli import smoke_test
 from bump_release import plan
