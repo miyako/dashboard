@@ -71,7 +71,7 @@ $report.version:=$result
 If (Not($result.ok))
 	$report.success:=False
 Else
-	If ($result.value.version#"0.1.5")
+	If ($result.value.version#"0.1.6")
 		$report.success:=False
 	End if
 End if
