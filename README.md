@@ -203,6 +203,37 @@ Content Security Policy protect the browser interface. A token grants access
 to all the allowlisted measurements for that instance; it is not a multi-user
 authorization system. Do not expose it directly to the public internet.
 
+### Operator mode (off by default)
+
+Operator mode is the safety substrate for future write actions. It is **off**
+unless host code opts in, and this release enables **no action that changes
+anything**: the only catalog entry, `operator.noop`, exists to prove the
+pipeline.
+
+```4d
+$monitor.start(New object("operator"; New object("actions"; New collection("operator.noop"))); $event)
+```
+
+- The CLI mints a second, independent operator token. `onStatus` (and the
+  returned shared state) carries it as `operatorUrl`; the viewer `url` never
+  does. Treat `operatorUrl` as a secret: anyone holding it can act.
+- Opening `operatorUrl` creates a per-browser operator session (15 min idle,
+  60 min absolute, at most 4). The viewer token, Designer, 4D users/groups and
+  Data Explorer grant no operator authority.
+- Every action is requested, then explicitly confirmed. A confirmation is
+  single-use and bound to the operator session, action, exact arguments, the
+  4D instance epoch, a target generation and a 60-second expiry. At most one
+  action is in flight, at most 6 requests per minute. Acceptance is not a
+  result: an action without a result after 30 s is reported as
+  `outcome_unknown`, never retried.
+- Each dispatched action is audited in the **host's** Logs folder,
+  `Logs/dashboard/audit.jsonl` (rotated at 1 MiB, 4 files), as hashed IDs
+  and argument digests only. If the audit record cannot be written, nothing
+  runs.
+- Viewers see nothing new. Operator status goes only to that operator session.
+
+The full contract is in [docs/operator-actions.md](docs/operator-actions.md).
+
 ## What measurements mean
 
 ### Synthetic database preview
@@ -432,6 +463,13 @@ CLI to 4D:
 {"protocol":1,"kind":"request","epoch":"INSTANCE-UUID","id":"64-lowercase-hex","action":"refresh"}
 ```
 
+With operator mode negotiated (both `ready` and `hello` carry
+`operator:{"version":1,"actions":[...]}`), the CLI may also send
+`{"kind":"action","epoch","id","action","args","actor"}` and 4D answers with
+`actionState` frames (`running`, then `completed` or `failed`). These are
+separate kinds: a refresh `request`/`result` is never reinterpreted as an
+action. See [docs/operator-actions.md](docs/operator-actions.md).
+
 4D to CLI: `hello` first (`seq:1`), then `snapshot`, `update` or `result`.
 All frames include `protocol:1`, a fixed `epoch`, exactly increasing safe-integer
 `seq` and an RFC3339 `sampledAt` timestamp with a timezone. A new monitor creates
@@ -474,6 +512,7 @@ the browser distinguishes stale, waiting and disconnected states.
 | Invocation | Result |
 | --- | --- |
 | `dashboard serve` | Authenticated loopback server; lifecycle tied to stdin |
+| `dashboard serve --operator-actions operator.noop` | Same, with opt-in operator mode for the listed catalog actions |
 | `dashboard --version` | `{"protocol":1,"version":"0.1.5"}` + LF |
 | `dashboard inspect --text "literal"` | Protocol/argument probe: `{"protocol":1,"text":"literal"}` + LF |
 | Invalid arguments/protocol | Exit 2; structured error diagnostics on stderr |
@@ -505,8 +544,8 @@ The original template's 20.7 compiler cannot validate the 21 LTS floor.
 ```sh
 python3 -m unittest discover -s tests -v
 python3 scripts/generate_icons.py --check
-(cd cli && go test -race ./... && go vet ./... && node --check web/app.js && node --check web/charts.js)
-node --test tests/test_charts.cjs
+(cd cli && go test -race ./... && go vet ./... && node --check web/app.js && node --check web/charts.js && node --check web/operator.js)
+node --test tests/test_charts.cjs tests/test_operator.cjs
 python3 scripts/ci_config.py download-tool4d --root .
 python3 scripts/accept_local.py --root . --repository miyako/dashboard \
   --tool4d .tools/tool4d.app/Contents/MacOS/tool4d --cross
