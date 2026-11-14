@@ -2862,6 +2862,14 @@
         ]
       },
       {
+        "path": "/abandonedSample",
+        "equals": {
+          "skipped": true,
+          "triggered": true,
+          "collectedWhenAwaited": true
+        }
+      },
+      {
         "path": "/adminLive/status",
         "equals": "running"
       },

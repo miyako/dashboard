@@ -103,6 +103,10 @@ Function sample($initial : Boolean)->$ok : Boolean
 	CALL WORKER(This.callbackWorker; "_DashboardSample"; "sample"; This.state; This.event; This.monitor; $signal; "")
 	If (Not($signal.wait(5)))
 		// One slow sample is not fatal: the refresh is answered collector_busy. Six in a row (about 30 s) are.
+		// Mark it abandoned so the queued request is skipped instead of collecting late and piling up.
+		Use ($signal)
+			$signal.abandoned:=True
+		End use
 		This.busy+=1
 		If ($initial | (This.busy>=6))
 			This.fail("Dashboard collection timed out")
