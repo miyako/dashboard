@@ -91,6 +91,11 @@ Function validate($value : Variant; $catalog : Object)->$result : Object
 		If ($catalog[$id].approval="operator+host")
 			$hostRequired:=True
 		End if
+		// "local" commands (for example SET CACHE SIZE) cannot run in 4D remote mode.
+		If (($catalog[$id].scope="local") & (Application type=4D Remote mode))
+			$result.error:="operator action "+$id+" is not available on a remote client"
+			return
+		End if
 		$seen[$id]:=True
 		$actions.push($id)
 	End for each
@@ -231,6 +236,7 @@ Function execute($message : Object; $record : Object; $entry : Object; $canonica
 	var $previous; $code : Text
 	var $answer : Variant
 	var $started; $index : Integer
+	var $requested; $current; $physical; $actual : Real
 	var CLI_LastErrors : Collection
 	$frame:=New object("id"; $message.id; "state"; "failed"; "error"; "host_denied")
 	If (($authorize#Null) | ($entry.approval="operator+host"))
@@ -267,6 +273,30 @@ Function execute($message : Object; $record : Object; $entry : Object; $canonica
 			End for
 		: (($message.action="monitor.cadence") | ($message.action="monitor.diagnostics"))
 			// Owner approval and audit only: the Go CLI applies these after this completed state.
+		: ($message.action="cache.flush")
+			// Plain form only: the size and * forms are documented as reserved for testing.
+			FLUSH CACHE
+		: ($message.action="cache.size")
+			// Lowering is always allowed (4D's floor is 100 MiB). Raising is capped at 75% of physical memory.
+			$requested:=$message.args.sizeMiB*1048576
+			$current:=Get cache size
+			$physical:=Num(System info.physicalMemory)*1024
+			If (($requested>$current) & (($physical<=0) | ($requested>($physical*0.75))))
+				ON ERR CALL($previous; ek local)
+				$record.state:="failed"
+				$record.error:="cache_size_policy"
+				This.audit($record)
+				return New object("id"; $message.id; "state"; "failed"; "error"; "cache_size_policy")
+			End if
+			SET CACHE SIZE($requested)
+			$actual:=Get cache size
+			If (Abs($actual-$requested)>1048576)
+				ON ERR CALL($previous; ek local)
+				$record.state:="failed"
+				$record.error:="postcondition_unmet"
+				This.audit($record)
+				return New object("id"; $message.id; "state"; "failed"; "error"; "postcondition_unmet")
+			End if
 	End case
 	ON ERR CALL($previous; ek local)
 	If (CLI_LastErrors#Null)

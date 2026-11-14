@@ -1097,6 +1097,48 @@ While ((Not($mcService.finished)) & (Milliseconds<$deadline))
 	DELAY PROCESS(Current process; 6)
 End while
 $report.monitorLive.stopped:=New object("finished"; $mcService.finished; "operatorUrlCleared"; ($mcService.operatorUrl=""))
+HOST_Phase:="cache action units"
+// A1: cache.flush (tier A) and cache.size (tier B, the first action that needs host approval).
+var $cacheOperator : cs.Dashboard._DashboardOperator
+var $cacheFolder : 4D.Folder
+var $cacheMessage; $cacheBegun : Object
+var $cacheOriginalMiB; $cacheCase : Integer
+var $cacheName : Text
+var $cacheCases : Object
+$cacheOriginalMiB:=Int(Get cache size/1048576)
+$report.cache:=New object("validate"; New object; "execute"; New object; "sizes"; New object)
+$report.cache.validate.sizeWithoutAuthorize:=$operator.validate(New object("actions"; New collection("cache.size")))
+$report.cache.validate.sizeWithAuthorize:=$operator.validate(New object("actions"; New collection("cache.size"); "authorize"; Formula(True))).ok
+$report.cache.validate.flushAlone:=$operator.validate(New object("actions"; New collection("cache.flush"))).ok
+$cacheFolder:=Folder(Temporary folder; fk platform path).folder("dashboard-cache-"+Generate UUID)
+$cacheOperator:=cs.Dashboard._DashboardOperator.new(New collection("cache.flush"; "cache.size"); "cache-epoch"; $cacheFolder)
+$cacheOperator.relay:=False
+$cacheCases:=New object(\
+	"flush"; New object("action"; "cache.flush"; "args"; New object; "authorize"; Null); \
+	"raise"; New object("action"; "cache.size"; "args"; New object("sizeMiB"; $cacheOriginalMiB+100); "authorize"; Formula(True)); \
+	"lowerToFloor"; New object("action"; "cache.size"; "args"; New object("sizeMiB"; 100); "authorize"; Formula(True)); \
+	"overPolicy"; New object("action"; "cache.size"; "args"; New object("sizeMiB"; 1048576); "authorize"; Formula(True)); \
+	"noAuthorize"; New object("action"; "cache.size"; "args"; New object("sizeMiB"; $cacheOriginalMiB+50); "authorize"; Null); \
+	"denied"; New object("action"; "cache.size"; "args"; New object("sizeMiB"; $cacheOriginalMiB+50); "authorize"; Formula(False)); \
+	"restore"; New object("action"; "cache.size"; "args"; New object("sizeMiB"; $cacheOriginalMiB); "authorize"; Formula(True)))
+For each ($cacheName; New collection("flush"; "raise"; "lowerToFloor"; "overPolicy"; "noAuthorize"; "denied"; "restore"))
+	$cacheMessage:=New object("protocol"; 1; "kind"; "action"; "epoch"; "cache-epoch"; "id"; Generate digest("cache "+$cacheName; SHA256 digest); "action"; $cacheCases[$cacheName].action; "args"; $cacheCases[$cacheName].args; "actor"; "0123456789abcdef")
+	$cacheBegun:=$cacheOperator.begin($cacheMessage)
+	$report.cache.execute[$cacheName]:=$cacheOperator.execute($cacheMessage; $cacheBegun.record; $cacheBegun.entry; $cacheBegun.canonical; $cacheCases[$cacheName].authorize)
+	OB REMOVE($report.cache.execute[$cacheName]; "id")
+	If (($cacheCases[$cacheName].action="cache.size") & ($report.cache.execute[$cacheName].state="completed"))
+		// Read back the real cache size for every change reported as completed.
+		$report.cache.sizes[$cacheName]:=(Get cache size=(Num($cacheCases[$cacheName].args.sizeMiB)*1048576))
+	End if
+End for each
+$report.cache.restored:=(Int(Get cache size/1048576)=$cacheOriginalMiB)
+$report.cache.badArgs:=$cacheOperator.begin(New object("protocol"; 1; "kind"; "action"; "epoch"; "cache-epoch"; "id"; Generate digest("cache bad"; SHA256 digest); "action"; "cache.size"; "args"; New object("sizeMiB"; 99); "actor"; "0123456789abcdef")).error
+$report.cache.auditStates:=New collection
+For each ($operatorRaw; Split string($cacheFolder.file("audit.jsonl").getText(); Char(10); sk ignore empty strings))
+	$operatorLine:=JSON Parse($operatorRaw)
+	$report.cache.auditStates.push($operatorLine.action+":"+$operatorLine.state+":"+String($operatorLine.error))
+End for each
+$cacheFolder.delete(Delete with contents)
 HOST_Phase:="abandoned sample skip"
 // A request the agent stopped waiting for must not collect late and delay the next sample.
 var $skipSampler : cs.Dashboard._DashboardSampler
@@ -1232,6 +1274,59 @@ If (Storage.adminCalls.length>0)
 	$report.adminLive.authorize.keys:=OB Keys(Storage.adminCalls[0]).orderBy()
 	$afSecrets:=JSON Stringify(Storage.adminCalls)
 	$report.adminLive.authorize.private:=(Position($afToken; $afSecrets; *)>0) | (Position($afViewer; $afSecrets; *)>0) | (Position($afCookie; $afSecrets; *)>0)
+End if
+HOST_Phase:="cache actions live"
+var $caTool : cs.Dashboard.Dashboard
+var $caService; $caRejected; $caHeaders; $caWait : Object
+var $caOrigin; $caViewer; $caToken; $caCookie; $caId : Text
+var $caOriginalMiB : Integer
+$caOriginalMiB:=Int(Get cache size/1048576)
+// Listing a tier B action without an authorize formula fails at start.
+$caRejected:=cs.Dashboard.Dashboard.new($target).start(New object("operator"; New object("actions"; New collection("cache.size"))))
+$deadline:=Milliseconds+10000
+While ((Not($caRejected.finished)) & (Milliseconds<$deadline))
+	DELAY PROCESS(Current process; 6)
+End while
+$report.cacheLive:=New object("rejected"; New object("status"; $caRejected.status; "error"; $caRejected.error))
+Use (Storage)
+	Storage.adminCalls:=New shared collection
+End use
+$caTool:=cs.Dashboard.Dashboard.new($target)
+$caService:=$caTool.start(New object("operator"; New object("actions"; New collection("cache.flush"; "cache.size"); "authorize"; Formula(Admin_authorize($1)))); New object)
+$deadline:=Milliseconds+15000
+While (($caService.samples<1) & ($caService.status#"failed") & (Milliseconds<$deadline))
+	DELAY PROCESS(Current process; 6)
+End while
+$report.cacheLive.status:=$caService.status
+If ($caService.status="running")
+	$caOrigin:=Substring($caService.url; 1; Position("/#token="; $caService.url; *)-1)
+	$caViewer:=Substring($caService.url; Position("/#token="; $caService.url; *)+8; 64)
+	$caToken:=Substring($caService.operatorUrl; Position("&operator="; $caService.operatorUrl; *)+10; 64)
+	$caCookie:=String(Operator_http("POST"; $caOrigin+"/api/session"; New object("Origin"; $caOrigin); $caViewer).cookies.dashboard)
+	$caHeaders:=New object("Origin"; $caOrigin; "Cookie"; "dashboard="+$caCookie; "X-Dashboard-Action"; "operator"; "Content-Type"; "application/json")
+	$caHeaders.Cookie:="dashboard="+$caCookie+"; dashboard_operator="+String(Operator_http("POST"; $caOrigin+"/api/operator/session"; $caHeaders; JSON Stringify(New object("token"; $caToken))).cookies.dashboard_operator)
+	$caId:=Operator_action($caOrigin; $caHeaders; "cache.size"; New object("sizeMiB"; $caOriginalMiB+100))
+	$caWait:=Operator_wait($caOrigin; $caHeaders.Cookie; $caId; New collection("completed"; "failed"); 15000)
+	$report.cacheLive.raise:=New object("state"; String(Operator_field($caWait; "record.state")); "error"; String(Operator_field($caWait; "record.error")); "applied"; (Get cache size=(($caOriginalMiB+100)*1048576)))
+	$caId:=Operator_action($caOrigin; $caHeaders; "cache.size"; New object("sizeMiB"; 1048576))
+	$caWait:=Operator_wait($caOrigin; $caHeaders.Cookie; $caId; New collection("completed"; "failed"); 15000)
+	$report.cacheLive.overPolicy:=New object("state"; String(Operator_field($caWait; "record.state")); "error"; String(Operator_field($caWait; "record.error")); "unchanged"; (Get cache size=(($caOriginalMiB+100)*1048576)))
+	$caId:=Operator_action($caOrigin; $caHeaders; "cache.size"; New object("sizeMiB"; $caOriginalMiB))
+	$caWait:=Operator_wait($caOrigin; $caHeaders.Cookie; $caId; New collection("completed"; "failed"); 15000)
+	$report.cacheLive.restore:=New object("state"; String(Operator_field($caWait; "record.state")); "restored"; (Int(Get cache size/1048576)=$caOriginalMiB))
+	$caId:=Operator_action($caOrigin; $caHeaders; "cache.flush"; New object)
+	$caWait:=Operator_wait($caOrigin; $caHeaders.Cookie; $caId; New collection("completed"; "failed"); 15000)
+	$report.cacheLive.flush:=New object("state"; String(Operator_field($caWait; "record.state")); "unverified"; (Operator_field($caWait; "record.unverified")=True))
+	$report.cacheLive.authorizeCalls:=Storage.adminCalls.extract("action")
+	$report.cacheLive.authorizeTiers:=Storage.adminCalls.extract("tier")
+End if
+$caTool.stop()
+$deadline:=Milliseconds+15000
+While ((Not($caService.finished)) & (Milliseconds<$deadline))
+	DELAY PROCESS(Current process; 6)
+End while
+If (Int(Get cache size/1048576)#$caOriginalMiB)
+	SET CACHE SIZE($caOriginalMiB*1048576)
 End if
 HOST_Phase:="running failure watchdog"
 $lifecycle:=New signal

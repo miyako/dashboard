@@ -257,8 +257,11 @@ contract is in [docs/history.md](docs/history.md).
 
 ### Administrative actions (foundations only)
 
-The groundwork for administrative actions is in place, but **no
-administrative action is enabled**. Actions come from one catalog,
+The groundwork for administrative actions is in place. The first two real
+actions, both off unless the host lists them, are `cache.flush` and
+`cache.size`. Setting the cache size needs the host's `authorize` approval
+and is capped at 75% of physical memory when raising; see section 9 of
+[docs/operator-actions.md](docs/operator-actions.md). Actions come from one catalog,
 `cli/actions.json`, shared by Go and 4D. They run on their own cooperative 4D
 worker, so the dashboard keeps sampling while one runs. Exclusive actions pause
 sampling, and viewers see "maintenance". A slow sample no longer ends the

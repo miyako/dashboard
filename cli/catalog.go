@@ -68,7 +68,7 @@ func parseCatalog(raw []byte) ([]*catalogEntry, error) {
 	seen := map[string]bool{}
 	for _, e := range catalog.Actions {
 		if !identifier.MatchString(e.ID) || seen[e.ID] || e.DeadlineMs < 1000 || e.DeadlineMs > 3600000 ||
-			(e.Tier != "A" && e.Tier != "B" && e.Tier != "C") || (e.Scope != "any" && e.Scope != "standalone" && e.Scope != "server") ||
+			(e.Tier != "A" && e.Tier != "B" && e.Tier != "C") || (e.Scope != "any" && e.Scope != "local" && e.Scope != "standalone" && e.Scope != "server") ||
 			(e.Verify != "none" && e.Verify != "cli" && e.Verify != "native") ||
 			(e.Approval != "operator" && e.Approval != "operator+host") || (e.Transport != "any" && e.Transport != "tls_or_loopback_only") ||
 			(e.Tier != "A" && (e.Approval != "operator+host" || e.Transport != "tls_or_loopback_only")) {
