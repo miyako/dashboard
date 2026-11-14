@@ -370,6 +370,17 @@
 			"Params": [],
 			"Summary": ""
 		},
+		"terminate()": {
+			"Syntax": "**.terminate**()->terminated : Boolean",
+			"Params": [
+				[
+					"terminated",
+					"Boolean",
+					"<-"
+				]
+			],
+			"Summary": ""
+		},
 		"start()": {
 			"Syntax": "**.start**( *options* : Object; *event* : Object )->state : Object",
 			"Params": [

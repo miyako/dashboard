@@ -90,6 +90,17 @@ Case of
 				End if
 			End if
 		End if
+	: ($operation="terminate")
+		// Any facade may end this instance's active dashboard, whichever facade started it.
+		If (Dashboard_State#Null)
+			If (Not(Dashboard_State.finished))
+				_DashboardWorker("stop"; ""; New object; Dashboard_State; New object; New object)
+			End if
+		End if
+	: ($operation="active")
+		Use ($signal)
+			$signal.active:=(Dashboard_State#Null)
+		End use
 End case
 If ($signal#Null)
 	$signal.trigger()
