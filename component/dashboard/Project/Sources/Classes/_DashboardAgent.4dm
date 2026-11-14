@@ -285,6 +285,12 @@ Function fail($message : Text)
 	End use
 	This.closing:=True
 	If (This.worker#Null)
+		If (Not(This.state.stopRequested))
+			Use (This.state)
+				This.state.stopRequested:=True
+			End use
+			CALL WORKER("Dashboard.stop."+This.epoch; "_DashboardStop"; This.state)
+		End if
 		This.worker.closeInput()
 	Else
 		This.finish()
@@ -311,9 +317,6 @@ Function finish()
 		return
 	End if
 	This.finalized:=True
-	If (This.state.port>0)
-		cs.workers.worker.new(cs._DashboardServer).terminate(This.state.port)
-	End if
 	If (Not(This.state.forceDrain))
 		_DashboardWorker("release"; ""; New object; This.state; New object; New object)
 	End if
@@ -322,7 +325,7 @@ Function finish()
 			This.state.status:="stopped"
 		End if
 		This.state.url:=""
-		This.state.finished:=Not(This.state.forceDrain)
+		This.state.finished:=This.state.finished | Not(This.state.forceDrain)
 	End use
 	This.worker:=Null
 	This.buffer:=""

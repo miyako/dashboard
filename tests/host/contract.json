@@ -873,6 +873,14 @@
       {
         "path": "/callbackStopped",
         "equals": true
+      },
+      {
+        "path": "/delayedFinalizer",
+        "equals": {"oldFinished":true,"replacementOwned":true,"replacementRunning":true,"replacementSampled":true}
+      },
+      {
+        "path": "/failureWatchdog",
+        "equals": {"running":true,"watchdog":true,"terminated":true,"finished":true,"diagnostic":true,"pruned":true}
       }
     ]
   },

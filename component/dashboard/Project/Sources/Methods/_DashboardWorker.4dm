@@ -2,6 +2,7 @@
 #DECLARE($operation : Text; $target : Text; $options : Object; $state : Object; $event : Object; $monitor : Object; $signal : 4D.Signal)
 var Dashboard_Pending : cs._DashboardAgent
 var Dashboard_State : Object
+var $stopping : Boolean
 Case of
 	: ($operation="start")
 		If (Dashboard_State#Null)
@@ -25,8 +26,17 @@ Case of
 	: ($operation="release")
 		If (Dashboard_State#Null)
 			If (Dashboard_State.epoch=$state.epoch)
-				Dashboard_Pending:=Null
-				Dashboard_State:=Null
+				If ($state.port>0)
+					cs.workers.worker.new(cs._DashboardServer).terminate($state.port)
+				End if
+				If (Dashboard_State#Null)
+					If (Dashboard_State.epoch=$state.epoch)
+						If (Not($state.forceDrain))
+							Dashboard_Pending:=Null
+							Dashboard_State:=Null
+						End if
+					End if
+				End if
 			End if
 		End if
 	: ($operation="drained")
@@ -55,6 +65,7 @@ Case of
 						$state.url:=""
 					End use
 				End if
+				$stopping:=$state.stopRequested
 				Use ($state)
 					$state.stopRequested:=True
 				End use
@@ -73,7 +84,9 @@ Case of
 					End if
 				End if
 				If (($operation="stop") | ($operation="timeout"))
-					CALL WORKER("Dashboard.stop."+ $state.epoch; "_DashboardStop"; $state)
+					If (Not($stopping))
+						CALL WORKER("Dashboard.stop."+ $state.epoch; "_DashboardStop"; $state)
+					End if
 				End if
 			End if
 		End if

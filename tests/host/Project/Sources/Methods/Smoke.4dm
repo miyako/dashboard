@@ -346,6 +346,20 @@ $report.service.duplicateRejected:=($duplicate.status="failed")
 If (($service.status#"running") | ($service.samples<1))
 	$report.success:=False
 End if
+HOST_Phase:="delayed retired controller finalization"
+var $lifecycle : 4D.Signal
+var $beforeFinalizer : Real
+$beforeFinalizer:=$service.samples
+$lifecycle:=New signal
+CALL WORKER(".workers"; "Dashboard_lifecycle"; "retired"; $target; $service; $lifecycle)
+If (Not($lifecycle.wait(5)))
+	$report.success:=False
+End if
+$deadline:=Milliseconds+5000
+While (($service.samples<=$beforeFinalizer) & Not($service.finished) & (Milliseconds<$deadline))
+	DELAY PROCESS(Current process; 6)
+End while
+$report.delayedFinalizer:=New object("oldFinished"; $lifecycle.oldFinished; "replacementOwned"; $lifecycle.replacementOwned; "replacementRunning"; ($service.status="running"); "replacementSampled"; ($service.samples>$beforeFinalizer))
 If ($service.status="running")
 	var $http : 4D.HTTPRequest
 	var $origin : Text
@@ -502,6 +516,13 @@ $forcedAgent.worker:=$forcedWorker
 $forcedAgent.force()
 $forcedWorker.wait(2)
 $report.forcedStop:=New object("terminated"; $forcedWorker.terminated; "finished"; $forcedState.finished; "status"; $forcedState.status)
+HOST_Phase:="running failure watchdog"
+$lifecycle:=New signal
+CALL WORKER(".workers"; "Dashboard_lifecycle"; "failure"; $target; New object; $lifecycle)
+If (Not($lifecycle.wait(8)))
+	$report.success:=False
+End if
+$report.failureWatchdog:=New object("running"; $lifecycle.running; "watchdog"; $lifecycle.watchdog; "terminated"; $lifecycle.terminated; "finished"; $lifecycle.finished; "diagnostic"; $lifecycle.diagnostic; "pruned"; $lifecycle.pruned)
 $report.finished:=True
 ON ERR CALL(HOST_PreviousHandler; ek local)
 $statusFile.setText(JSON Stringify($report))

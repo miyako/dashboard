@@ -35,6 +35,8 @@ opt-in and valid TLS. Unknown/invalid options fail explicitly.
 `stop()` queues graceful shutdown, closes stdin, then uses a finite 3.5-second
 grace period and forced fallback if needed. Registration drainage precedes
 replacement after force. A ten-second startup watchdog bounds pending ownership.
+Transport, protocol and collection failures use the same finite stop watchdog;
+delayed finalization prunes only the currently owned generation, never a replacement.
 Terminal cleanup clears the private URL and prunes callback/collector/watchdog
 workers and queued calls, not the shared `.workers` process. Unexpected exit
 preserves stderr, emits `failed`, and permits restart after cleanup.
