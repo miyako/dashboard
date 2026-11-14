@@ -479,3 +479,38 @@ func TestLANAndEOF(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestDatabaseParameterMetricsAreAClosedTypedAllowlist(t *testing.T) {
+	for _, test := range []struct {
+		id, typ, unit, kind string
+		value               any
+		valid               bool
+	}{
+		{"db.hostIsProject", "boolean", "", "static", true, true},
+		{"db.hostIsProject", "number", "", "static", float64(1), false},
+		{"db.hostWritable", "boolean", "", "gauge", false, false},
+		{"db.libzipVersion", "text", "", "static", "1.11.4", true},
+		{"db.libzipVersion", "text", "", "static", "/private/lib/libzip.dylib", false},
+		{"db.libldapVersion", "text", "", "static", "2.6.10", false},
+		{"db.libsaslVersion", "text", "", "static", "2.1.28", false},
+		{"db.openSSLVersion", "text", "", "static", "OpenSSL 3.5.1 1 Jul 2025", true},
+		{"db.cacheUnloadMinimum", "number", "bytes", "static", float64(0), true},
+		{"db.cacheUnloadMinimum", "number", "bytes", "static", float64(9007199254740992), false},
+		{"db.cacheUnloadMinimum", "number", "KiB", "static", float64(1024), false},
+		{"db.cacheFlushPeriodicity", "number", "s", "static", float64(15), true},
+		{"db.cacheFlushPeriodicity", "number", "s", "static", float64(-1), false},
+		{"db.cacheFlushPeriodicity", "number", "s", "static", float64(1.5), false},
+		{"db.cacheFlushPeriodicity", "number", "s", "static", float64(2147483648), false},
+		{"db.serverTimeout", "number", "min", "static", float64(10), false},
+		{"db.currentIsProject", "boolean", "", "static", true, false},
+	} {
+		m := metric{ID: test.id, Label: "Parameter", Type: test.typ, Unit: test.unit, Kind: test.kind, Availability: "available", Value: test.value}
+		if validMetric(m) != test.valid {
+			t.Fatalf("%s %v %s %s", test.id, test.value, test.unit, test.kind)
+		}
+	}
+	missing := metric{ID: "db.openSSLVersion", Label: "Parameter", Type: "text", Kind: "static", Availability: "missing", Reason: "Not reported by this 4D runtime"}
+	if !validMetric(missing) {
+		t.Fatal("unavailable parameter metric rejected")
+	}
+}

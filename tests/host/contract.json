@@ -1634,6 +1634,650 @@
         "equals": true
       },
       {
+        "path": "/parameters/count",
+        "equals": 6
+      },
+      {
+        "path": "/parameters/selectors",
+        "equals": [
+          113,
+          117,
+          94,
+          120,
+          66,
+          95
+        ]
+      },
+      {
+        "path": "/parameters/cases/flagOne",
+        "equals": {
+          "db.hostWritable": {
+            "id": "db.hostWritable",
+            "label": "Host project or structure file writable",
+            "type": "boolean",
+            "unit": "",
+            "kind": "static",
+            "availability": "available",
+            "value": true
+          },
+          "db.libzipVersion": {
+            "id": "db.libzipVersion",
+            "label": "libzip library version",
+            "type": "text",
+            "unit": "",
+            "kind": "static",
+            "availability": "missing",
+            "reason": "Not reported by this 4D runtime"
+          },
+          "db.cacheUnloadMinimum": {
+            "id": "db.cacheUnloadMinimum",
+            "label": "Cache unload minimum (current setting)",
+            "type": "number",
+            "unit": "bytes",
+            "kind": "static",
+            "availability": "available",
+            "value": 1
+          },
+          "db.cacheFlushPeriodicity": {
+            "id": "db.cacheFlushPeriodicity",
+            "label": "Cache flush periodicity (current setting)",
+            "type": "number",
+            "unit": "s",
+            "kind": "static",
+            "availability": "available",
+            "value": 1
+          }
+        }
+      },
+      {
+        "path": "/parameters/cases/flagZero",
+        "equals": {
+          "db.hostWritable": {
+            "id": "db.hostWritable",
+            "label": "Host project or structure file writable",
+            "type": "boolean",
+            "unit": "",
+            "kind": "static",
+            "availability": "available",
+            "value": false
+          },
+          "db.libzipVersion": {
+            "id": "db.libzipVersion",
+            "label": "libzip library version",
+            "type": "text",
+            "unit": "",
+            "kind": "static",
+            "availability": "missing",
+            "reason": "Not reported by this 4D runtime"
+          },
+          "db.cacheUnloadMinimum": {
+            "id": "db.cacheUnloadMinimum",
+            "label": "Cache unload minimum (current setting)",
+            "type": "number",
+            "unit": "bytes",
+            "kind": "static",
+            "availability": "available",
+            "value": 0
+          },
+          "db.cacheFlushPeriodicity": {
+            "id": "db.cacheFlushPeriodicity",
+            "label": "Cache flush periodicity (current setting)",
+            "type": "number",
+            "unit": "s",
+            "kind": "static",
+            "availability": "available",
+            "value": 0
+          }
+        }
+      },
+      {
+        "path": "/parameters/cases/flagTwo",
+        "equals": {
+          "db.hostWritable": {
+            "id": "db.hostWritable",
+            "label": "Host project or structure file writable",
+            "type": "boolean",
+            "unit": "",
+            "kind": "static",
+            "availability": "error",
+            "reason": "Invalid database parameter value"
+          },
+          "db.libzipVersion": {
+            "id": "db.libzipVersion",
+            "label": "libzip library version",
+            "type": "text",
+            "unit": "",
+            "kind": "static",
+            "availability": "missing",
+            "reason": "Not reported by this 4D runtime"
+          },
+          "db.cacheUnloadMinimum": {
+            "id": "db.cacheUnloadMinimum",
+            "label": "Cache unload minimum (current setting)",
+            "type": "number",
+            "unit": "bytes",
+            "kind": "static",
+            "availability": "available",
+            "value": 2
+          },
+          "db.cacheFlushPeriodicity": {
+            "id": "db.cacheFlushPeriodicity",
+            "label": "Cache flush periodicity (current setting)",
+            "type": "number",
+            "unit": "s",
+            "kind": "static",
+            "availability": "available",
+            "value": 2
+          }
+        }
+      },
+      {
+        "path": "/parameters/cases/version",
+        "equals": {
+          "db.hostWritable": {
+            "id": "db.hostWritable",
+            "label": "Host project or structure file writable",
+            "type": "boolean",
+            "unit": "",
+            "kind": "static",
+            "availability": "available",
+            "value": false
+          },
+          "db.libzipVersion": {
+            "id": "db.libzipVersion",
+            "label": "libzip library version",
+            "type": "text",
+            "unit": "",
+            "kind": "static",
+            "availability": "available",
+            "value": "1.11.4"
+          },
+          "db.cacheUnloadMinimum": {
+            "id": "db.cacheUnloadMinimum",
+            "label": "Cache unload minimum (current setting)",
+            "type": "number",
+            "unit": "bytes",
+            "kind": "static",
+            "availability": "available",
+            "value": 0
+          },
+          "db.cacheFlushPeriodicity": {
+            "id": "db.cacheFlushPeriodicity",
+            "label": "Cache flush periodicity (current setting)",
+            "type": "number",
+            "unit": "s",
+            "kind": "static",
+            "availability": "available",
+            "value": 0
+          }
+        }
+      },
+      {
+        "path": "/parameters/cases/versionEmpty",
+        "equals": {
+          "db.hostWritable": {
+            "id": "db.hostWritable",
+            "label": "Host project or structure file writable",
+            "type": "boolean",
+            "unit": "",
+            "kind": "static",
+            "availability": "available",
+            "value": false
+          },
+          "db.libzipVersion": {
+            "id": "db.libzipVersion",
+            "label": "libzip library version",
+            "type": "text",
+            "unit": "",
+            "kind": "static",
+            "availability": "missing",
+            "reason": "Not reported by this 4D runtime"
+          },
+          "db.cacheUnloadMinimum": {
+            "id": "db.cacheUnloadMinimum",
+            "label": "Cache unload minimum (current setting)",
+            "type": "number",
+            "unit": "bytes",
+            "kind": "static",
+            "availability": "available",
+            "value": 0
+          },
+          "db.cacheFlushPeriodicity": {
+            "id": "db.cacheFlushPeriodicity",
+            "label": "Cache flush periodicity (current setting)",
+            "type": "number",
+            "unit": "s",
+            "kind": "static",
+            "availability": "available",
+            "value": 0
+          }
+        }
+      },
+      {
+        "path": "/parameters/cases/versionPath",
+        "equals": {
+          "db.hostWritable": {
+            "id": "db.hostWritable",
+            "label": "Host project or structure file writable",
+            "type": "boolean",
+            "unit": "",
+            "kind": "static",
+            "availability": "available",
+            "value": false
+          },
+          "db.libzipVersion": {
+            "id": "db.libzipVersion",
+            "label": "libzip library version",
+            "type": "text",
+            "unit": "",
+            "kind": "static",
+            "availability": "error",
+            "reason": "Invalid database parameter value"
+          },
+          "db.cacheUnloadMinimum": {
+            "id": "db.cacheUnloadMinimum",
+            "label": "Cache unload minimum (current setting)",
+            "type": "number",
+            "unit": "bytes",
+            "kind": "static",
+            "availability": "available",
+            "value": 0
+          },
+          "db.cacheFlushPeriodicity": {
+            "id": "db.cacheFlushPeriodicity",
+            "label": "Cache flush periodicity (current setting)",
+            "type": "number",
+            "unit": "s",
+            "kind": "static",
+            "availability": "available",
+            "value": 0
+          }
+        }
+      },
+      {
+        "path": "/parameters/cases/number",
+        "equals": {
+          "db.hostWritable": {
+            "id": "db.hostWritable",
+            "label": "Host project or structure file writable",
+            "type": "boolean",
+            "unit": "",
+            "kind": "static",
+            "availability": "error",
+            "reason": "Invalid database parameter value"
+          },
+          "db.libzipVersion": {
+            "id": "db.libzipVersion",
+            "label": "libzip library version",
+            "type": "text",
+            "unit": "",
+            "kind": "static",
+            "availability": "missing",
+            "reason": "Not reported by this 4D runtime"
+          },
+          "db.cacheUnloadMinimum": {
+            "id": "db.cacheUnloadMinimum",
+            "label": "Cache unload minimum (current setting)",
+            "type": "number",
+            "unit": "bytes",
+            "kind": "static",
+            "availability": "available",
+            "value": 1048576
+          },
+          "db.cacheFlushPeriodicity": {
+            "id": "db.cacheFlushPeriodicity",
+            "label": "Cache flush periodicity (current setting)",
+            "type": "number",
+            "unit": "s",
+            "kind": "static",
+            "availability": "available",
+            "value": 1048576
+          }
+        }
+      },
+      {
+        "path": "/parameters/cases/negative",
+        "equals": {
+          "db.hostWritable": {
+            "id": "db.hostWritable",
+            "label": "Host project or structure file writable",
+            "type": "boolean",
+            "unit": "",
+            "kind": "static",
+            "availability": "error",
+            "reason": "Invalid database parameter value"
+          },
+          "db.libzipVersion": {
+            "id": "db.libzipVersion",
+            "label": "libzip library version",
+            "type": "text",
+            "unit": "",
+            "kind": "static",
+            "availability": "missing",
+            "reason": "Not reported by this 4D runtime"
+          },
+          "db.cacheUnloadMinimum": {
+            "id": "db.cacheUnloadMinimum",
+            "label": "Cache unload minimum (current setting)",
+            "type": "number",
+            "unit": "bytes",
+            "kind": "static",
+            "availability": "error",
+            "reason": "Invalid database parameter value"
+          },
+          "db.cacheFlushPeriodicity": {
+            "id": "db.cacheFlushPeriodicity",
+            "label": "Cache flush periodicity (current setting)",
+            "type": "number",
+            "unit": "s",
+            "kind": "static",
+            "availability": "error",
+            "reason": "Invalid database parameter value"
+          }
+        }
+      },
+      {
+        "path": "/parameters/cases/fraction",
+        "equals": {
+          "db.hostWritable": {
+            "id": "db.hostWritable",
+            "label": "Host project or structure file writable",
+            "type": "boolean",
+            "unit": "",
+            "kind": "static",
+            "availability": "error",
+            "reason": "Invalid database parameter value"
+          },
+          "db.libzipVersion": {
+            "id": "db.libzipVersion",
+            "label": "libzip library version",
+            "type": "text",
+            "unit": "",
+            "kind": "static",
+            "availability": "missing",
+            "reason": "Not reported by this 4D runtime"
+          },
+          "db.cacheUnloadMinimum": {
+            "id": "db.cacheUnloadMinimum",
+            "label": "Cache unload minimum (current setting)",
+            "type": "number",
+            "unit": "bytes",
+            "kind": "static",
+            "availability": "error",
+            "reason": "Invalid database parameter value"
+          },
+          "db.cacheFlushPeriodicity": {
+            "id": "db.cacheFlushPeriodicity",
+            "label": "Cache flush periodicity (current setting)",
+            "type": "number",
+            "unit": "s",
+            "kind": "static",
+            "availability": "error",
+            "reason": "Invalid database parameter value"
+          }
+        }
+      },
+      {
+        "path": "/parameters/cases/overflow",
+        "equals": {
+          "db.hostWritable": {
+            "id": "db.hostWritable",
+            "label": "Host project or structure file writable",
+            "type": "boolean",
+            "unit": "",
+            "kind": "static",
+            "availability": "error",
+            "reason": "Invalid database parameter value"
+          },
+          "db.libzipVersion": {
+            "id": "db.libzipVersion",
+            "label": "libzip library version",
+            "type": "text",
+            "unit": "",
+            "kind": "static",
+            "availability": "missing",
+            "reason": "Not reported by this 4D runtime"
+          },
+          "db.cacheUnloadMinimum": {
+            "id": "db.cacheUnloadMinimum",
+            "label": "Cache unload minimum (current setting)",
+            "type": "number",
+            "unit": "bytes",
+            "kind": "static",
+            "availability": "available",
+            "value": 2147483648
+          },
+          "db.cacheFlushPeriodicity": {
+            "id": "db.cacheFlushPeriodicity",
+            "label": "Cache flush periodicity (current setting)",
+            "type": "number",
+            "unit": "s",
+            "kind": "static",
+            "availability": "error",
+            "reason": "Invalid database parameter value"
+          }
+        }
+      },
+      {
+        "path": "/parameters/cases/failed",
+        "equals": {
+          "db.hostWritable": {
+            "id": "db.hostWritable",
+            "label": "Host project or structure file writable",
+            "type": "boolean",
+            "unit": "",
+            "kind": "static",
+            "availability": "error",
+            "reason": "Database parameter read failed"
+          },
+          "db.libzipVersion": {
+            "id": "db.libzipVersion",
+            "label": "libzip library version",
+            "type": "text",
+            "unit": "",
+            "kind": "static",
+            "availability": "error",
+            "reason": "Database parameter read failed"
+          },
+          "db.cacheUnloadMinimum": {
+            "id": "db.cacheUnloadMinimum",
+            "label": "Cache unload minimum (current setting)",
+            "type": "number",
+            "unit": "bytes",
+            "kind": "static",
+            "availability": "error",
+            "reason": "Database parameter read failed"
+          },
+          "db.cacheFlushPeriodicity": {
+            "id": "db.cacheFlushPeriodicity",
+            "label": "Cache flush periodicity (current setting)",
+            "type": "number",
+            "unit": "s",
+            "kind": "static",
+            "availability": "error",
+            "reason": "Database parameter read failed"
+          }
+        }
+      },
+      {
+        "path": "/parameters/cases/unimplemented",
+        "equals": {
+          "db.hostWritable": {
+            "id": "db.hostWritable",
+            "label": "Host project or structure file writable",
+            "type": "boolean",
+            "unit": "",
+            "kind": "static",
+            "availability": "unsupported",
+            "reason": "This 4D runtime does not implement Get database parameter"
+          },
+          "db.libzipVersion": {
+            "id": "db.libzipVersion",
+            "label": "libzip library version",
+            "type": "text",
+            "unit": "",
+            "kind": "static",
+            "availability": "unsupported",
+            "reason": "This 4D runtime does not implement Get database parameter"
+          },
+          "db.cacheUnloadMinimum": {
+            "id": "db.cacheUnloadMinimum",
+            "label": "Cache unload minimum (current setting)",
+            "type": "number",
+            "unit": "bytes",
+            "kind": "static",
+            "availability": "unsupported",
+            "reason": "This 4D runtime does not implement Get database parameter"
+          },
+          "db.cacheFlushPeriodicity": {
+            "id": "db.cacheFlushPeriodicity",
+            "label": "Cache flush periodicity (current setting)",
+            "type": "number",
+            "unit": "s",
+            "kind": "static",
+            "availability": "unsupported",
+            "reason": "This 4D runtime does not implement Get database parameter"
+          }
+        }
+      },
+      {
+        "path": "/parameters/cases/remote",
+        "equals": {
+          "db.hostWritable": {
+            "id": "db.hostWritable",
+            "label": "Host project or structure file writable",
+            "type": "boolean",
+            "unit": "",
+            "kind": "static",
+            "availability": "unsupported",
+            "reason": "Unavailable on a remote client; run a collector on the server"
+          },
+          "db.libzipVersion": {
+            "id": "db.libzipVersion",
+            "label": "libzip library version",
+            "type": "text",
+            "unit": "",
+            "kind": "static",
+            "availability": "unsupported",
+            "reason": "Unavailable on a remote client; run a collector on the server"
+          },
+          "db.cacheUnloadMinimum": {
+            "id": "db.cacheUnloadMinimum",
+            "label": "Cache unload minimum (current setting)",
+            "type": "number",
+            "unit": "bytes",
+            "kind": "static",
+            "availability": "unsupported",
+            "reason": "Unavailable on a remote client; run a collector on the server"
+          },
+          "db.cacheFlushPeriodicity": {
+            "id": "db.cacheFlushPeriodicity",
+            "label": "Cache flush periodicity (current setting)",
+            "type": "number",
+            "unit": "s",
+            "kind": "static",
+            "availability": "unsupported",
+            "reason": "Unavailable on a remote client; run a collector on the server"
+          }
+        }
+      },
+      {
+        "path": "/parameters/cases/invalid",
+        "equals": {
+          "db.hostWritable": {
+            "id": "db.hostWritable",
+            "label": "Host project or structure file writable",
+            "type": "boolean",
+            "unit": "",
+            "kind": "static",
+            "availability": "error",
+            "reason": "Invalid database parameter value"
+          },
+          "db.libzipVersion": {
+            "id": "db.libzipVersion",
+            "label": "libzip library version",
+            "type": "text",
+            "unit": "",
+            "kind": "static",
+            "availability": "error",
+            "reason": "Invalid database parameter value"
+          },
+          "db.cacheUnloadMinimum": {
+            "id": "db.cacheUnloadMinimum",
+            "label": "Cache unload minimum (current setting)",
+            "type": "number",
+            "unit": "bytes",
+            "kind": "static",
+            "availability": "error",
+            "reason": "Invalid database parameter value"
+          },
+          "db.cacheFlushPeriodicity": {
+            "id": "db.cacheFlushPeriodicity",
+            "label": "Cache flush periodicity (current setting)",
+            "type": "number",
+            "unit": "s",
+            "kind": "static",
+            "availability": "error",
+            "reason": "Invalid database parameter value"
+          }
+        }
+      },
+      {
+        "path": "/parameters/live",
+        "equals": {
+          "db.hostIsProject": {
+            "type": "boolean",
+            "unit": "",
+            "kind": "static",
+            "availability": "available",
+            "valueType": 6
+          },
+          "db.hostWritable": {
+            "type": "boolean",
+            "unit": "",
+            "kind": "static",
+            "availability": "available",
+            "valueType": 6
+          },
+          "db.openSSLVersion": {
+            "type": "text",
+            "unit": "",
+            "kind": "static",
+            "availability": "available",
+            "valueType": 2
+          },
+          "db.libzipVersion": {
+            "type": "text",
+            "unit": "",
+            "kind": "static",
+            "availability": "available",
+            "valueType": 2
+          },
+          "db.cacheUnloadMinimum": {
+            "type": "number",
+            "unit": "bytes",
+            "kind": "static",
+            "availability": "available",
+            "valueType": 1
+          },
+          "db.cacheFlushPeriodicity": {
+            "type": "number",
+            "unit": "s",
+            "kind": "static",
+            "availability": "available",
+            "valueType": 1
+          }
+        }
+      },
+      {
+        "path": "/parameters/staticInInfo",
+        "equals": true
+      },
+      {
+        "path": "/parameters/settingsInSnapshot",
+        "equals": true
+      },
+      {
         "path": "/backup/calendar",
         "equals": [
           {

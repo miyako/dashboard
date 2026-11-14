@@ -424,6 +424,40 @@ For each ($measurement; $collector._webMetrics($webRead))
 	$report.web.live[$measurement.id]:=$measurement
 End for each
 $report.web.inSnapshot:=($collector.snapshot().metrics.query("id = :1"; "web.running").length=1)
+HOST_Phase:="database parameter normalization"
+var $parameterDefinitions : Collection
+var $parameterCases; $parameterCase; $parameterDefinition : Object
+$parameterDefinitions:=$collector._parameterDefinitions()
+$report.parameters:=New object("count"; $parameterDefinitions.length; "selectors"; $parameterDefinitions.extract("selector"); "cases"; New object)
+$parameterCases:=New object(\
+	"flagOne"; New object("ok"; True; "data"; New object("number"; 1; "text"; "")); \
+	"flagZero"; New object("ok"; True; "data"; New object("number"; 0; "text"; "")); \
+	"flagTwo"; New object("ok"; True; "data"; New object("number"; 2; "text"; "")); \
+	"version"; New object("ok"; True; "data"; New object("number"; 0; "text"; "1.11.4")); \
+	"versionEmpty"; New object("ok"; True; "data"; New object("number"; 0; "text"; "")); \
+	"versionPath"; New object("ok"; True; "data"; New object("number"; 0; "text"; "/private/lib/libzip.dylib")); \
+	"number"; New object("ok"; True; "data"; New object("number"; 1048576; "text"; "")); \
+	"negative"; New object("ok"; True; "data"; New object("number"; -1; "text"; "")); \
+	"fraction"; New object("ok"; True; "data"; New object("number"; 1.5; "text"; "")); \
+	"overflow"; New object("ok"; True; "data"; New object("number"; 2147483648; "text"; "")); \
+	"failed"; New object("ok"; False; "data"; New object("number"; 1; "text"; "1.0")); \
+	"unimplemented"; New object("ok"; False; "unimplemented"; True; "data"; Null); \
+	"remote"; New object("ok"; True; "remote"; True; "data"; Null); \
+	"invalid"; New object("ok"; True; "data"; "private-parameter"))
+// One definition per type: a flag, a version and each numeric unit.
+For each ($name; OB Keys($parameterCases))
+	$parameterCase:=New object
+	For each ($parameterDefinition; $parameterDefinitions.query("id in :1"; New collection("db.hostWritable"; "db.libzipVersion"; "db.cacheUnloadMinimum"; "db.cacheFlushPeriodicity")))
+		$parameterCase[$parameterDefinition.id]:=$collector._parameterMetric($parameterDefinition; $parameterCases[$name])
+	End for each
+	$report.parameters.cases[$name]:=$parameterCase
+End for each
+$report.parameters.live:=New object
+For each ($measurement; $collector.parameters("static").combine($collector.parameters("settings")))
+	$report.parameters.live[$measurement.id]:=New object("type"; $measurement.type; "unit"; $measurement.unit; "kind"; $measurement.kind; "availability"; $measurement.availability; "valueType"; Value type($measurement.value))
+End for each
+$report.parameters.staticInInfo:=($collector.staticMetrics.query("id = :1"; "db.libzipVersion").length=1)
+$report.parameters.settingsInSnapshot:=($collector.snapshot().metrics.query("id = :1"; "db.cacheFlushPeriodicity").length=1)
 HOST_Phase:="license usage normalization"
 $licenseEntries:=New collection(\
 	New object("productId"; 7; "productName"; "Client"; "productUsedCount"; 500; "productBalance"; 200; "token"; 123456; "reason"; "private caller"; "session"; New object("userName"; "private user")); \
