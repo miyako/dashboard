@@ -212,6 +212,35 @@ func TestStaticDatastoreCountsAreBoundedAndUnavailableIsNotZero(t *testing.T) {
 	}
 }
 
+func TestEngineTableCountsAreBoundedAndFlagsAreStrictBooleans(t *testing.T) {
+	for _, test := range []struct {
+		value float64
+		valid bool
+	}{{0, true}, {512, true}, {513, false}, {-1, false}, {1.5, false}} {
+		m := metric{ID: "datastore.encryptedTables", Label: "Encrypted tables", Type: "number", Unit: "tables", Kind: "static", Availability: "available", Value: test.value}
+		if validMetric(m) != test.valid {
+			t.Fatalf("table count %v", test.value)
+		}
+	}
+	for _, test := range []struct {
+		value any
+		valid bool
+	}{{true, true}, {false, true}, {"false", false}, {float64(0), false}, {nil, false}} {
+		m := metric{ID: "datastore.locked", Label: "Datastore write freeze (lock, backup or VSS)", Type: "boolean", Kind: "gauge", Availability: "available", Value: test.value}
+		if validMetric(m) != test.valid {
+			t.Fatalf("lock flag %v", test.value)
+		}
+	}
+	unavailable := metric{ID: "datastore.encryptionKeyProvided", Label: "Data encryption key provided", Type: "boolean", Kind: "static", Availability: "unsupported", Reason: "Data file is not encrypted; no data key applies"}
+	if !validMetric(unavailable) {
+		t.Fatal("not-applicable key state rejected")
+	}
+	unavailable.Value = false
+	if validMetric(unavailable) {
+		t.Fatal("unavailable key state carried a value")
+	}
+}
+
 func TestRefreshCorrelation(t *testing.T) {
 	s := newService("http://127.0.0.1", "token")
 	hello(t, s)

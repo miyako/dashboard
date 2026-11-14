@@ -186,7 +186,7 @@ func validMetric(m metric) bool {
 			if m.Unit == "records" {
 				return v >= 0 && v <= 9007199254740991 && math.Trunc(v) == v
 			}
-			if m.Unit == "dataclasses" {
+			if m.Unit == "dataclasses" || m.Unit == "tables" {
 				return v >= 0 && v <= 512 && math.Trunc(v) == v
 			}
 			return true

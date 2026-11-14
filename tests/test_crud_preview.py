@@ -6,7 +6,7 @@ import tempfile
 import xml.etree.ElementTree as ET
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
-from preview_crud import verify
+from preview_crud import ENGINE, verify
 from test_backup_scope import prepare, verify as verify_backup_scope
 
 
@@ -37,6 +37,14 @@ class CrudEvidenceTests(unittest.TestCase):
                 for field in ("lastAt", "nextAt", "statusCode", "duration", "beginUTC")
             },
         }
+        for field, (kind, unit, cadence, availability, value) in ENGINE.items():
+            metric = {"id": "datastore." + field, "label": field, "type": kind, "unit": unit,
+                      "kind": cadence, "availability": availability}
+            if availability == "available":
+                metric["value"] = value
+            else:
+                metric["reason"] = "Data file is not encrypted; no data key applies"
+            self.report["datastore"]["datastore." + field] = metric
         self.report["backup"]["backup.observedAt"] = {
             "id": "backup.observedAt", "label": "Observed", "type": "text", "unit": "",
             "kind": "static", "availability": "available", "value": "2026-11-14T00:00:00.123Z"}
@@ -100,6 +108,26 @@ class CrudEvidenceTests(unittest.TestCase):
         bad = copy.deepcopy(self.report)
         del bad["datastore"]
         with self.assertRaisesRegex(ValueError, "Datastore"):
+            verify(bad)
+
+    def test_requires_observed_plain_engine_posture_without_private_fields(self):
+        verify(self.report)
+        for field, update in (("encrypted", {"value": True}),
+                              ("encryptedTables", {"value": False}),
+                              ("encryptableTables", {"availability": "error", "reason": "x"}),
+                              ("encryptionKeyProvided", {"value": False}),
+                              ("locked", {"kind": "static"}),
+                              ("adminProtected", {"name": "private-table"})):
+            bad = copy.deepcopy(self.report)
+            metric = bad["datastore"]["datastore." + field]
+            metric.update(update)
+            if "reason" in update:
+                metric.pop("value", None)
+            with self.subTest(field=field), self.assertRaisesRegex(ValueError, "engine posture"):
+                verify(bad)
+        bad = copy.deepcopy(self.report)
+        del bad["datastore"]["datastore.locked"]
+        with self.assertRaisesRegex(ValueError, "inventory"):
             verify(bad)
 
     def test_requires_round_trips_and_real_counter_movement(self):

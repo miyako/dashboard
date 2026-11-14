@@ -1,1 +1,1 @@
-{"version":2100,"dependencies":{"dashboard":{}}}
+{"version":2100,"dependencies":{"dashboard":{},"workers":{},"tcp":{}}}

@@ -406,6 +406,527 @@
         "equals": true
       },
       {
+        "path": "/engine/encryption/plain",
+        "equals": {
+          "datastore.encrypted": {
+            "id": "datastore.encrypted",
+            "label": "Data file encrypted",
+            "type": "boolean",
+            "unit": "",
+            "kind": "static",
+            "availability": "available",
+            "value": false
+          },
+          "datastore.encryptionKeyProvided": {
+            "id": "datastore.encryptionKeyProvided",
+            "label": "Data encryption key provided",
+            "type": "boolean",
+            "unit": "",
+            "kind": "static",
+            "availability": "unsupported",
+            "reason": "Data file is not encrypted; no data key applies"
+          },
+          "datastore.encryptableTables": {
+            "id": "datastore.encryptableTables",
+            "label": "Encryptable tables",
+            "type": "number",
+            "unit": "tables",
+            "kind": "static",
+            "availability": "available",
+            "value": 0
+          },
+          "datastore.encryptedTables": {
+            "id": "datastore.encryptedTables",
+            "label": "Encrypted tables",
+            "type": "number",
+            "unit": "tables",
+            "kind": "static",
+            "availability": "available",
+            "value": 0
+          }
+        }
+      },
+      {
+        "path": "/engine/encryption/encrypted",
+        "equals": {
+          "datastore.encrypted": {
+            "id": "datastore.encrypted",
+            "label": "Data file encrypted",
+            "type": "boolean",
+            "unit": "",
+            "kind": "static",
+            "availability": "available",
+            "value": true
+          },
+          "datastore.encryptionKeyProvided": {
+            "id": "datastore.encryptionKeyProvided",
+            "label": "Data encryption key provided",
+            "type": "boolean",
+            "unit": "",
+            "kind": "static",
+            "availability": "available",
+            "value": true
+          },
+          "datastore.encryptableTables": {
+            "id": "datastore.encryptableTables",
+            "label": "Encryptable tables",
+            "type": "number",
+            "unit": "tables",
+            "kind": "static",
+            "availability": "available",
+            "value": 2
+          },
+          "datastore.encryptedTables": {
+            "id": "datastore.encryptedTables",
+            "label": "Encrypted tables",
+            "type": "number",
+            "unit": "tables",
+            "kind": "static",
+            "availability": "available",
+            "value": 1
+          }
+        }
+      },
+      {
+        "path": "/engine/encryption/keyMissing/datastore.encryptionKeyProvided/value",
+        "equals": false
+      },
+      {
+        "path": "/engine/encryption/failed/datastore.encrypted/availability",
+        "equals": "error"
+      },
+      {
+        "path": "/engine/encryption/failed/datastore.encrypted/reason",
+        "equals": "Datastore encryption status failed"
+      },
+      {
+        "path": "/engine/encryption/failed/datastore.encrypted/value",
+        "absent": true
+      },
+      {
+        "path": "/engine/encryption/failed/datastore.encryptionKeyProvided/availability",
+        "equals": "error"
+      },
+      {
+        "path": "/engine/encryption/failed/datastore.encryptionKeyProvided/reason",
+        "equals": "Datastore encryption status failed"
+      },
+      {
+        "path": "/engine/encryption/failed/datastore.encryptionKeyProvided/value",
+        "absent": true
+      },
+      {
+        "path": "/engine/encryption/failed/datastore.encryptableTables/availability",
+        "equals": "error"
+      },
+      {
+        "path": "/engine/encryption/failed/datastore.encryptableTables/reason",
+        "equals": "Datastore encryption status failed"
+      },
+      {
+        "path": "/engine/encryption/failed/datastore.encryptableTables/value",
+        "absent": true
+      },
+      {
+        "path": "/engine/encryption/failed/datastore.encryptedTables/availability",
+        "equals": "error"
+      },
+      {
+        "path": "/engine/encryption/failed/datastore.encryptedTables/reason",
+        "equals": "Datastore encryption status failed"
+      },
+      {
+        "path": "/engine/encryption/failed/datastore.encryptedTables/value",
+        "absent": true
+      },
+      {
+        "path": "/engine/encryption/absent/datastore.encrypted/availability",
+        "equals": "unsupported"
+      },
+      {
+        "path": "/engine/encryption/absent/datastore.encrypted/reason",
+        "equals": "No datastore available in this host"
+      },
+      {
+        "path": "/engine/encryption/absent/datastore.encrypted/value",
+        "absent": true
+      },
+      {
+        "path": "/engine/encryption/absent/datastore.encryptionKeyProvided/availability",
+        "equals": "unsupported"
+      },
+      {
+        "path": "/engine/encryption/absent/datastore.encryptionKeyProvided/reason",
+        "equals": "No datastore available in this host"
+      },
+      {
+        "path": "/engine/encryption/absent/datastore.encryptionKeyProvided/value",
+        "absent": true
+      },
+      {
+        "path": "/engine/encryption/absent/datastore.encryptableTables/availability",
+        "equals": "unsupported"
+      },
+      {
+        "path": "/engine/encryption/absent/datastore.encryptableTables/reason",
+        "equals": "No datastore available in this host"
+      },
+      {
+        "path": "/engine/encryption/absent/datastore.encryptableTables/value",
+        "absent": true
+      },
+      {
+        "path": "/engine/encryption/absent/datastore.encryptedTables/availability",
+        "equals": "unsupported"
+      },
+      {
+        "path": "/engine/encryption/absent/datastore.encryptedTables/reason",
+        "equals": "No datastore available in this host"
+      },
+      {
+        "path": "/engine/encryption/absent/datastore.encryptedTables/value",
+        "absent": true
+      },
+      {
+        "path": "/engine/encryption/remote/datastore.encrypted/availability",
+        "equals": "unsupported"
+      },
+      {
+        "path": "/engine/encryption/remote/datastore.encrypted/reason",
+        "equals": "Unavailable on a remote client; run a collector on the server"
+      },
+      {
+        "path": "/engine/encryption/remote/datastore.encrypted/value",
+        "absent": true
+      },
+      {
+        "path": "/engine/encryption/remote/datastore.encryptionKeyProvided/availability",
+        "equals": "unsupported"
+      },
+      {
+        "path": "/engine/encryption/remote/datastore.encryptionKeyProvided/reason",
+        "equals": "Unavailable on a remote client; run a collector on the server"
+      },
+      {
+        "path": "/engine/encryption/remote/datastore.encryptionKeyProvided/value",
+        "absent": true
+      },
+      {
+        "path": "/engine/encryption/remote/datastore.encryptableTables/availability",
+        "equals": "unsupported"
+      },
+      {
+        "path": "/engine/encryption/remote/datastore.encryptableTables/reason",
+        "equals": "Unavailable on a remote client; run a collector on the server"
+      },
+      {
+        "path": "/engine/encryption/remote/datastore.encryptableTables/value",
+        "absent": true
+      },
+      {
+        "path": "/engine/encryption/remote/datastore.encryptedTables/availability",
+        "equals": "unsupported"
+      },
+      {
+        "path": "/engine/encryption/remote/datastore.encryptedTables/reason",
+        "equals": "Unavailable on a remote client; run a collector on the server"
+      },
+      {
+        "path": "/engine/encryption/remote/datastore.encryptedTables/value",
+        "absent": true
+      },
+      {
+        "path": "/engine/encryption/invalid/datastore.encrypted/availability",
+        "equals": "error"
+      },
+      {
+        "path": "/engine/encryption/invalid/datastore.encrypted/reason",
+        "equals": "Invalid encryption status"
+      },
+      {
+        "path": "/engine/encryption/invalid/datastore.encrypted/value",
+        "absent": true
+      },
+      {
+        "path": "/engine/encryption/invalid/datastore.encryptionKeyProvided/availability",
+        "equals": "error"
+      },
+      {
+        "path": "/engine/encryption/invalid/datastore.encryptionKeyProvided/reason",
+        "equals": "Invalid encryption status"
+      },
+      {
+        "path": "/engine/encryption/invalid/datastore.encryptionKeyProvided/value",
+        "absent": true
+      },
+      {
+        "path": "/engine/encryption/invalid/datastore.encryptableTables/availability",
+        "equals": "error"
+      },
+      {
+        "path": "/engine/encryption/invalid/datastore.encryptableTables/reason",
+        "equals": "Invalid encryption status"
+      },
+      {
+        "path": "/engine/encryption/invalid/datastore.encryptableTables/value",
+        "absent": true
+      },
+      {
+        "path": "/engine/encryption/invalid/datastore.encryptedTables/availability",
+        "equals": "error"
+      },
+      {
+        "path": "/engine/encryption/invalid/datastore.encryptedTables/reason",
+        "equals": "Invalid encryption status"
+      },
+      {
+        "path": "/engine/encryption/invalid/datastore.encryptedTables/value",
+        "absent": true
+      },
+      {
+        "path": "/engine/encryption/invalidMap/datastore.encrypted/value",
+        "equals": false
+      },
+      {
+        "path": "/engine/encryption/invalidMap/datastore.encryptableTables/availability",
+        "equals": "error"
+      },
+      {
+        "path": "/engine/encryption/invalidMap/datastore.encryptableTables/reason",
+        "equals": "Invalid encryption table map"
+      },
+      {
+        "path": "/engine/encryption/invalidMap/datastore.encryptableTables/value",
+        "absent": true
+      },
+      {
+        "path": "/engine/encryption/invalidMap/datastore.encryptedTables/availability",
+        "equals": "error"
+      },
+      {
+        "path": "/engine/encryption/invalidMap/datastore.encryptedTables/reason",
+        "equals": "Invalid encryption table map"
+      },
+      {
+        "path": "/engine/encryption/invalidMap/datastore.encryptedTables/value",
+        "absent": true
+      },
+      {
+        "path": "/engine/encryption/invalidEntry/datastore.encryptableTables/availability",
+        "equals": "error"
+      },
+      {
+        "path": "/engine/encryption/invalidEntry/datastore.encryptableTables/reason",
+        "equals": "Invalid encryption table entry"
+      },
+      {
+        "path": "/engine/encryption/invalidEntry/datastore.encryptableTables/value",
+        "absent": true
+      },
+      {
+        "path": "/engine/encryption/invalidEntry/datastore.encryptedTables/availability",
+        "equals": "error"
+      },
+      {
+        "path": "/engine/encryption/invalidEntry/datastore.encryptedTables/reason",
+        "equals": "Invalid encryption table entry"
+      },
+      {
+        "path": "/engine/encryption/invalidEntry/datastore.encryptedTables/value",
+        "absent": true
+      },
+      {
+        "path": "/engine/encryption/overflow/datastore.encryptableTables/availability",
+        "equals": "error"
+      },
+      {
+        "path": "/engine/encryption/overflow/datastore.encryptableTables/reason",
+        "equals": "Encryption table limit exceeded (512)"
+      },
+      {
+        "path": "/engine/encryption/overflow/datastore.encryptableTables/value",
+        "absent": true
+      },
+      {
+        "path": "/engine/encryption/overflow/datastore.encryptedTables/availability",
+        "equals": "error"
+      },
+      {
+        "path": "/engine/encryption/overflow/datastore.encryptedTables/reason",
+        "equals": "Encryption table limit exceeded (512)"
+      },
+      {
+        "path": "/engine/encryption/overflow/datastore.encryptedTables/value",
+        "absent": true
+      },
+      {
+        "path": "/engine/encryption/overflow/datastore.encrypted/value",
+        "equals": true
+      },
+      {
+        "path": "/engine/encryption/boundary/datastore.encryptableTables/value",
+        "equals": 512
+      },
+      {
+        "path": "/engine/encryption/boundary/datastore.encryptedTables/value",
+        "equals": 256
+      },
+      {
+        "path": "/engine/flags/true",
+        "equals": {
+          "id": "datastore.locked",
+          "label": "Datastore write freeze (lock, backup or VSS)",
+          "type": "boolean",
+          "unit": "",
+          "kind": "gauge",
+          "availability": "available",
+          "value": true
+        }
+      },
+      {
+        "path": "/engine/flags/false/value",
+        "equals": false
+      },
+      {
+        "path": "/engine/flags/false/availability",
+        "equals": "available"
+      },
+      {
+        "path": "/engine/flags/failed",
+        "equals": {
+          "id": "datastore.locked",
+          "label": "Datastore write freeze (lock, backup or VSS)",
+          "type": "boolean",
+          "unit": "",
+          "kind": "gauge",
+          "availability": "error",
+          "reason": "Datastore state read failed or invalid"
+        }
+      },
+      {
+        "path": "/engine/flags/absent",
+        "equals": {
+          "id": "datastore.locked",
+          "label": "Datastore write freeze (lock, backup or VSS)",
+          "type": "boolean",
+          "unit": "",
+          "kind": "gauge",
+          "availability": "unsupported",
+          "reason": "No datastore available in this host"
+        }
+      },
+      {
+        "path": "/engine/flags/remote",
+        "equals": {
+          "id": "datastore.locked",
+          "label": "Datastore write freeze (lock, backup or VSS)",
+          "type": "boolean",
+          "unit": "",
+          "kind": "gauge",
+          "availability": "unsupported",
+          "reason": "Unavailable on a remote client; run a collector on the server"
+        }
+      },
+      {
+        "path": "/engine/flags/invalid",
+        "equals": {
+          "id": "datastore.locked",
+          "label": "Datastore write freeze (lock, backup or VSS)",
+          "type": "boolean",
+          "unit": "",
+          "kind": "gauge",
+          "availability": "error",
+          "reason": "Datastore state read failed or invalid"
+        }
+      },
+      {
+        "path": "/engine/flags/malformed",
+        "equals": {
+          "id": "datastore.locked",
+          "label": "Datastore write freeze (lock, backup or VSS)",
+          "type": "boolean",
+          "unit": "",
+          "kind": "gauge",
+          "availability": "error",
+          "reason": "Datastore state read failed or invalid"
+        }
+      },
+      {
+        "path": "/engine/adminLabel",
+        "equals": "Data Explorer access disabled"
+      },
+      {
+        "path": "/engine/live",
+        "equals": {
+          "datastore.encrypted": {
+            "id": "datastore.encrypted",
+            "label": "Data file encrypted",
+            "type": "boolean",
+            "unit": "",
+            "kind": "static",
+            "availability": "unsupported",
+            "reason": "No datastore available in this host"
+          },
+          "datastore.encryptionKeyProvided": {
+            "id": "datastore.encryptionKeyProvided",
+            "label": "Data encryption key provided",
+            "type": "boolean",
+            "unit": "",
+            "kind": "static",
+            "availability": "unsupported",
+            "reason": "No datastore available in this host"
+          },
+          "datastore.encryptableTables": {
+            "id": "datastore.encryptableTables",
+            "label": "Encryptable tables",
+            "type": "number",
+            "unit": "tables",
+            "kind": "static",
+            "availability": "unsupported",
+            "reason": "No datastore available in this host"
+          },
+          "datastore.encryptedTables": {
+            "id": "datastore.encryptedTables",
+            "label": "Encrypted tables",
+            "type": "number",
+            "unit": "tables",
+            "kind": "static",
+            "availability": "unsupported",
+            "reason": "No datastore available in this host"
+          },
+          "datastore.locked": {
+            "id": "datastore.locked",
+            "label": "Datastore write freeze (lock, backup or VSS)",
+            "type": "boolean",
+            "unit": "",
+            "kind": "gauge",
+            "availability": "unsupported",
+            "reason": "No datastore available in this host"
+          },
+          "datastore.adminProtected": {
+            "id": "datastore.adminProtected",
+            "label": "Data Explorer access disabled",
+            "type": "boolean",
+            "unit": "",
+            "kind": "gauge",
+            "availability": "unsupported",
+            "reason": "No datastore available in this host"
+          }
+        }
+      },
+      {
+        "path": "/engine/cached",
+        "equals": true
+      },
+      {
+        "path": "/engine/refreshed",
+        "equals": true
+      },
+      {
+        "path": "/engine/inSnapshot",
+        "equals": true
+      },
+      {
         "path": "/backup/calendar",
         "equals": [
           {
