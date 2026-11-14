@@ -789,6 +789,98 @@
       {
         "path": "/service/stopped",
         "equals": true
+      },
+      {
+        "path": "/service/clearedURL",
+        "equals": true
+      },
+      {
+        "path": "/serviceFailure/status",
+        "equals": "failed"
+      },
+      {
+        "path": "/serviceFailure/clearedURL",
+        "equals": true
+      },
+      {
+        "path": "/serviceFailure/diagnostic",
+        "equals": true
+      },
+      {
+        "path": "/service/owned",
+        "equals": true
+      },
+      {
+        "path": "/service/duplicateRejected",
+        "equals": true
+      },
+      {
+        "path": "/service/pruned",
+        "equals": true
+      },
+      {
+        "path": "/callbackSequence",
+        "equals": ["starting", "running", "sample"]
+      },
+      {
+        "path": "/callbackEvents",
+        "each": [{"path": "/process", "matches": "Dashboard\\.callbacks\\.[A-F0-9]{32}"}, {"path":"/preemptive","equals":false}]
+      },
+      {
+        "path": "/callbackEvents/1/portObserved",
+        "equals": true
+      },
+      {
+        "path": "/callbackEvents/1/listening",
+        "equals": true
+      },
+      {
+        "path": "/cancelled",
+        "equals": {"status":"stopped","finished":true,"clearedURL":true}
+      },
+      {
+        "path": "/callbackFailure",
+        "equals": {"status":"failed","finished":true,"diagnostic":true,"clearedURL":true}
+      },
+      {
+        "path": "/staleHandle",
+        "equals": {"oldFinished":true,"restarted":true,"pruned":true}
+      },
+      {
+        "path": "/sameFacadeRejected",
+        "equals": true
+      },
+      {
+        "path": "/serviceFailure/callbackError",
+        "equals": true
+      },
+      {
+        "path": "/occupiedPort",
+        "equals": {"status":"failed","finished":true,"diagnostic":true,"clearedURL":true,"blockerStopped":true}
+      },
+      {
+        "path": "/ipv6",
+        "equals": {"running":true,"url":true,"owned":true,"unexpectedExit":true,"pruned":true}
+      },
+      {
+        "path": "/callbackWorkerPruned",
+        "equals": true
+      },
+      {
+        "path": "/forcedStop",
+        "equals": {"terminated":true,"finished":true,"status":"stopped"}
+      },
+      {
+        "path": "/callbackStopped",
+        "equals": true
+      },
+      {
+        "path": "/delayedFinalizer",
+        "equals": {"oldFinished":true,"replacementOwned":true,"replacementRunning":true,"replacementSampled":true}
+      },
+      {
+        "path": "/failureWatchdog",
+        "equals": {"running":true,"watchdog":true,"terminated":true,"finished":true,"diagnostic":true,"pruned":true}
       }
     ]
   },

@@ -6,20 +6,49 @@ dashboard. Requires **4D 21 LTS or later**. It does not use 4D's web server.
 `new(target : Text)` selects `macOS-universal` or explicit `Windows-x64`.
 The bundled `dashboard` executable is resolved from component Resources only.
 
-`start(options : Object) : Object` asynchronously launches one monitor per
-4D instance in the `Dashboard.monitor` worker. Returns shared state
-`{status,url,error,samples}`; status is `starting`, `running`, `failed` or
-`stopped`. Read it from your application event loop. URL is available only
-after readiness and includes a private authentication token: do not log it.
+`start(options : Object; event : Object) : Object` asynchronously launches one
+monitor per 4D instance. `event` is optional, with an optional `onStatus` Formula
+or function: `onStatus(status : Object; monitor : cs.Dashboard.Dashboard)`.
+It is invoked with `This` bound to the listener. Status snapshots contain
+`kind,status,url,error,samples,epoch,port,finished`; kinds are `starting`,
+`running`, `sample`, `failed`, `stopped`. URL contains a private authentication
+token: do not log it. `running` follows real CLI readiness and registration
+of the same worker at its real listening port through `cs.workers.worker`.
+No fake/fixed registry port replaces OS-assigned port zero.
+The running event includes `portCheck:{availability,listening}` from `tcp`;
+query failure reports `availability:"error",reason`, not a free/occupied guess.
+
+Native transport lives on `.workers`. Custom callbacks and native collection
+run on the explicitly cooperative `Dashboard.callbacks.<epoch>` worker.
+Ordinary objects are copied across processes; use shared listener state to
+communicate with the original host owner, or explicit host dispatch for UI.
+The callback's monitor is generation-bound and supports stop/restart reentrancy.
+Exceptions are contained in `callbackError`; an existing transport error is
+not overwritten. Callbacks must return promptly.
+
+Returns shared `{status,url,error,samples,epoch,port,finished,callbackError,...}`
+for compatibility; polling is optional, not the required callback interface.
 Options: `listen` (IP:port), `allowLAN` (Boolean), `tls-cert`, `tls-key`
 (absolute paths). Default authenticated `127.0.0.1:0`; LAN requires explicit
 opt-in and valid TLS. Unknown/invalid options fail explicitly.
 
-`stop()` queues a graceful shutdown on the owning worker. It closes stdin,
-waits up to two seconds, terminates a stuck child, clears state and kills the
-worker with pending calls. Call from host shutdown. Unexpected termination
-sets `failed`; explicitly stop before restarting. No global process map,
-permanent host error handler or caller-blocking sampling loop is installed.
+`stop()` queues graceful shutdown, closes stdin, then uses a finite 3.5-second
+grace period and forced fallback if needed. Registration drainage precedes
+replacement after force. A ten-second startup watchdog bounds pending ownership.
+Transport, protocol and collection failures use the same finite stop watchdog;
+delayed finalization prunes only the currently owned generation, never a replacement.
+Terminal cleanup clears the private URL and prunes callback/collector/watchdog
+workers and queued calls, not the shared `.workers` process. Unexpected exit
+preserves stderr, emits `failed`, and permits restart after cleanup.
+Repeated start does not replace the facade's active owned handle; stale handles
+cannot stop a replacement. No host process-variable handle, unsafe PID map,
+permanent host error handler or caller-blocking sampling loop is required.
+
+**Deployment:** install `workers` 20.0.23 and `tcp` 20.0.14 as separate host
+components alongside dashboard when using `Components/`. Dependency Manager
+resolves the pinned declarations; the manual folder path ignores nested
+declarations. Helpers are not bundled in Resources or the dashboard ZIP.
+The exact archive hashes/revisions are in root `support-components.json`.
 
 `collect() : Object` synchronously returns `{ok:true,value:{metrics,processes,
 sessions}}` without starting HTTP. Its collectors run on the calling instance.

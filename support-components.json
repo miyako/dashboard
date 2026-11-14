@@ -1,0 +1,19 @@
+{
+  "schema": 1,
+  "components": [
+    {
+      "name": "workers",
+      "repository": "miyako/workers",
+      "tag": "20.0.23",
+      "revision": "4978a15db25f43fb412c690d4b032825f106b4a7",
+      "sha256": "71d433cd8e0afc73a81bc05b23d616936f8014dc3d3196ffeb41d5af14590ec4"
+    },
+    {
+      "name": "tcp",
+      "repository": "miyako/tcp",
+      "tag": "20.0.14",
+      "revision": "1eafcd276f5b97a679dd63bb0bce0a693b98fd1c",
+      "sha256": "0071875f7c7fb8fabcf6bed37269ddd3c08887bfef80252661a86fdb3a158d19"
+    }
+  ]
+}

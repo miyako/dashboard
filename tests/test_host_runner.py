@@ -6,10 +6,12 @@ import shutil
 import subprocess
 import unittest
 import uuid
+import sys
 from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "scripts"))
 spec = importlib.util.spec_from_file_location("host_runner", ROOT / "scripts/test_4d.py")
 runner = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(runner)
@@ -22,7 +24,9 @@ def valid_status(compiled=False):
               "fileArgument": {"ok": True, "stdout": "file round trip", "stderr": "", "exitCode": 0},
               "folderArgument": {"ok": True, "stdout": "folder round trip", "stderr": "", "exitCode": 0},
               "collector": {"ok": True, "value": {"metrics": [{"id": "app.type", "availability": "available"}]}},
-              "service": {"status": "running", "error": "", "stopped": True}}
+              "service": {"status": "running", "error": "", "stopped": True},
+              "callbackEvents": [{"process": "Dashboard.callbacks." + "A" * 32}
+                                 for _ in range(4)]}
     def apply_assertions(value, assertions):
         for assertion in assertions:
             tokens = assertion["path"].split("/")[1:]
@@ -39,6 +43,7 @@ def valid_status(compiled=False):
             if "length" in assertion:
                 destination[key] = [{} for _ in range(assertion["length"])]
             if "each" in assertion:
+                destination.setdefault(key, [{}])
                 destination[key] = [apply_assertions(entry, assertion["each"]) for entry in destination[key]]
         return value
 

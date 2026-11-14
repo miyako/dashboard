@@ -327,16 +327,39 @@ For each ($licenseCaseName; New collection("populated"; "empty"; "failed"; "null
 End for each
 HOST_Phase:="async web service"
 var $service : Object
+var $event; $callbackLog; $duplicate; $oldService : Object
 var $deadline : Integer
-$service:=$tool.start(New object)
+$callbackLog:=New shared object("events"; New shared collection; "action"; "")
+$event:=New object("log"; $callbackLog; "onStatus"; Formula(Dashboard_callback($1; $2)))
+$service:=$tool.start(New object; $event)
+$report.sameFacadeRejected:=($tool.start(New object).status="failed")
+$duplicate:=cs.Dashboard.Dashboard.new($target).start(New object)
 $deadline:=Milliseconds+15000
-While (($service.samples<1) & ($service.status#"failed") & (Milliseconds<$deadline))
+While ((($service.samples<1) | ($callbackLog.events.length<3)) & ($service.status#"failed") & (Milliseconds<$deadline))
 	DELAY PROCESS(Current process; 6)
 End while
 $report.service:=New object("status"; $service.status; "samples"; $service.samples; "error"; $service.error)
+$report.service.callbackError:=$service.callbackError
+$report.service.callbackCount:=$callbackLog.events.length
+$report.service.owned:=cs.workers.worker.new(cs.Dashboard._DashboardServer).isRunning($service.port)
+$report.service.duplicateRejected:=($duplicate.status="failed")
 If (($service.status#"running") | ($service.samples<1))
 	$report.success:=False
 End if
+HOST_Phase:="delayed retired controller finalization"
+var $lifecycle : 4D.Signal
+var $beforeFinalizer : Real
+$beforeFinalizer:=$service.samples
+$lifecycle:=New signal
+CALL WORKER(".workers"; "Dashboard_lifecycle"; "retired"; $target; $service; $lifecycle)
+If (Not($lifecycle.wait(5)))
+	$report.success:=False
+End if
+$deadline:=Milliseconds+5000
+While (($service.samples<=$beforeFinalizer) & Not($service.finished) & (Milliseconds<$deadline))
+	DELAY PROCESS(Current process; 6)
+End while
+$report.delayedFinalizer:=New object("oldFinished"; $lifecycle.oldFinished; "replacementOwned"; $lifecycle.replacementOwned; "replacementRunning"; ($service.status="running"); "replacementSampled"; ($service.samples>$beforeFinalizer))
 If ($service.status="running")
 	var $http : 4D.HTTPRequest
 	var $origin : Text
@@ -356,13 +379,150 @@ If ($service.status="running")
 End if
 $tool.stop()
 $deadline:=Milliseconds+5000
-While (($service.status="running") & (Milliseconds<$deadline))
+var $callbackStopped : Boolean
+$callbackStopped:=False
+While ((Not($service.finished) | Not($callbackStopped)) & (Milliseconds<$deadline))
+	If ($callbackLog.events.length>0)
+		$callbackStopped:=($callbackLog.events[$callbackLog.events.length-1].kind="stopped")
+	End if
 	DELAY PROCESS(Current process; 6)
 End while
+$report.callbackStopped:=$callbackStopped
 $report.service.stopped:=($service.status="stopped")
+$report.service.clearedURL:=($service.url="")
+$report.service.pruned:=Not(cs.workers.worker.new(cs.Dashboard._DashboardServer).isRunning($service.port))
+$report.callbackSequence:=New collection
+If ($callbackLog.events.length>=3)
+	$report.callbackSequence:=New collection($callbackLog.events[0].kind; $callbackLog.events[1].kind; $callbackLog.events[2].kind)
+End if
+$report.callbackEvents:=$callbackLog.events.copy()
 If (Not($report.service.stopped))
 	$report.success:=False
 End if
+HOST_Phase:="CLI failure diagnostics"
+$callbackLog:=New shared object("events"; New shared collection; "action"; "error-terminal")
+$event:=New object("log"; $callbackLog; "onStatus"; Formula(Dashboard_callback($1; $2)))
+$service:=$tool.start(New object("listen"; "localhost:0"); $event)
+$deadline:=Milliseconds+5000
+While ((Not($service.finished) | ($service.callbackError="")) & (Milliseconds<$deadline))
+	DELAY PROCESS(Current process; 6)
+End while
+$report.serviceFailure:=New object("status"; $service.status; "clearedURL"; ($service.url=""); "diagnostic"; (Position("listen requires a concrete literal IP"; $service.error; *)>0); "callbackError"; ($service.callbackError#""))
+If (($service.status#"failed") | Not($report.serviceFailure.diagnostic))
+	$report.success:=False
+End if
+$tool.stop()
+HOST_Phase:="stop before ready"
+$service:=$tool.start(New object)
+$tool.stop()
+$deadline:=Milliseconds+7000
+While (Not($service.finished) & (Milliseconds<$deadline))
+	DELAY PROCESS(Current process; 6)
+End while
+$report.cancelled:=New object("status"; $service.status; "finished"; $service.finished; "clearedURL"; ($service.url=""))
+HOST_Phase:="callback exception"
+$callbackLog:=New shared object("events"; New shared collection; "action"; "error")
+$event:=New object("log"; $callbackLog; "onStatus"; Formula(Dashboard_callback($1; $2)))
+$service:=$tool.start(New object; $event)
+$deadline:=Milliseconds+10000
+While (Not($service.finished) & (Milliseconds<$deadline))
+	DELAY PROCESS(Current process; 6)
+End while
+$report.callbackFailure:=New object("status"; $service.status; "finished"; $service.finished; "diagnostic"; ($service.callbackError#""); "clearedURL"; ($service.url=""))
+HOST_Phase:="callback stop and restart"
+$callbackLog:=New shared object("events"; New shared collection; "action"; "restart")
+$event:=New object("log"; $callbackLog; "onStatus"; Formula(Dashboard_callback($1; $2)))
+$service:=$tool.start(New object; $event)
+$oldService:=$service
+$tool.stop()
+$deadline:=Milliseconds+15000
+While (($callbackLog.events.length<5) & (Milliseconds<$deadline))
+	DELAY PROCESS(Current process; 6)
+End while
+// The original facade still owns its old generation; it must not stop the restart.
+$tool.stop()
+$report.staleHandle:=New object("oldFinished"; $oldService.finished)
+$deadline:=Milliseconds+10000
+While ((($callbackLog.events.length<5) | ($callbackLog.events[$callbackLog.events.length-1].kind#"stopped")) & (Milliseconds<$deadline))
+	DELAY PROCESS(Current process; 6)
+End while
+$report.reentrantEvents:=$callbackLog.events.copy()
+$report.staleHandle.restarted:=False
+var $entry : Object
+For each ($entry; $callbackLog.events)
+	If (($entry.epoch#$oldService.epoch) & ($entry.kind="sample"))
+		$report.staleHandle.restarted:=True
+	End if
+End for each
+$report.staleHandle.pruned:=Not(cs.workers.worker.new(cs.Dashboard._DashboardServer).isRunning($callbackLog.events[$callbackLog.events.length-1].port))
+HOST_Phase:="occupied explicit port"
+var $blocker : 4D.SystemWorker
+var $resolved; $ready : Object
+var $blockerState; $blockerOptions : Object
+var $listen : Text
+$resolved:=cs.Dashboard._CLI.new("dashboard"; $target).resolve()
+$blockerState:=New shared object("url"; "")
+$blockerOptions:=New object("dataType"; "text"; "encoding"; "UTF-8"; "hideWindow"; True; "timeout"; 10; "currentDirectory"; $resolved.file.parent; "buffer"; ""; "state"; $blockerState; "onData"; Formula(Dashboard_blocker($1; $2)))
+$blocker:=4D.SystemWorker.new(cs.Dashboard._Process.new().quote($resolved.file.path)+" serve"; $blockerOptions)
+$deadline:=Milliseconds+5000
+While (($blockerState.url="") & (Milliseconds<$deadline))
+	$blocker.wait(0.1)
+End while
+$ready:=New object("url"; $blockerState.url)
+$listen:=Substring($ready.url; 8; Position("/#token="; $ready.url; *)-8)
+$service:=$tool.start(New object("listen"; $listen))
+$deadline:=Milliseconds+6000
+While (Not($service.finished) & (Milliseconds<$deadline))
+	DELAY PROCESS(Current process; 6)
+End while
+$report.occupiedPort:=New object("status"; $service.status; "finished"; $service.finished; "diagnostic"; (Position("address already in use"; $service.error; *)>0); "clearedURL"; ($service.url=""))
+$blocker.closeInput()
+$blocker.wait(3)
+If (Not($blocker.terminated))
+	$blocker.terminate()
+	$blocker.wait(1)
+End if
+$report.occupiedPort.blockerStopped:=$blocker.terminated
+HOST_Phase:="IPv6 loopback and unexpected exit"
+$callbackLog:=New shared object("events"; New shared collection; "action"; "")
+$event:=New object("log"; $callbackLog; "onStatus"; Formula(Dashboard_callback($1; $2)))
+$service:=$tool.start(New object("listen"; "[::1]:0"); $event)
+$deadline:=Milliseconds+10000
+While (($service.samples<1) & Not($service.finished) & (Milliseconds<$deadline))
+	DELAY PROCESS(Current process; 6)
+End while
+$report.ipv6:=New object("running"; ($service.status="running"); "url"; (Position("http://[::1]:"; $service.url; *)=1); "owned"; cs.workers.worker.new(cs.Dashboard._DashboardServer).isRunning($service.port))
+cs.workers.worker.new(cs.Dashboard._DashboardServer).terminate($service.port)
+$deadline:=Milliseconds+5000
+While (Not($service.finished) & (Milliseconds<$deadline))
+	DELAY PROCESS(Current process; 6)
+End while
+$report.ipv6.unexpectedExit:=($service.status="failed")
+$report.ipv6.pruned:=Not(cs.workers.worker.new(cs.Dashboard._DashboardServer).isRunning($service.port))
+$deadline:=Milliseconds+3000
+While ((Process number("Dashboard.callbacks."+$service.epoch)#0) & (Milliseconds<$deadline))
+	DELAY PROCESS(Current process; 6)
+End while
+$report.callbackWorkerPruned:=(Process number("Dashboard.callbacks."+$service.epoch)=0)
+HOST_Phase:="pending force termination"
+var $forcedAgent : cs.Dashboard._DashboardAgent
+var $forcedWorker : 4D.SystemWorker
+var $forcedState : Object
+$forcedState:=New shared object("status"; "starting"; "url"; ""; "error"; ""; "samples"; 0; "epoch"; Generate UUID; "port"; 0; "finished"; False; "stopRequested"; False; "forceDrain"; False)
+$forcedAgent:=cs.Dashboard._DashboardAgent.new($target; New object; $forcedState; New object; $tool)
+// Isolate the force primitive: this child is killed before readiness, never transferred or registered.
+$forcedWorker:=4D.SystemWorker.new(cs.Dashboard._Process.new().quote($resolved.file.path)+" serve"; $forcedAgent)
+$forcedAgent.worker:=$forcedWorker
+$forcedAgent.force()
+$forcedWorker.wait(2)
+$report.forcedStop:=New object("terminated"; $forcedWorker.terminated; "finished"; $forcedState.finished; "status"; $forcedState.status)
+HOST_Phase:="running failure watchdog"
+$lifecycle:=New signal
+CALL WORKER(".workers"; "Dashboard_lifecycle"; "failure"; $target; New object; $lifecycle)
+If (Not($lifecycle.wait(8)))
+	$report.success:=False
+End if
+$report.failureWatchdog:=New object("running"; $lifecycle.running; "watchdog"; $lifecycle.watchdog; "terminated"; $lifecycle.terminated; "finished"; $lifecycle.finished; "diagnostic"; $lifecycle.diagnostic; "pruned"; $lifecycle.pruned)
 $report.finished:=True
 ON ERR CALL(HOST_PreviousHandler; ek local)
 $statusFile.setText(JSON Stringify($report))

@@ -88,6 +88,9 @@ def verify_assets(root, repository, tag, revision, apple_signing=False):
     for name in ("assembly", "package"):
         passed(name)
     compiled = passed("compile")
+    from support_components import validate_evidence
+    for stage_name in ("compile", "source_host", "compiled_host"):
+        validate_evidence(root, passed(stage_name))
     if (not isinstance(compiled, dict) or compiled.get("success") is not True
             or not isinstance(compiled.get("targets"), list)
             or set(compiled["targets"]) != {"x86_64_generic", "arm64_macOS_lib"}
@@ -108,6 +111,7 @@ def verify_assets(root, repository, tag, revision, apple_signing=False):
         passed("signing")
         passed("signing_proof")
         validate_status(passed("unsigned_compiled_host"), contract, True)
+        validate_evidence(root, passed("unsigned_compiled_host"))
         expected += ["dist/" + name + ".dmg", "dist/" + name + "-signing.json"]
     elif not isinstance(steps.get("signing"), dict) or steps["signing"].get("status") != "not_run":
         raise ValueError("unsigned publication must not conceal signing evidence")

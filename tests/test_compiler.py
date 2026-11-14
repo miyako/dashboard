@@ -5,9 +5,11 @@ import shutil
 import subprocess
 import tempfile
 import unittest
+import sys
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "scripts"))
 spec = importlib.util.spec_from_file_location("compile_component", ROOT / "scripts/compile_component.py")
 compiler = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(compiler)

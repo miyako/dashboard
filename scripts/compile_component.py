@@ -7,6 +7,7 @@ import subprocess
 import sys
 import shutil
 import hashlib
+from support_components import stage as stage_support
 
 
 def input_digest(root):
@@ -17,6 +18,8 @@ def input_digest(root):
              component / "Project" / (config["repository"] + ".4DProject")]
     if (root / "workflow-contract.json").exists():
         files.append(root / "workflow-contract.json")
+    if (root / "support-components.json").exists():
+        files.append(root / "support-components.json")
     for folder in ("Project/Sources", "Documentation", "Resources"):
         directory = component / folder
         if directory.exists():
@@ -69,6 +72,12 @@ def compile_component(root, tool4d):
         raise ValueError("compiler library cleanup path must not traverse symlinks")
     library.unlink(missing_ok=True)
     original_digest = input_digest(root)
+    support_path = root / ".tools" / "support" / "compiled"
+    support = stage_support(root, support_path)
+    request.write_text(json.dumps({
+        "project": str(project), "status": str(output),
+        "components": [str(support_path / (item["name"] + ".4dbase") / (item["name"] + ".4DZ"))
+                       for item in support]}) + "\n")
     subprocess.run([str(Path(tool4d).resolve()),
                     str(root / "tooling" / "compiler" / "Project" / "compiler.4DProject"),
                     "--skip-onstartup", "--startup-method=Compile",
@@ -85,6 +94,8 @@ def compile_component(root, tool4d):
         raise ValueError("component inputs changed during compilation; refusing stale output")
     status["input_sha256"] = original_digest
     status["output_sha256"] = output_digest(project.parent.parent)
+    if support:
+        status["support_components"] = support
     output.write_text(json.dumps(status, indent=2) + "\n")
     return status
 

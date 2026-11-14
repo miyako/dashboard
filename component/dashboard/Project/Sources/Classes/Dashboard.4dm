@@ -1,4 +1,5 @@
 property _cli : cs._CLI
+property state : Object
 
 Class constructor($target : Text)
 	This._cli:=cs._CLI.new("dashboard"; $target)
@@ -12,22 +13,63 @@ Function collect()->$result : Object
 	End if
 	$result:=New object("ok"; True; "value"; cs._DashboardCollector.new().snapshot())
 
-Function start($options : Object)->$state : Object
-	$state:=New shared object("status"; "starting"; "url"; ""; "error"; ""; "samples"; 0)
+Function start($options : Object; $event : Object)->$state : Object
+	$state:=New shared object("status"; "starting"; "url"; ""; "error"; ""; "samples"; 0; "epoch"; Generate UUID; "port"; 0; "stopRequested"; False; "finished"; False; "callbackError"; ""; "cleanupError"; ""; "forceDrain"; False)
 	If (Num(Substring(Application version; 1; 2))<21)
 		Use ($state)
 			$state.status:="failed"
 			$state.error:="4D 21 LTS or later is required"
+			$state.finished:=True
 		End use
 		return $state
 	End if
 	If ($options=Null)
 		$options:=New object
 	End if
-	CALL WORKER("Dashboard.monitor"; "_DashboardWorker"; "start"; This._cli.target; $options; $state)
+	If ($event=Null)
+		$event:=New object
+	End if
+	If (Value type($event.onStatus)#Is undefined)
+		If (Value type($event.onStatus)#Is object)
+			Use ($state)
+				$state.status:="failed"
+				$state.error:="onStatus must be a Formula or function"
+				$state.finished:=True
+			End use
+			return $state
+		End if
+		If (Not(OB Instance of($event.onStatus; 4D.Function)))
+			Use ($state)
+				$state.status:="failed"
+				$state.error:="onStatus must be a Formula or function"
+				$state.finished:=True
+			End use
+			return $state
+		End if
+	End if
+	If (This.state#Null)
+		If (Not(This.state.finished))
+			Use ($state)
+				$state.status:="failed"
+				$state.error:="This dashboard controller already owns an active instance"
+				$state.finished:=True
+			End use
+			var $rejected : cs.Dashboard
+			$rejected:=cs.Dashboard.new(This._cli.target)
+			$rejected.state:=$state
+			CALL WORKER("Dashboard.callbacks."+$state.epoch; "_DashboardSample"; "reject"; $state; $event; $rejected; Null; "failed")
+			return $state
+		End if
+	End if
+	This.state:=$state
+	CALL WORKER(".workers"; "_DashboardWorker"; "start"; This._cli.target; $options; $state; $event; This)
 
 Function stop()
-	CALL WORKER("Dashboard.monitor"; "_DashboardWorker"; "stop"; ""; New object; New shared object)
+	If (This.state#Null)
+		If (Not(This.state.finished))
+			CALL WORKER(".workers"; "_DashboardWorker"; "stop"; ""; New object; This.state; New object; This)
+		End if
+	End if
 
 Function version()->$result : Object
 	$result:=This._decode(This._cli.execute(New collection("--version")); "version")

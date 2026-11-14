@@ -8,7 +8,14 @@ LTS** floor. Do not reinitialize it or restore greeting starters. Read the
 root README and current class/stream contracts before editing. The fixed
 compiler in `package.json.tool` is 21.1, not the historical 20.7 examples below.
 Keep `_Process` synchronous/generic; `_DashboardAgent` owns the long-lived
-CALL WORKER-based stream. Monitoring is read-only, local-instance scoped,
+stream on `.workers`, with the same CLI registered through `cs.workers.worker`
+at its actual ready port. A bounded pending controller covers pre-readiness.
+`_DashboardSample` is explicitly cooperative for native collection and custom
+host status callbacks. Keep pinned `workers`/`tcp` packages separately deployed;
+manual Components-folder host tests must load both explicitly and compilation
+must supply their compiled `.4DZ` files. Preserve helper lock/evidence in
+compiler, package, host and isolated signing provenance.
+Monitoring is read-only, local-instance scoped,
 authenticated loopback by default; LAN requires explicit opt-in and TLS.
 Preserve both the finite generic execution probes and the live streaming
 service/source/compiled-host assertions.
