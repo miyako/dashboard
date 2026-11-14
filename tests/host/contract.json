@@ -2712,6 +2712,20 @@
         "equals": true
       },
       {
+        "path": "/monitorLive/history",
+        "equals": {
+          "unauthenticated": 401,
+          "badResolution": 400,
+          "raw": 200,
+          "minute": 200,
+          "kind": "gauge",
+          "coverage": true,
+          "rawCoversSamples": true,
+          "bucketsMatchRaw": true,
+          "private": false
+        }
+      },
+      {
         "path": "/backup/calendar",
         "equals": [
           {

@@ -96,3 +96,36 @@ test('identity tracking distinguishes disappearance from enumeration failure and
   assert.deepEqual(series.map(p => p.value), [10, null, null, null]);
   assert.deepEqual(charts.cpu(samples).map(p => p.value), [10, null, 0, null]);
 });
+
+test('history views pick raw up to one hour and minute buckets beyond', () => {
+  assert.equal(charts.view('live', 0).windowMs, 120000);
+  assert.equal(charts.view('1h', 0).resolution, 'raw');
+  assert.deepEqual([charts.view('6h', 0).resolution, charts.view('6h', 0).gapMs], ['minute', 90000]);
+  const query = new URLSearchParams(charts.historyQuery('app.cpuUsage', charts.view('15m', Date.parse(at(900)))));
+  assert.deepEqual(Object.fromEntries(query), { metric: 'app.cpuUsage', from: at(0), to: at(900), resolution: 'raw' });
+});
+
+test('minute buckets draw at their midpoint and empty buckets stay gaps', () => {
+  const buckets = [{ at: at(0), count: 2, mean: 5, min: 1, max: 9, last: 9, rate: 2 }, { at: at(60), count: 0, mean: null, min: null, max: null, last: null, rate: null }];
+  assert.deepEqual(charts.fromMinute(buckets, 'mean'), [{ at: at(30), value: 5, min: 1, max: 9 }, { at: at(90), value: null, min: null, max: null }]);
+  assert.deepEqual(charts.fromMinute(buckets, 'rate').map(p => p.value), [2, null]);
+  assert.deepEqual(charts.fromMinute(buckets, 'last').map(p => p.value), [9, null]);
+});
+
+test('long ranges break lines at the bucket gap and draw min-max bands per run', () => {
+  const end = Date.parse(at(0)) + 21600000;
+  const points = [0, 60, 120, 600, 660].map((s, i) => ({ at: at(s + 30), value: i + 1, min: i, max: i + 2 }));
+  const p = charts.plot(points, end, { windowMs: 21600000, gapMs: 90000 });
+  assert.equal(p.path.split('M').length - 1, 2, 'a 480 s hole starts a new line');
+  assert.equal(p.band.split('Z').length - 1, 2, 'one band per contiguous run');
+  assert.equal(p.hi, 6, 'scale includes the band maximum');
+  assert.equal(charts.plot([{ at: at(30), value: 1 }], end, { windowMs: 21600000 }).band, '');
+});
+
+test('range note never presents unrecorded time as data', () => {
+  assert.match(charts.rangeNote(charts.view('live', 0), []), /^Live:/);
+  const v = charts.view('1h', Date.parse(at(3600)));
+  assert.match(charts.rangeNote(v, [at(1800)], 'en-US'), /Recording began/);
+  assert.match(charts.rangeNote(v, [], 'en-US'), /Nothing recorded/);
+  assert.match(charts.rangeNote(charts.view('24h', Date.parse(at(86400))), [at(0)], 'en-US'), /1-minute buckets/);
+});
