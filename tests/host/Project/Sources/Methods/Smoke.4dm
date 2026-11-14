@@ -458,6 +458,106 @@ For each ($measurement; $collector.parameters("static").combine($collector.param
 End for each
 $report.parameters.staticInInfo:=($collector.staticMetrics.query("id = :1"; "db.libzipVersion").length=1)
 $report.parameters.settingsInSnapshot:=($collector.snapshot().metrics.query("id = :1"; "db.cacheFlushPeriodicity").length=1)
+HOST_Phase:="operator action normalization"
+var $operator : cs.Dashboard._DashboardOperator
+var $operatorFolder; $brokenFolder; $rotationFolder : 4D.Folder
+var $operatorCases; $operatorMessage; $operatorValid; $operatorBegun; $operatorFrame; $operatorLine : Object
+var $operatorLines : Collection
+var $operatorText; $operatorRaw : Text
+var $operatorBlob : Blob
+$report.operator:=New object("validate"; New object; "violations"; New object)
+$operator:=cs.Dashboard._DashboardOperator.new()
+$operatorCases:=New object(\
+	"null"; Null; \
+	"text"; "operator.noop"; \
+	"extraKey"; New object("actions"; New collection("operator.noop"); "audit"; "/private/audit"); \
+	"empty"; New object("actions"; New collection); \
+	"unknown"; New object("actions"; New collection("operator.shell")); \
+	"duplicate"; New object("actions"; New collection("operator.noop"; "operator.noop")); \
+	"nonText"; New object("actions"; New collection(1)); \
+	"caseVariant"; New object("actions"; New collection("Operator.Noop")); \
+	"valid"; New object("actions"; New collection("operator.noop")))
+For each ($name; OB Keys($operatorCases))
+	$report.operator.validate[$name]:=$operator.validate($operatorCases[$name])
+End for each
+$operatorFolder:=Folder(Temporary folder; fk platform path).folder("dashboard-operator-"+Generate UUID)
+$operator:=cs.Dashboard._DashboardOperator.new(New collection("operator.noop"); "operator-epoch"; $operatorFolder)
+$operatorValid:=New object("protocol"; 1; "kind"; "action"; "epoch"; "operator-epoch"; "id"; Generate digest("operator one"; SHA256 digest); "action"; "operator.noop"; "args"; New object("note"; "private sentinel"); "actor"; "0123456789abcdef")
+$operatorBegun:=$operator.begin(OB Copy($operatorValid))
+$report.operator.begin:=New object("ok"; $operatorBegun.ok; "frame"; $operatorBegun.frame; "idLength"; Length($operatorValid.id))
+$report.operator.complete:=$operator.complete($operatorValid; $operatorBegun.record)
+$operatorText:=$operatorFolder.file("audit.jsonl").getText()
+$operatorLines:=Split string($operatorText; Char(10); sk ignore empty strings)
+$report.operator.audit:=New object("lines"; $operatorLines.length; "states"; New collection; "keys"; Null; "private"; False)
+For each ($operatorRaw; $operatorLines)
+	$operatorLine:=JSON Parse($operatorRaw)
+	$report.operator.audit.states.push($operatorLine.state)
+	$report.operator.audit.keys:=OB Keys($operatorLine)
+	$report.operator.audit.idDigest:=($operatorLine.id=Substring(Generate digest($operatorValid.id; SHA256 digest); 1; 16))
+	$report.operator.audit.argsDigest:=($operatorLine.args=Substring(Generate digest("{\"note\":\"private sentinel\"}"; SHA256 digest); 1; 16))
+	$report.operator.audit.actor:=$operatorLine.actor
+	$report.operator.audit.utc:=Match regex("^\\d{4}-\\d\\d-\\d\\dT\\d\\d:\\d\\d:\\d\\d\\.\\d{3}Z$"; $operatorLine.at)
+End for each
+$report.operator.audit.private:=(Position("private sentinel"; $operatorText; *)>0) | (Position($operatorValid.id; $operatorText; *)>0)
+$operatorCases:=New object(\
+	"wrongEpoch"; New object("epoch"; "other-epoch"); \
+	"extraField"; New object("path"; "/private/path"); \
+	"badId"; New object("id"; "short"); \
+	"upperId"; New object("id"; Uppercase(Generate digest("operator two"; SHA256 digest))); \
+	"badActor"; New object("actor"; "0123456789ABCDEF"); \
+	"disabled"; New object("action"; "operator.shell"); \
+	"extraArg"; New object("args"; New object("note"; "x"; "path"; "/private/path")); \
+	"unsafeNote"; New object("args"; New object("note"; "a;rm")); \
+	"longNote"; New object("args"; New object("note"; "123456789012345678901234567890123")); \
+	"nonTextNote"; New object("args"; New object("note"; 1)); \
+	"nonObjectArgs"; New object("args"; "private"); \
+	"duplicate"; New object)
+For each ($name; OB Keys($operatorCases))
+	$operatorMessage:=OB Copy($operatorValid)
+	If ($name#"duplicate")
+		$operatorMessage.id:=Generate digest("operator "+$name; SHA256 digest)
+	End if
+	For each ($parameter; OB Keys($operatorCases[$name]))
+		$operatorMessage[$parameter]:=$operatorCases[$name][$parameter]
+	End for each
+	$operatorBegun:=$operator.begin($operatorMessage)
+	$report.operator.violations[$name]:=New object("ok"; $operatorBegun.ok; "error"; $operatorBegun.error)
+End for each
+$operatorMessage:=OB Copy($operatorValid)
+OB REMOVE($operatorMessage; "actor")
+$operatorMessage.id:=Generate digest("operator missing"; SHA256 digest)
+$operatorBegun:=$operator.begin($operatorMessage)
+$report.operator.violations.missingField:=New object("ok"; $operatorBegun.ok; "error"; $operatorBegun.error)
+// Fail closed: an unwritable audit file means nothing runs.
+$brokenFolder:=Folder(Temporary folder; fk platform path).folder("dashboard-operator-"+Generate UUID)
+$brokenFolder.folder("audit.jsonl").create()
+$operator.folder:=$brokenFolder
+$operatorMessage:=OB Copy($operatorValid)
+$operatorMessage.id:=Generate digest("operator broken"; SHA256 digest)
+$operatorBegun:=$operator.begin($operatorMessage)
+$report.operator.auditUnavailable:=New object("ok"; $operatorBegun.ok; "frame"; $operatorBegun.frame)
+$operator.folder:=$operatorFolder
+$operatorMessage.id:=Generate digest("operator incomplete"; SHA256 digest)
+$operatorBegun:=$operator.begin($operatorMessage)
+$operator.folder:=$brokenFolder
+$report.operator.auditIncomplete:=New object("begin"; $operatorBegun.frame.state; "complete"; $operator.complete($operatorMessage; $operatorBegun.record))
+// Rotation at 1 MiB keeps four files.
+$rotationFolder:=Folder(Temporary folder; fk platform path).folder("dashboard-operator-"+Generate UUID)
+$rotationFolder.create()
+SET BLOB SIZE($operatorBlob; 1048576; 120)
+$rotationFolder.file("audit.jsonl").setContent($operatorBlob)
+$rotationFolder.file("audit.1.jsonl").setText("one")
+$rotationFolder.file("audit.2.jsonl").setText("two")
+$rotationFolder.file("audit.3.jsonl").setText("three")
+$operator.folder:=$rotationFolder
+$operatorMessage.id:=Generate digest("operator rotation"; SHA256 digest)
+$operatorBegun:=$operator.begin($operatorMessage)
+$operator.complete($operatorMessage; $operatorBegun.record)
+$report.operator.rotation:=New object("first"; $rotationFolder.file("audit.1.jsonl").size; "second"; $rotationFolder.file("audit.2.jsonl").getText(); "third"; $rotationFolder.file("audit.3.jsonl").getText(); "fourth"; $rotationFolder.file("audit.4.jsonl").exists; "current"; Split string($rotationFolder.file("audit.jsonl").getText(); Char(10); sk ignore empty strings).length)
+$report.operator.folder:=New object("matchesHost"; ($operator.defaultFolder().platformPath=Folder(fk logs folder).folder("dashboard").platformPath); "notComponent"; (Position("dashboard.4dbase"; $operator.defaultFolder().platformPath)=0))
+For each ($operatorFolder; New collection($operatorFolder; $brokenFolder; $rotationFolder))
+	$operatorFolder.delete(Delete with contents)
+End for each
 HOST_Phase:="license usage normalization"
 $licenseEntries:=New collection(\
 	New object("productId"; 7; "productName"; "Client"; "productUsedCount"; 500; "productBalance"; 200; "token"; 123456; "reason"; "private caller"; "session"; New object("userName"; "private user")); \
@@ -691,6 +791,87 @@ $forcedAgent.worker:=$forcedWorker
 $forcedAgent.force()
 $forcedWorker.wait(2)
 $report.forcedStop:=New object("terminated"; $forcedWorker.terminated; "finished"; $forcedState.finished; "status"; $forcedState.status)
+HOST_Phase:="operator live action"
+var $opTool : cs.Dashboard.Dashboard
+var $opLog; $opEvent; $opService; $opHeaders; $opResponse; $opStatus; $opRecord : Object
+var $opOrigin; $opViewer; $opToken; $opCookie; $opOperatorCookie; $opId; $opConfirmation; $opAudit; $opRequest; $opState; $opError : Text
+var $opAuditFile : 4D.File
+var $opLines : Collection
+$opAuditFile:=Folder(fk logs folder).folder("dashboard").file("audit.jsonl")
+If ($opAuditFile.exists)
+	$opAuditFile.delete()
+End if
+$opLog:=New shared object("events"; New shared collection; "action"; "")
+$opEvent:=New object("log"; $opLog; "onStatus"; Formula(Dashboard_callback($1; $2)))
+$opTool:=cs.Dashboard.Dashboard.new($target)
+$opService:=$opTool.start(New object("operator"; New object("actions"; New collection("operator.noop"))); $opEvent)
+$deadline:=Milliseconds+15000
+While (($opService.samples<1) & ($opService.status#"failed") & (Milliseconds<$deadline))
+	DELAY PROCESS(Current process; 6)
+End while
+$report.operatorLive:=New object("status"; $opService.status; "sampled"; ($opService.samples>0); "error"; $opService.error; \
+	"urlShape"; Match regex("^http://127\\.0\\.0\\.1:[0-9]+/#token=[0-9a-f]{64}&operator=[0-9a-f]{64}$"; $opService.operatorUrl); \
+	"viewerPrefix"; (Position($opService.url+"&operator="; $opService.operatorUrl; *)=1); "http"; New object)
+If ($opService.status="running")
+	$opOrigin:=Substring($opService.url; 1; Position("/#token="; $opService.url; *)-1)
+	$opViewer:=Substring($opService.url; Position("/#token="; $opService.url; *)+8; 64)
+	$opToken:=Substring($opService.operatorUrl; Position("&operator="; $opService.operatorUrl; *)+10; 64)
+	$opResponse:=Operator_http("POST"; $opOrigin+"/api/session"; New object("Origin"; $opOrigin); $opViewer)
+	$opCookie:=String($opResponse.cookies.dashboard)
+	$report.operatorLive.http.viewerSession:=$opResponse.status
+	$opHeaders:=New object("Origin"; $opOrigin; "Cookie"; "dashboard="+$opCookie; "X-Dashboard-Action"; "operator"; "Content-Type"; "application/json")
+	$report.operatorLive.http.viewerOnly:=Operator_http("GET"; $opOrigin+"/api/operator/status"; New object("Cookie"; "dashboard="+$opCookie); "").status
+	$report.operatorLive.http.viewerTokenAsOperator:=Operator_http("POST"; $opOrigin+"/api/operator/session"; $opHeaders; JSON Stringify(New object("token"; $opViewer))).status
+	$opResponse:=Operator_http("POST"; $opOrigin+"/api/operator/session"; $opHeaders; JSON Stringify(New object("token"; $opToken)))
+	$report.operatorLive.http.operatorSession:=$opResponse.status
+	$opOperatorCookie:=String($opResponse.cookies.dashboard_operator)
+	$opHeaders.Cookie:="dashboard="+$opCookie+"; dashboard_operator="+$opOperatorCookie
+	$opRequest:=JSON Stringify(New object("action"; "operator.noop"; "args"; New object("note"; "live sentinel")))
+	$opResponse:=Operator_http("POST"; $opOrigin+"/api/operator/request"; $opHeaders; $opRequest)
+	$report.operatorLive.http.request:=$opResponse.status
+	$opConfirmation:=String(JSON Parse($opResponse.body).confirmation)
+	$opResponse:=Operator_http("POST"; $opOrigin+"/api/operator/confirm"; $opHeaders; JSON Stringify(New object("confirmation"; $opConfirmation; "action"; "operator.noop"; "args"; New object("note"; "other note"))))
+	$report.operatorLive.http.argumentMismatch:=New object("status"; $opResponse.status; "error"; JSON Parse($opResponse.body).error)
+	$opResponse:=Operator_http("POST"; $opOrigin+"/api/operator/request"; $opHeaders; $opRequest)
+	$opId:=String(JSON Parse($opResponse.body).id)
+	$opConfirmation:=String(JSON Parse($opResponse.body).confirmation)
+	$opResponse:=Operator_http("POST"; $opOrigin+"/api/operator/confirm"; $opHeaders; JSON Stringify(New object("confirmation"; $opConfirmation; "action"; "operator.noop"; "args"; New object("note"; "live sentinel"))))
+	$report.operatorLive.http.confirm:=$opResponse.status
+	$deadline:=Milliseconds+10000
+	Repeat
+		DELAY PROCESS(Current process; 6)
+		$opStatus:=JSON Parse(Operator_http("GET"; $opOrigin+"/api/operator/status"; New object("Cookie"; $opHeaders.Cookie); "").body)
+		$opRecord:=$opStatus.records.query("id = :1"; $opId).first()
+		$opState:=""
+		$opError:=""
+		If ($opRecord#Null)
+			$opState:=String($opRecord.state)
+			$opError:=String($opRecord.error)
+		End if
+	Until (($opState="completed") | ($opState="failed") | (Milliseconds>$deadline))
+	$report.operatorLive.http.final:=New object("state"; $opState; "error"; $opError)
+	$report.operatorLive.http.replay:=Operator_http("POST"; $opOrigin+"/api/operator/confirm"; $opHeaders; JSON Stringify(New object("confirmation"; $opConfirmation; "action"; "operator.noop"; "args"; New object("note"; "live sentinel")))).status
+	$opAudit:=""
+	If ($opAuditFile.exists)
+		$opAudit:=$opAuditFile.getText()
+	End if
+	$opLines:=Split string($opAudit; Char(10); sk ignore empty strings)
+	$report.operatorLive.audit:=New object("lines"; $opLines.length; "states"; New collection; "matchesAction"; True; \
+		"private"; (Position("sentinel"; $opAudit; *)>0) | (Position($opToken; $opAudit; *)>0) | (Position($opViewer; $opAudit; *)>0) | (Position($opCookie; $opAudit; *)>0) | (Position($opOperatorCookie; $opAudit; *)>0) | (Position($opConfirmation; $opAudit; *)>0) | (Position($opId; $opAudit; *)>0))
+	For each ($operatorRaw; $opLines)
+		$operatorLine:=JSON Parse($operatorRaw)
+		$report.operatorLive.audit.states.push($operatorLine.state)
+		$report.operatorLive.audit.matchesAction:=$report.operatorLive.audit.matchesAction & ($operatorLine.id=Substring(Generate digest($opId; SHA256 digest); 1; 16)) & ($operatorLine.epoch=$opService.epoch)
+	End for each
+	$report.operatorLive.http.logout:=Operator_http("POST"; $opOrigin+"/api/operator/logout"; $opHeaders; "{}").status
+	$report.operatorLive.http.afterLogout:=Operator_http("GET"; $opOrigin+"/api/operator/status"; New object("Cookie"; $opHeaders.Cookie); "").status
+End if
+$opTool.stop()
+$deadline:=Milliseconds+15000
+While ((Not($opService.finished)) & (Milliseconds<$deadline))
+	DELAY PROCESS(Current process; 6)
+End while
+$report.operatorLive.stopped:=New object("finished"; $opService.finished; "urlCleared"; ($opService.url=""); "operatorUrlCleared"; ($opService.operatorUrl=""))
 HOST_Phase:="running failure watchdog"
 $lifecycle:=New signal
 CALL WORKER(".workers"; "Dashboard_lifecycle"; "failure"; $target; New object; $lifecycle)

@@ -6,6 +6,7 @@
 @media(max-width:600px){header{align-items:start;flex-direction:column}main{padding-top:1rem}.controls{width:100%;justify-content:space-between}dl{grid-template-columns:1fr}dd{margin-bottom:.5rem}}
 @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}
 [hidden]{display:none!important}
+#operator{margin-top:2rem;padding-top:1rem;border-top:1px solid var(--line)}#operator-confirm{margin:1rem 0;border-color:var(--accent)}.operator-records{padding-left:1.2rem;font-size:.85rem;overflow-wrap:anywhere}
 .tabs{display:flex;gap:.5rem;overflow-x:auto;padding:.4rem 0;margin-top:1.5rem}
 .tabs button{white-space:nowrap;font-size:.85rem}
 .tabs [aria-selected=true]{color:var(--accent);border-color:var(--accent);background:var(--panel);box-shadow:inset 0 -3px var(--accent)}

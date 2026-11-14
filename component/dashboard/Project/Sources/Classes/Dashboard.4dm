@@ -14,7 +14,7 @@ Function collect()->$result : Object
 	$result:=New object("ok"; True; "value"; cs._DashboardCollector.new().snapshot())
 
 Function start($options : Object; $event : Object)->$state : Object
-	$state:=New shared object("status"; "starting"; "url"; ""; "error"; ""; "samples"; 0; "epoch"; Generate UUID; "port"; 0; "stopRequested"; False; "finished"; False; "callbackError"; ""; "cleanupError"; ""; "forceDrain"; False)
+	$state:=New shared object("status"; "starting"; "url"; ""; "operatorUrl"; ""; "error"; ""; "samples"; 0; "epoch"; Generate UUID; "port"; 0; "stopRequested"; False; "finished"; False; "callbackError"; ""; "cleanupError"; ""; "forceDrain"; False)
 	If (Num(Substring(Application version; 1; 2))<21)
 		Use ($state)
 			$state.status:="failed"

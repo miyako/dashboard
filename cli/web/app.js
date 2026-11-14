@@ -272,7 +272,70 @@ setInterval(() => {
   redrawGraphs();
   if (lastSample && Date.now() - Date.parse(lastSample) > 15000) { $('status').textContent = 'Stale / no recent measurements'; $('refresh').disabled = true; }
 }, 1000);
-const token = new URLSearchParams(location.hash.slice(1)).get('token');
+let operatorTimer, operatorPending;
+function operatorMessage(text) { $('operator-message').textContent = text; }
+function stopOperator(text) {
+  clearInterval(operatorTimer); operatorTimer = undefined; operatorPending = undefined;
+  $('operator').hidden = true; if (text) $('action').textContent = text;
+}
+async function operatorCall(route, body) {
+  const response = await fetch('/api/operator/' + route, { method: 'POST', headers: DashboardOperator.headers(), body: JSON.stringify(body) });
+  let data = {};
+  try { data = await response.json(); } catch { /* 204 and plain errors have no JSON body. */ }
+  if (response.status === 401) stopOperator('Operator session ended');
+  if (!response.ok) throw new Error(DashboardOperator.reason(data.error) || `HTTP ${response.status}`);
+  return data;
+}
+function renderOperator(status) {
+  $('operator').hidden = false;
+  operatorPending = status.confirmations[0];
+  $('operator-confirm').hidden = !operatorPending;
+  if (operatorPending) {
+    $('operator-summary').textContent = DashboardOperator.summary(operatorPending);
+    $('operator-expiry').textContent = `Expires in ${DashboardOperator.secondsLeft(operatorPending.expiresAt, Date.now())} s. Confirming dispatches it to 4D; it cannot be cancelled afterwards.`;
+  }
+  $('operator-records').replaceChildren(...DashboardOperator.newestFirst(status.records).map(record => el('li', DashboardOperator.describe(record))));
+}
+async function operatorRefresh() {
+  try {
+    const response = await fetch('/api/operator/status');
+    if (response.status === 401) { stopOperator('Operator session ended'); return; }
+    if (response.ok) renderOperator(await response.json());
+  } catch { /* The viewer stream reports connectivity. */ }
+}
+async function startOperator(token) {
+  try {
+    await operatorCall('session', { token });
+    await operatorRefresh();
+    operatorTimer = setInterval(operatorRefresh, 2000);
+  } catch (error) { $('action').textContent = `Operator access failed: ${error.message}`; }
+}
+$('operator-request').addEventListener('submit', async event => {
+  event.preventDefault();
+  try {
+    await operatorCall('request', { action: 'operator.noop', args: DashboardOperator.noopArgs($('operator-note').value) });
+    $('operator-note').value = ''; operatorMessage('Review and confirm the action below.');
+  } catch (error) { operatorMessage(`Request rejected: ${error.message}`); }
+  operatorRefresh();
+});
+$('operator-confirm-button').addEventListener('click', async () => {
+  if (!operatorPending) return;
+  const { confirmation, action, args } = operatorPending;
+  try { await operatorCall('confirm', { confirmation, action, args }); operatorMessage('Dispatched to 4D; waiting for its result.'); }
+  catch (error) { operatorMessage(`Not dispatched: ${error.message}`); }
+  operatorRefresh();
+});
+$('operator-withdraw').addEventListener('click', async () => {
+  if (!operatorPending) return;
+  try { await operatorCall('cancel', { id: operatorPending.id }); operatorMessage('Withdrawn.'); }
+  catch (error) { operatorMessage(`Withdraw failed: ${error.message}`); }
+  operatorRefresh();
+});
+$('operator-logout').addEventListener('click', async () => {
+  try { await operatorCall('logout', {}); } catch { /* Ending locally is enough. */ }
+  stopOperator('Operator session ended');
+});
+const { viewer: token, operator: operatorToken } = DashboardOperator.tokens(location.hash);
 history.replaceState(null, '', location.pathname);
-if (token) authenticate(token).catch(error => { $('status').textContent = error.message; $('login').hidden = false; });
+if (token) authenticate(token).then(() => { if (operatorToken) startOperator(operatorToken); }).catch(error => { $('status').textContent = error.message; $('login').hidden = false; });
 else connect();

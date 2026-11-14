@@ -1,6 +1,7 @@
 property worker : 4D.SystemWorker
 property currentDirectory : 4D.Folder
 property state; options; event; monitor : Object
+property operator : cs._DashboardOperator
 property target; buffer; epoch; diagnostic; callbackWorker; transportError : Text
 property sequence : Real
 property closing; finalized : Boolean
@@ -58,8 +59,19 @@ Function launch()
 			$command+=" --allow-lan"
 		End if
 	End if
+	If (Value type(This.options.operator)#Is undefined)
+		// Explicit host opt-in only; a separate operator token is minted by the CLI.
+		var $operator : Object
+		$operator:=cs._DashboardOperator.new().validate(This.options.operator)
+		If (Not($operator.ok))
+			This.fail($operator.error)
+			return
+		End if
+		This.operator:=cs._DashboardOperator.new($operator.actions; This.epoch; cs._DashboardOperator.new().defaultFolder())
+		$command+=" --operator-actions "+$adapter.quote($operator.actions.join(","))
+	End if
 	For each ($argument; OB Keys(This.options))
-		If (New collection("listen"; "tls-cert"; "tls-key"; "allowLAN").indexOf($argument)<0)
+		If (New collection("listen"; "tls-cert"; "tls-key"; "allowLAN"; "operator").indexOf($argument)<0)
 			This.fail("Unknown dashboard option")
 			return
 		End if
@@ -95,13 +107,17 @@ Function sample($initial : Boolean)
 	End if
 	$payload:=JSON Parse($signal.payload)
 	If ($initial)
-		This.send("hello"; New object("info"; $payload.info))
+		If (This.operator#Null)
+			This.send("hello"; New object("info"; $payload.info; "operator"; New object("version"; 1; "actions"; This.operator.actions.copy())))
+		Else
+			This.send("hello"; New object("info"; $payload.info))
+		End if
 	End if
 	This.send("snapshot"; $payload.snapshot)
 
 Function notify($kind : Text)
 	var $status : Object
-	$status:=New object("kind"; $kind; "status"; This.state.status; "url"; This.state.url; "error"; This.state.error; "samples"; This.state.samples; "epoch"; This.state.epoch; "port"; This.state.port; "finished"; This.state.finished)
+	$status:=New object("kind"; $kind; "status"; This.state.status; "url"; This.state.url; "operatorUrl"; This.state.operatorUrl; "error"; This.state.error; "samples"; This.state.samples; "epoch"; This.state.epoch; "port"; This.state.port; "finished"; This.state.finished)
 	CALL WORKER(This.callbackWorker; "_DashboardSample"; "notify"; This.state; This.event; This.monitor; Null; $kind; $status)
 
 Function get dataType()->$value : Text
@@ -137,6 +153,7 @@ Function onData($worker : 4D.SystemWorker; $event : Object)
 	var $position : Integer
 	var $line; $previous : Text
 	var $message : Variant
+	var $begun : Object
 	var CLI_LastErrors : Collection
 	If (This.closing)
 		return
@@ -204,6 +221,9 @@ Function onData($worker : 4D.SystemWorker; $event : Object)
 					This.fail("Invalid dashboard listening port")
 					return
 				End if
+				If (Not(This._operatorReady($message)))
+					return
+				End if
 				$manager:=cs.workers.worker.new(cs._DashboardServer)
 				If (Not($manager.start($port; New object("agent"; This))))
 					This.fail("Dashboard instance registration failed: "+JSON Stringify($manager.errors))
@@ -212,6 +232,9 @@ Function onData($worker : 4D.SystemWorker; $event : Object)
 				Use (This.state)
 					This.state.port:=$port
 					This.state.url:=$message.url
+					If (This.operator#Null)
+						This.state.operatorUrl:=$message.operatorUrl
+					End if
 					This.state.status:="running"
 				End use
 				_DashboardWorker("adopted"; ""; New object; This.state; New object; New object)
@@ -241,6 +264,28 @@ Function onData($worker : 4D.SystemWorker; $event : Object)
 					This.state.samples+=1
 				End use
 				This.notify("sample")
+			: ($message.kind="action")
+				If (This.operator=Null)
+					This.fail("Unexpected dashboard action")
+					This.stop()
+					return
+				End if
+				$begun:=This.operator.begin($message)
+				If (Not($begun.ok))
+					This.fail($begun.error)
+					This.stop()
+					return
+				End if
+				This.send("actionState"; $begun.frame)
+				If (This.closing | (This.state.status="failed"))
+					return
+				End if
+				If ($begun.frame.state="running")
+					This.send("actionState"; This.operator.complete($message; $begun.record))
+					If (This.closing | (This.state.status="failed"))
+						return
+					End if
+				End if
 			Else
 				This.fail("Unknown dashboard message")
 				This.stop()
@@ -248,6 +293,42 @@ Function onData($worker : 4D.SystemWorker; $event : Object)
 		End case
 		$position:=Position(Char(10); This.buffer; *)
 	End while
+
+Function _operatorReady($message : Object)->$ok : Boolean
+	// Both sides must agree on operator mode before the dashboard is adopted.
+	$ok:=False
+	If (This.operator=Null)
+		If ((Value type($message.operator)#Is undefined) | (Value type($message.operatorUrl)#Is undefined))
+			This.fail("Unexpected dashboard operator negotiation")
+			return
+		End if
+		return True
+	End if
+	If ((Value type($message.operator)#Is object) | (Value type($message.operatorUrl)#Is text))
+		This.fail("Missing dashboard operator negotiation")
+		return
+	End if
+	If ((Value type($message.operator.version)#Is real) & (Value type($message.operator.version)#Is longint))
+		This.fail("Invalid dashboard operator negotiation")
+		return
+	End if
+	If (($message.operator.version#1) | (Value type($message.operator.actions)#Is collection))
+		This.fail("Invalid dashboard operator negotiation")
+		return
+	End if
+	If (JSON Stringify($message.operator.actions)#JSON Stringify(This.operator.actions))
+		This.fail("Dashboard operator actions differ from the request")
+		return
+	End if
+	If (Not(Match regex("^https?://(\\[[0-9A-Fa-f:]+\\]|[0-9.]+):[0-9]+/#token=[0-9a-f]{64}&operator=[0-9a-f]{64}$"; $message.operatorUrl)))
+		This.fail("Invalid dashboard operator URL")
+		return
+	End if
+	If (Position($message.url+"&operator="; $message.operatorUrl; *)#1)
+		This.fail("Dashboard operator URL does not match the viewer URL")
+		return
+	End if
+	$ok:=True
 
 Function onDataError($worker : 4D.SystemWorker; $event : Object)
 	This.diagnostic:=Substring(This.diagnostic+$event.data; 1; 4096)
@@ -282,6 +363,7 @@ Function fail($message : Text)
 		This.state.status:="failed"
 		This.state.error:=$message
 		This.state.url:=""
+		This.state.operatorUrl:=""
 	End use
 	This.closing:=True
 	If (This.worker#Null)
@@ -325,6 +407,7 @@ Function finish()
 			This.state.status:="stopped"
 		End if
 		This.state.url:=""
+		This.state.operatorUrl:=""
 		This.state.finished:=This.state.finished | Not(This.state.forceDrain)
 	End use
 	This.worker:=Null

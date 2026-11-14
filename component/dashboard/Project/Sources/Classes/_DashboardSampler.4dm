@@ -43,7 +43,7 @@ Function _notify($kind : Text; $status : Object)
 		This.terminal:=True
 	End if
 	If ($status=Null)
-		$status:=New object("kind"; $kind; "status"; This.state.status; "url"; This.state.url; "error"; This.state.error; "samples"; This.state.samples; "epoch"; This.state.epoch; "port"; This.state.port; "finished"; This.state.finished)
+		$status:=New object("kind"; $kind; "status"; This.state.status; "url"; This.state.url; "operatorUrl"; This.state.operatorUrl; "error"; This.state.error; "samples"; This.state.samples; "epoch"; This.state.epoch; "port"; This.state.port; "finished"; This.state.finished)
 	End if
 	If ($kind="running")
 		$status.portCheck:=Try(This.portStatus($status.port))
@@ -62,6 +62,7 @@ Function _notify($kind : Text; $status : Object)
 				End if
 				This.state.status:="failed"
 				This.state.url:=""
+				This.state.operatorUrl:=""
 			End use
 			This.callbackEnabled:=False
 			This.monitor.stop()

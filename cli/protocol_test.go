@@ -409,6 +409,8 @@ func TestAuthHostOriginAndReadOnlyRoutes(t *testing.T) {
 		{"POST", "/api/delete", "127.0.0.1:8123", s.origin, "", true, 404},
 		{"POST", "/api/refresh", "127.0.0.1:8123", s.origin, "", true, 202},
 		{"GET", "/app.js", "127.0.0.1:8123", "", "", false, 200},
+		{"GET", "/operator.js", "127.0.0.1:8123", "", "", false, 200},
+		{"GET", "/api/operator/status", "127.0.0.1:8123", "", "", true, 404},
 	}
 	for _, tt := range tests {
 		t.Run(fmt.Sprint(tt.method, tt.path, tt.status), func(t *testing.T) {

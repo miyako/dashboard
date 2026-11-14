@@ -46,7 +46,7 @@ func run(args []string, input io.Reader, output, diagnostic io.Writer) error {
 		return encoder.Encode(map[string]any{"protocol": 1, "text": args[2]})
 	}
 	if len(args) == 0 || args[0] != "serve" {
-		return errors.New("expected serve [--listen IP:port] [--allow-lan --tls-cert file --tls-key file], inspect --text text, or --version")
+		return errors.New("expected serve [--listen IP:port] [--allow-lan --tls-cert file --tls-key file] [--operator-actions ids], inspect --text text, or --version")
 	}
 	flags := flag.NewFlagSet("serve", flag.ContinueOnError)
 	flags.SetOutput(diagnostic)
@@ -54,6 +54,7 @@ func run(args []string, input io.Reader, output, diagnostic io.Writer) error {
 	lan := flags.Bool("allow-lan", false, "explicitly permit non-loopback HTTPS")
 	cert := flags.String("tls-cert", "", "TLS certificate")
 	key := flags.String("tls-key", "", "TLS key")
+	operatorActions := flags.String("operator-actions", "", "comma-separated operator action IDs; operator mode stays off when omitted")
 	if err := flags.Parse(args[1:]); err != nil {
 		return err
 	}
@@ -68,6 +69,12 @@ func run(args []string, input io.Reader, output, diagnostic io.Writer) error {
 	n, portErr := strconv.Atoi(port)
 	if ip == nil || ip.IsUnspecified() || portErr != nil || n < 0 || n > 65535 {
 		return errors.New("listen requires a concrete literal IP and valid port; wildcard binds are forbidden")
+	}
+	var actions map[string]bool
+	if *operatorActions != "" {
+		if actions, err = parseOperatorActions(*operatorActions); err != nil {
+			return err
+		}
 	}
 	if (*cert == "") != (*key == "") {
 		return errors.New("TLS certificate and key must be supplied together")
@@ -95,6 +102,9 @@ func run(args []string, input io.Reader, output, diagnostic io.Writer) error {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer cancel()
 	service := newService(scheme+"://"+listener.Addr().String(), nonce())
+	if actions != nil {
+		service.op = newOperator(actions)
+	}
 	server := &http.Server{Handler: service.handler(), TLSConfig: tlsConfig, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 5 * time.Second, IdleTimeout: 30 * time.Second, MaxHeaderBytes: 8192}
 	failures := make(chan error, 3)
 	go func() {
@@ -119,7 +129,12 @@ func run(args []string, input io.Reader, output, diagnostic io.Writer) error {
 		}
 	}()
 	go func() { failures <- service.read(input) }()
-	if err := service.emit(map[string]any{"protocol": 1, "kind": "ready", "url": service.origin + "/#token=" + service.token, "version": version}); err != nil {
+	ready := map[string]any{"protocol": 1, "kind": "ready", "url": service.origin + "/#token=" + service.token, "version": version}
+	if service.op != nil {
+		ready["operator"] = service.op.caps()
+		ready["operatorUrl"] = service.origin + "/#token=" + service.token + "&operator=" + service.op.token
+	}
+	if err := service.emit(ready); err != nil {
 		return err
 	}
 	ticker := time.NewTicker(2 * time.Second)
