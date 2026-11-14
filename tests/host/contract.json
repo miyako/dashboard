@@ -848,6 +848,18 @@
         "equals": true
       },
       {
+        "path": "/terminate",
+        "equals": {
+          "wasRunning": true,
+          "returned": true,
+          "finished": true,
+          "stopped": true,
+          "clearedURL": true,
+          "pruned": true,
+          "idle": true
+        }
+      },
+      {
         "path": "/cancelled",
         "equals": {
           "status": "stopped",

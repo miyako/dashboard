@@ -44,6 +44,19 @@ Repeated start does not replace the facade's active owned handle; stale handles
 cannot stop a replacement. No host process-variable handle, unsafe PID map,
 permanent host error handler or caller-blocking sampling loop is required.
 
+`terminate() : Boolean` ends the instance's active dashboard whichever facade
+started it, so shutdown code needs no stored handle; the target is not used.
+It runs the same graceful stop and forced fallback as `stop()`, then waits up to
+20 seconds until the dashboard is released, and returns `True` when nothing is
+running (including when nothing was). It blocks the caller; call it from your
+own process, such as `On Exit`, not from `.workers` (which returns `False`).
+
+```4d
+var $monitor : cs.Dashboard.Dashboard
+$monitor:=cs.Dashboard.Dashboard.new()
+$monitor.terminate()
+```
+
 **Deployment:** install `workers` 20.0.23 and `tcp` 20.0.14 as separate host
 components alongside dashboard when using `Components/`. Dependency Manager
 resolves the pinned declarations; the manual folder path ignores nested

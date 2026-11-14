@@ -412,6 +412,20 @@ $report.callbackEvents:=$callbackLog.events.copy()
 If (Not($report.service.stopped))
 	$report.success:=False
 End if
+HOST_Phase:="terminate from a fresh facade"
+var $orphan : Object
+var $terminated; $idleTerminated : Boolean
+$orphan:=cs.Dashboard.Dashboard.new($target).start(New object)
+$deadline:=Milliseconds+15000
+While (($orphan.status#"running") & Not($orphan.finished) & (Milliseconds<$deadline))
+	DELAY PROCESS(Current process; 6)
+End while
+$terminated:=cs.Dashboard.Dashboard.new().terminate()
+$idleTerminated:=cs.Dashboard.Dashboard.new().terminate()
+$report.terminate:=New object("wasRunning"; ($orphan.port>0); "returned"; $terminated; "finished"; $orphan.finished; "stopped"; ($orphan.status="stopped"); "clearedURL"; ($orphan.url=""); "pruned"; Not(cs.workers.worker.new(cs.Dashboard._DashboardServer).isRunning($orphan.port)); "idle"; $idleTerminated)
+If (Not($terminated) | Not($orphan.finished) | Not($idleTerminated) | ($orphan.port=0) | Not($report.terminate.pruned))
+	$report.success:=False
+End if
 HOST_Phase:="CLI failure diagnostics"
 $callbackLog:=New shared object("events"; New shared collection; "action"; "error-terminal")
 $event:=New object("log"; $callbackLog; "onStatus"; Formula(Dashboard_callback($1; $2)))

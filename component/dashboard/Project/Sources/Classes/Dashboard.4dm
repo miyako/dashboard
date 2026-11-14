@@ -71,6 +71,32 @@ Function stop()
 		End if
 	End if
 
+Function terminate()->$terminated : Boolean
+	// Ends this instance's active dashboard whichever facade started it, and waits for cleanup.
+	var $signal : 4D.Signal
+	var $deadline : Real
+	If (Current process name=".workers")
+		return False  // the shutdown runs on .workers, which cannot wait for itself
+	End if
+	$deadline:=Milliseconds+20000
+	$signal:=New signal
+	CALL WORKER(".workers"; "_DashboardWorker"; "terminate"; ""; New object; New object; New object; New object; $signal)
+	If (Not($signal.wait(5)))
+		return False
+	End if
+	Repeat
+		$signal:=New signal
+		CALL WORKER(".workers"; "_DashboardWorker"; "active"; ""; New object; New object; New object; New object; $signal)
+		If (Not($signal.wait(5)))
+			return False
+		End if
+		If (Not($signal.active))
+			return True
+		End if
+		DELAY PROCESS(Current process; 6)
+	Until (Milliseconds>$deadline)
+	$terminated:=False
+
 Function version()->$result : Object
 	$result:=This._decode(This._cli.execute(New collection("--version")); "version")
 
