@@ -87,6 +87,13 @@ counted from a map that lists only encryptable or encrypted tables. More than
 (the `flushAndLock()`/backup/VSS write freeze, not data file write protection)
 and `datastore.adminProtected` (Data Explorer access disabled) are read every
 sample. No table names, numbers or keys are exported, and nothing is changed.
+Web server fields use `WEB Server(Web server host database)`, so they describe
+the host's server, never the component's own. `web.running` is sampled; HTTP/HTTPS
+enabled and ports, HSTS enabled and max age (seconds), minimum TLS version
+(`"TLS 1.0"`..`"TLS 1.3"`), perfect forward secrecy and OpenSSL version are the
+current settings. No server is started, stopped or configured, and no paths,
+addresses, ciphers, cookies or handlers are exported. Runtimes without the
+command, such as tool4d, report unsupported.
 Backup descriptors currently report unsupported even for an eligible local main
 datastore: `BACKUP INFO` normally runs in component context and its host data-file
 target has not been established. A local `ds` check is not proof of backup scope.

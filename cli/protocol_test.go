@@ -241,6 +241,38 @@ func TestEngineTableCountsAreBoundedAndFlagsAreStrictBooleans(t *testing.T) {
 	}
 }
 
+func TestWebMetricsAreAClosedTypedAllowlist(t *testing.T) {
+	for _, test := range []struct {
+		id, typ, unit, kind string
+		value               any
+		valid               bool
+	}{
+		{"web.running", "boolean", "", "gauge", true, true},
+		{"web.running", "boolean", "", "static", true, false},
+		{"web.httpPort", "number", "port", "static", float64(80), true},
+		{"web.httpPort", "number", "port", "static", float64(0), false},
+		{"web.httpsPort", "number", "port", "static", float64(65536), false},
+		{"web.httpsPort", "number", "port", "static", float64(443.5), false},
+		{"web.hstsMaxAge", "number", "s", "static", float64(63072000), true},
+		{"web.hstsMaxAge", "number", "ms", "static", float64(63072000), false},
+		{"web.minTLSVersion", "text", "", "static", "TLS 1.2", true},
+		{"web.minTLSVersion", "text", "", "static", "3", false},
+		{"web.openSSLVersion", "text", "", "static", "OpenSSL 3.5.1 1 Jul 2025", true},
+		{"web.openSSLVersion", "text", "", "static", "/private/lib/ssl", false},
+		{"web.rootFolder", "text", "", "static", "/private/web", false},
+		{"web.IPAddressToListen", "text", "", "static", "192.0.2.1", false},
+	} {
+		m := metric{ID: test.id, Label: "Web", Type: test.typ, Unit: test.unit, Kind: test.kind, Availability: "available", Value: test.value}
+		if validMetric(m) != test.valid {
+			t.Fatalf("%s %v %s", test.id, test.value, test.kind)
+		}
+	}
+	unsupported := metric{ID: "web.httpPort", Label: "Web", Type: "number", Unit: "port", Kind: "static", Availability: "error", Reason: "Invalid host web server value"}
+	if !validMetric(unsupported) {
+		t.Fatal("unavailable web metric rejected")
+	}
+}
+
 func TestRefreshCorrelation(t *testing.T) {
 	s := newService("http://127.0.0.1", "token")
 	hello(t, s)

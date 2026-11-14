@@ -151,6 +151,9 @@ Function read($command : Text)->$result : Object
 			Else
 				$data:=Null
 			End if
+		: ($command="web")
+			// Option 2 targets the host's web server; omitting it would read this component's own.
+			$data:=WEB Server(Web server host database)
 		: ($command="adminProtected")
 			$store:=ds
 			If ($store#Null)
@@ -161,6 +164,10 @@ Function read($command : Text)->$result : Object
 	End case
 	ON ERR CALL($previous; ek local)
 	$result:=New object("ok"; CLI_LastErrors=Null; "data"; $data)
+	If (CLI_LastErrors#Null)
+		// -33/33 "Unimplemented command or function": this runtime (for example tool4d) lacks the command.
+		$result.unimplemented:=(CLI_LastErrors.query("errCode = :1"; 33).length>0)
+	End if
 	CLI_LastErrors:=Null
 
 Function metric($id : Text; $label : Text; $type : Text; $unit : Text; $kind : Text; $value : Variant)->$metric : Object
@@ -657,6 +664,131 @@ Function _encryptionMetrics($read : Variant)->$metrics : Collection
 		End if
 	End for each
 
+Function _webMetrics($read : Variant)->$metrics : Collection
+	var $data : Object
+	var $value : Variant
+	var $status; $reason; $field; $id; $label; $type; $unit; $kind; $version : Text
+	var $valid : Boolean
+	$metrics:=New collection
+	$status:="error"
+	$reason:="Host web server read failed"
+	If (Value type($read)=Is object)
+		If (Value type($read.unimplemented)=Is boolean)
+			If ($read.unimplemented)
+				$status:="unsupported"
+				$reason:="This 4D runtime does not implement WEB Server (for example tool4d)"
+			End if
+		End if
+		If (Value type($read.ok)=Is boolean)
+			If ($read.ok)
+				Case of
+					: ($read.data=Null)
+						$status:="unsupported"
+						$reason:="No host web server object"
+					: (Value type($read.data)#Is object)
+						$reason:="Invalid host web server object"
+					Else
+						$status:="available"
+						$data:=$read.data
+				End case
+			End if
+		End if
+	End if
+	// Closed allowlist: no paths, addresses, ciphers, cookies, CORS, handlers, rules or access key.
+	For each ($field; New collection("isRunning"; "HTTPEnabled"; "HTTPPort"; "HTTPSEnabled"; "HTTPSPort"; "HSTSEnabled"; "HSTSMaxAge"; "minTLSVersion"; "perfectForwardSecrecy"; "openSSLVersion"))
+		$type:="boolean"
+		$unit:=""
+		$kind:="static"
+		Case of
+			: ($field="isRunning")
+				$id:="web.running"
+				$label:="Host web server running"
+				$kind:="gauge"
+			: ($field="HTTPEnabled")
+				$id:="web.httpEnabled"
+				$label:="HTTP enabled (current setting)"
+			: ($field="HTTPPort")
+				$id:="web.httpPort"
+				$label:="HTTP port (current setting)"
+				$type:="number"
+				$unit:="port"
+			: ($field="HTTPSEnabled")
+				$id:="web.httpsEnabled"
+				$label:="HTTPS enabled (current setting)"
+			: ($field="HTTPSPort")
+				$id:="web.httpsPort"
+				$label:="HTTPS port (current setting)"
+				$type:="number"
+				$unit:="port"
+			: ($field="HSTSEnabled")
+				$id:="web.hstsEnabled"
+				$label:="HSTS enabled (current setting)"
+			: ($field="HSTSMaxAge")
+				$id:="web.hstsMaxAge"
+				$label:="HSTS max age (current setting)"
+				$type:="number"
+				$unit:="s"
+			: ($field="minTLSVersion")
+				$id:="web.minTLSVersion"
+				$label:="Minimum TLS version (current setting)"
+				$type:="text"
+			: ($field="perfectForwardSecrecy")
+				$id:="web.perfectForwardSecrecy"
+				$label:="Perfect forward secrecy available"
+			: ($field="openSSLVersion")
+				$id:="web.openSSLVersion"
+				$label:="OpenSSL library version"
+				$type:="text"
+		End case
+		If ($status#"available")
+			$metrics.push(This.unavailable($id; $label; $type; $unit; $kind; $status; $reason))
+			continue
+		End if
+		$value:=$data[$field]
+		$valid:=False
+		Case of
+			: ($type="boolean")
+				$valid:=(Value type($value)=Is boolean)
+			: ($type="number")
+				If ((Value type($value)=Is real) | (Value type($value)=Is longint))
+					If ($unit="port")
+						$valid:=(($value>=1) & ($value<=65535))
+					Else
+						$valid:=(($value>=0) & ($value<=2147483647))
+					End if
+					If ($valid)
+						$valid:=(Int($value)=$value)
+					End if
+				End if
+			: ($field="minTLSVersion")
+				// Setting enum 1..4; this is the configured floor, not a negotiated protocol.
+				If ((Value type($value)=Is real) | (Value type($value)=Is longint))
+					$version:=""
+					Case of
+						: ($value=1)
+							$version:="TLS 1.0"
+						: ($value=2)
+							$version:="TLS 1.1"
+						: ($value=3)
+							$version:="TLS 1.2"
+						: ($value=4)
+							$version:="TLS 1.3"
+					End case
+					$valid:=($version#"")
+					$value:=$version
+				End if
+			: ($field="openSSLVersion")
+				If (Value type($value)=Is text)
+					$valid:=Match regex("^[A-Za-z0-9 ._()+-]{1,64}$"; $value)
+				End if
+		End case
+		If ($valid)
+			$metrics.push(This.metric($id; $label; $type; $unit; $kind; $value))
+		Else
+			$metrics.push(This.unavailable($id; $label; $type; $unit; $kind; "error"; "Invalid host web server value"))
+		End if
+	End for each
+
 Function _licenseUsageMetrics($read : Object)->$metrics : Collection
 	var $entries; $ids : Collection
 	var $entry : Variant
@@ -758,6 +890,9 @@ Function snapshot()->$snapshot : Object
 		$metrics.push($entry)
 	End for each
 	For each ($entry; This.engine())
+		$metrics.push($entry)
+	End for each
+	For each ($entry; This._webMetrics(This.read("web")))
 		$metrics.push($entry)
 	End for each
 	For each ($entry; This.licenseUsage())
