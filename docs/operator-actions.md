@@ -161,7 +161,44 @@ sample. A confirmation issued before another action finished cannot be used.
   cache flush or tuning, PID or session termination, restart or shutdown,
   SQL/web lifecycle, license or key operations, and real database operations.
 
-## 8. Never
+## 8. A0 foundations (admin phase)
+
+See `docs/admin-actions-design.md`. Changes to this contract:
+
+- **One catalog:** `cli/actions.json` is embedded in the CLI, and a byte-identical
+  copy is at `component/dashboard/Resources/actions.json`; a test checks both.
+  Each entry declares tier, scope, `deadlineMs`, `exclusive`, `progress`,
+  `verify` (`none`, `cli` or `native`), approval, transport and argument specs
+  (anchored text patterns, or integer enums or ranges). Go and 4D validate
+  arguments generically from it, and the action timeout is per entry.
+- **Executor:** 4D runs actions on a cooperative worker,
+  `Dashboard.admin.<epoch>`, never on `.workers`, which keeps serving the pipe.
+  Results return through `_DashboardRelay` to the agent of the same epoch. A
+  result for an epoch that has ended is audited as `orphaned` and never sent.
+- **Frame fields:** `actionState` may carry `exclusive` (on `running`, and
+  required exactly when declared), `progress {phase, percent}` (on `running`,
+  only when declared) and `unverified` (on `completed`, exactly when
+  `verify:"none"`). The CLI rejects any undeclared field.
+- **Exclusive actions** pause scheduled sampling. Viewers see status
+  `maintenance`, distinct from `stale`, and history records an anonymous
+  maintenance band `{from, to}`. Sampling resumes at the final state or the
+  deadline, and a refresh during a pause gets 409.
+- **Slow samples:** a refresh that 4D can't collect within 5 s is answered
+  `collector_busy`. Only the first sample, or six slow samples in a row, ends
+  the instance.
+- **Host authority:** the optional `operator.authorize` formula is called on the
+  executor with `{action, args, actor, tier}`; it is required for tier B/C. Any
+  answer other than `True`, an error, or more than 5 s means `host_denied`,
+  which is audited.
+- **Transport:** tier B/C requests need TLS or a loopback origin.
+- **Test actions:** `operator.sleep` (1–20 s) and `operator.exclusiveSleep`
+  (1–10 s, pauses sampling) change nothing. They prove the executor, progress,
+  pause and deadlines.
+- **Native gate:** `scripts/probe_native.py` runs candidate commands in a
+  throwaway tool4d project and reports `passed`, `error`, `crashed` or
+  `not_run` per case. A crash keeps a command out of the catalog.
+
+## 9. Never
 
 No arbitrary method, formula, SQL, shell, file, PID, session or selector
 execution. No action results in SSE: viewers see nothing new. Operator status

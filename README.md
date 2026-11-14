@@ -255,6 +255,18 @@ gaps, and the chart says where recording began. Viewers fetch windows from
 `GET /api/history` (viewer login required, read-only, rate limited). The
 contract is in [docs/history.md](docs/history.md).
 
+### Administrative actions (foundations only)
+
+The groundwork for administrative actions is in place, but **no
+administrative action is enabled**. Actions come from one catalog,
+`cli/actions.json`, shared by Go and 4D. They run on their own cooperative 4D
+worker, so the dashboard keeps sampling while one runs. Exclusive actions pause
+sampling, and viewers see "maintenance". A slow sample no longer ends the
+monitor. Hosts can pass an `authorize` formula, which will be required for
+riskier tiers. Candidate native commands must first pass
+`scripts/probe_native.py`. Design and phases:
+[docs/admin-actions-design.md](docs/admin-actions-design.md).
+
 ## What measurements mean
 
 ### Synthetic database preview

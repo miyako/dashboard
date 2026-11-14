@@ -122,7 +122,7 @@ func TestCadenceNotAppliedOnFailureOrTimeout(t *testing.T) {
 	id, conf = requestAction(t, c, "monitor.cadence", `{"seconds":10}`)
 	confirmAction(t, c, conf, "monitor.cadence", `{"seconds":10}`)
 	s.mu.Lock()
-	s.op.dispatchedAt = time.Now().Add(-actionTimeout - time.Second)
+	s.op.dispatchedAt = time.Now().Add(-entryFor("operator.noop").deadline() - time.Second)
 	s.mu.Unlock()
 	s.expire()
 	if err := actionState(s, id, "completed", ""); err != nil {
@@ -154,7 +154,7 @@ func TestDiagnosticsAreSanitizedAndOperatorOnly(t *testing.T) {
 			t.Fatal("missing", key)
 		}
 	}
-	if len(d) != 20 {
+	if len(d) != 24 {
 		t.Fatal("diagnostics field set changed", len(d))
 	}
 	for _, secret := range []string{s.token, s.cookie, s.op.token, c.operator, actorOf(c.operator), id, conf, "test-epoch", s.origin, "127.0.0.1"} {

@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net"
+	"strings"
 	"time"
 )
 
@@ -16,24 +18,6 @@ const maxObservedIntervals = 8
 // allowedCadences never goes faster than the default, so collector load cannot rise.
 var allowedCadences = map[int]bool{2: true, 5: true, 10: true}
 
-func init() {
-	operatorCatalog["monitor.cadence"] = func(raw json.RawMessage) (json.RawMessage, error) {
-		var args struct {
-			Seconds *int `json:"seconds"`
-		}
-		if err := strictDecode(raw, &args); err != nil || args.Seconds == nil || !allowedCadences[*args.Seconds] {
-			return nil, errors.New("monitor.cadence requires seconds: 2, 5 or 10")
-		}
-		return json.Marshal(map[string]int{"seconds": *args.Seconds})
-	}
-	operatorCatalog["monitor.diagnostics"] = func(raw json.RawMessage) (json.RawMessage, error) {
-		if err := strictDecode(raw, &struct{}{}); err != nil {
-			return nil, errors.New("monitor.diagnostics takes no arguments")
-		}
-		return json.RawMessage(`{}`), nil
-	}
-}
-
 type monitorState struct {
 	cadence          time.Duration
 	cadenceSince     time.Time
@@ -45,6 +29,10 @@ type monitorState struct {
 	refreshResults   uint64
 	refreshTimeouts  uint64
 	lateRefreshCount uint64
+	collectorBusy    uint64
+	paused           bool
+	pauses           uint64
+	pausedSkips      uint64
 }
 
 func newMonitorState() monitorState {
@@ -93,6 +81,7 @@ func (s *service) diagnosticsLocked(now time.Time) map[string]any {
 		"viewers": len(s.clients), "stdoutQueue": len(s.out), "stdoutCapacity": cap(s.out),
 		"metrics": len(s.current.Metrics), "processes": len(s.current.Processes), "sessions": len(s.current.Sessions),
 		"operatorSessions": len(s.op.sessions), "pendingConfirmations": len(s.op.confirmations),
+		"collectorBusy": s.mon.collectorBusy, "paused": s.mon.paused, "maintenancePauses": s.mon.pauses, "pausedSkips": s.mon.pausedSkips,
 		"actionStates": states, "lateActionFrames": s.op.late,
 	}
 }
@@ -113,7 +102,50 @@ func (s *service) applyCompletedLocked(r *actionRecord, now time.Time) {
 	}
 }
 
+// pauseLocked suspends scheduled sampling for an exclusive action and opens a maintenance band.
+func (s *service) pauseLocked(now time.Time) {
+	if s.mon.paused {
+		return
+	}
+	s.mon.paused, s.current.Status = true, "maintenance"
+	s.mon.pauses++
+	s.hist.openMaintenance(now)
+	s.broadcastLocked()
+}
+
+// settleLocked resumes sampling once no action is in flight.
+func (s *service) settleLocked(now time.Time) {
+	if !s.mon.paused || (s.op != nil && s.op.inflight != nil) {
+		return
+	}
+	s.mon.paused = false
+	s.hist.closeMaintenance(now)
+	s.current.Status = "connected"
+	if !s.last.IsZero() && now.Sub(s.last) > 15*time.Second {
+		s.current.Status = "stale"
+	}
+	s.broadcastLocked()
+}
+
+func (s *service) secureOrLoopback() bool {
+	if strings.HasPrefix(s.origin, "https://") {
+		return true
+	}
+	host, _, err := net.SplitHostPort(strings.TrimPrefix(s.origin, "http://"))
+	ip := net.ParseIP(strings.Trim(host, "[]"))
+	return err == nil && ip != nil && ip.IsLoopback()
+}
+
 func (s *service) scheduledRequest(now time.Time) error {
+	s.mu.Lock()
+	paused := s.mon.paused
+	if paused {
+		s.mon.pausedSkips++
+	}
+	s.mu.Unlock()
+	if paused {
+		return nil
+	}
 	if _, err := s.request(); err != nil {
 		if errors.Is(err, errBusy) {
 			s.mu.Lock()

@@ -103,9 +103,18 @@ func drain(s *service) []map[string]any {
 	}
 }
 
+// actionState sends a frame the way 4D does: unverified on completion and exclusive on running, per catalog.
 func actionState(s *service, id, state, code string) error {
 	m := frame("actionState", s.current.Seq+1)
 	m.ID, m.State, m.Error = id, state, code
+	if s.op == nil {
+		return s.apply(m)
+	}
+	if r := s.op.record(id); r != nil && r.State != "completed" && r.State != "failed" && r.State != "cancelled" {
+		e := entryFor(r.Action)
+		m.Unverified = state == "completed" && e.Verify == "none"
+		m.Exclusive = state == "running" && e.Exclusive
+	}
 	return s.apply(m)
 }
 
@@ -400,7 +409,7 @@ func TestOperatorStaleTargetAndTimeout(t *testing.T) {
 	}
 	// The in-flight action times out with an unknown outcome; a late result is recorded, never applied.
 	s.mu.Lock()
-	s.op.dispatchedAt = time.Now().Add(-actionTimeout - time.Second)
+	s.op.dispatchedAt = time.Now().Add(-entryFor("operator.noop").deadline() - time.Second)
 	s.mu.Unlock()
 	s.expire()
 	r := recordOf(s, id)
@@ -497,7 +506,7 @@ func TestOperatorCancelLogoutAndPrivacy(t *testing.T) {
 	}
 	// Status is per actor and never echoes secrets.
 	status := owner.call("GET", "status", "")
-	if status.Code != 200 || strings.Count(status.Body.String(), `"id":"`) != 2 {
+	if status.Code != 200 || len(decode(t, status)["records"].([]any)) != 2 {
 		t.Fatal(status.Body)
 	}
 	if body := other.call("GET", "status", "").Body.String(); strings.Contains(body, id) {

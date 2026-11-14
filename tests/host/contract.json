@@ -2281,21 +2281,21 @@
         "path": "/operator/validate/null",
         "equals": {
           "ok": false,
-          "error": "operator must be an object with only an actions collection"
+          "error": "operator must be an object with an actions collection and an optional authorize formula"
         }
       },
       {
         "path": "/operator/validate/text",
         "equals": {
           "ok": false,
-          "error": "operator must be an object with only an actions collection"
+          "error": "operator must be an object with an actions collection and an optional authorize formula"
         }
       },
       {
         "path": "/operator/validate/extraKey",
         "equals": {
           "ok": false,
-          "error": "operator must be an object with only an actions collection"
+          "error": "operator must be an object with an actions collection and an optional authorize formula"
         }
       },
       {
@@ -2448,7 +2448,8 @@
         "path": "/operator/complete",
         "equals": {
           "id": "620278d49d71c3d5454da29a7dad7c8cde631e16325f103d46fdd8ce970756e1",
-          "state": "completed"
+          "state": "completed",
+          "unverified": true
         }
       },
       {
@@ -2494,6 +2495,7 @@
           "complete": {
             "id": "b00b1f6256eb51bba3864b3f24b07afe5b9b86f39ea29c44d50f109bc7b67f49",
             "state": "completed",
+            "unverified": true,
             "error": "audit_incomplete"
           }
         }
@@ -2673,7 +2675,7 @@
         "path": "/monitorLive/diagnostics",
         "equals": {
           "state": "completed",
-          "fields": 20,
+          "fields": 24,
           "cadenceSeconds": 5,
           "observedOk": true,
           "private": false
@@ -2722,6 +2724,217 @@
           "coverage": true,
           "rawCoversSamples": true,
           "bucketsMatchRaw": true,
+          "private": false
+        }
+      },
+      {
+        "path": "/admin/catalogIds",
+        "equals": [
+          "monitor.cadence",
+          "monitor.diagnostics",
+          "operator.exclusiveSleep",
+          "operator.noop",
+          "operator.sleep"
+        ]
+      },
+      {
+        "path": "/admin/validate",
+        "equals": {
+          "authorizeNotFormula": {
+            "ok": false,
+            "error": "operator authorize must be a Formula or function"
+          },
+          "withAuthorize": true,
+          "unknownKey": {
+            "ok": false,
+            "error": "operator must be an object with an actions collection and an optional authorize formula"
+          },
+          "tierBWithout": {
+            "ok": false,
+            "error": "tier B and C actions require an authorize callback"
+          },
+          "tierBWith": true
+        }
+      },
+      {
+        "path": "/admin/execute",
+        "equals": {
+          "operator.sleep": {
+            "begin": {
+              "id": "50090a10bb5bf9693299e63ee3e2af9910d6d1a2e7cd9dea0d9d6555bfa280d0",
+              "state": "running"
+            },
+            "canonical": "{\"seconds\":2}",
+            "final": {
+              "id": "50090a10bb5bf9693299e63ee3e2af9910d6d1a2e7cd9dea0d9d6555bfa280d0",
+              "state": "completed",
+              "unverified": true
+            },
+            "progress": [
+              {
+                "id": "50090a10bb5bf9693299e63ee3e2af9910d6d1a2e7cd9dea0d9d6555bfa280d0",
+                "state": "running",
+                "progress": {
+                  "phase": "sleeping",
+                  "percent": 50
+                }
+              },
+              {
+                "id": "50090a10bb5bf9693299e63ee3e2af9910d6d1a2e7cd9dea0d9d6555bfa280d0",
+                "state": "running",
+                "progress": {
+                  "phase": "sleeping",
+                  "percent": 100
+                }
+              }
+            ]
+          },
+          "operator.exclusiveSleep": {
+            "begin": {
+              "id": "541ad53357d047fd4708eac03aa3e930268e7205ff815448efc513e2acb50e7f",
+              "state": "running",
+              "exclusive": true
+            },
+            "canonical": "{\"seconds\":2}",
+            "final": {
+              "id": "541ad53357d047fd4708eac03aa3e930268e7205ff815448efc513e2acb50e7f",
+              "state": "completed",
+              "unverified": true
+            },
+            "progress": [
+              {
+                "id": "541ad53357d047fd4708eac03aa3e930268e7205ff815448efc513e2acb50e7f",
+                "state": "running",
+                "progress": {
+                  "phase": "sleeping",
+                  "percent": 50
+                },
+                "exclusive": true
+              },
+              {
+                "id": "541ad53357d047fd4708eac03aa3e930268e7205ff815448efc513e2acb50e7f",
+                "state": "running",
+                "progress": {
+                  "phase": "sleeping",
+                  "percent": 100
+                },
+                "exclusive": true
+              }
+            ]
+          },
+          "authorize_deny": {
+            "id": "b4c066d3676f56f8e6a78a00d9762a1ac7c2ad3b41c62e4843876a2c303dd1cf",
+            "state": "failed",
+            "error": "host_denied"
+          },
+          "authorize_nonBoolean": {
+            "id": "c8e14ef0376d57973b039c621d013bb5606951bcde38588f4e9304dbebf94c2a",
+            "state": "failed",
+            "error": "host_denied"
+          },
+          "authorize_throws": {
+            "id": "7fb6ef65dc4cd881789ffd8901ebe7580a79e95b7bfe58307d33e88f561ca97b",
+            "state": "failed",
+            "error": "host_denied"
+          },
+          "authorize_allow": {
+            "id": "c9b4313570b107e8e483686392abd6fa3bbc71985bc9a6c8d41fe44f879f6262",
+            "state": "completed",
+            "unverified": true
+          }
+        }
+      },
+      {
+        "path": "/admin/auditStates",
+        "equals": [
+          "operator.sleep:running:",
+          "operator.sleep:completed:",
+          "operator.exclusiveSleep:running:",
+          "operator.exclusiveSleep:completed:",
+          "operator.noop:running:",
+          "operator.noop:failed:host_denied",
+          "operator.noop:running:",
+          "operator.noop:failed:host_denied",
+          "operator.noop:running:",
+          "operator.noop:failed:host_denied",
+          "operator.noop:running:",
+          "operator.noop:completed:"
+        ]
+      },
+      {
+        "path": "/adminLive/status",
+        "equals": "running"
+      },
+      {
+        "path": "/adminLive/error",
+        "equals": ""
+      },
+      {
+        "path": "/adminLive/sleep",
+        "equals": {
+          "progressPhase": "sleeping",
+          "state": "completed",
+          "unverified": true,
+          "sampledDuring": true
+        }
+      },
+      {
+        "path": "/adminLive/exclusive",
+        "equals": {
+          "target": "maintenance",
+          "state": "completed",
+          "pausedSamples": true,
+          "resumed": true,
+          "bands": 1,
+          "bandClosed": true
+        }
+      },
+      {
+        "path": "/adminLive/busy",
+        "equals": {
+          "status": "running",
+          "sampledAfter": true,
+          "collectorBusy": true,
+          "pauses": 1
+        }
+      },
+      {
+        "path": "/adminLive/stopped",
+        "equals": {
+          "finished": true,
+          "operatorUrlCleared": true
+        }
+      },
+      {
+        "path": "/adminLive/audit",
+        "equals": [
+          "operator.sleep:running:",
+          "operator.sleep:completed:",
+          "operator.exclusiveSleep:running:",
+          "operator.exclusiveSleep:completed:",
+          "monitor.diagnostics:running:",
+          "monitor.diagnostics:completed:",
+          "operator.sleep:running:",
+          "operator.sleep:completed:",
+          "operator.sleep:orphaned:completed"
+        ]
+      },
+      {
+        "path": "/adminLive/authorize",
+        "equals": {
+          "calls": 4,
+          "actions": [
+            "operator.sleep",
+            "operator.exclusiveSleep",
+            "monitor.diagnostics",
+            "operator.sleep"
+          ],
+          "keys": [
+            "action",
+            "actor",
+            "args",
+            "tier"
+          ],
           "private": false
         }
       },

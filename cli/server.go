@@ -4,6 +4,7 @@ import (
 	"crypto/subtle"
 	"embed"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -63,6 +64,10 @@ func (s *service) handler() http.Handler {
 					return
 				}
 				id, err := s.request()
+				if errors.Is(err, errMaintenance) {
+					http.Error(w, err.Error(), 409)
+					return
+				}
 				if err != nil {
 					http.Error(w, err.Error(), 429)
 					return

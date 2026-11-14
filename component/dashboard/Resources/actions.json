@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "actions": [
+    {"id": "operator.noop", "tier": "A", "scope": "any", "deadlineMs": 30000, "exclusive": false, "progress": false, "verify": "none", "approval": "operator", "transport": "any",
+      "args": {"note": {"type": "text", "pattern": "^[A-Za-z0-9 _.-]{1,32}$"}}},
+    {"id": "operator.sleep", "tier": "A", "scope": "any", "deadlineMs": 30000, "exclusive": false, "progress": true, "verify": "none", "approval": "operator", "transport": "any",
+      "args": {"seconds": {"type": "integer", "min": 1, "max": 20}}},
+    {"id": "operator.exclusiveSleep", "tier": "A", "scope": "any", "deadlineMs": 20000, "exclusive": true, "progress": true, "verify": "none", "approval": "operator", "transport": "any",
+      "args": {"seconds": {"type": "integer", "min": 1, "max": 10}}},
+    {"id": "monitor.cadence", "tier": "A", "scope": "any", "deadlineMs": 30000, "exclusive": false, "progress": false, "verify": "cli", "approval": "operator", "transport": "any",
+      "args": {"seconds": {"type": "integer", "enum": [2, 5, 10]}}},
+    {"id": "monitor.diagnostics", "tier": "A", "scope": "any", "deadlineMs": 30000, "exclusive": false, "progress": false, "verify": "cli", "approval": "operator", "transport": "any",
+      "args": {}}
+  ]
+}

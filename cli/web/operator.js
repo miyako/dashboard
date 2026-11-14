@@ -42,24 +42,44 @@ const DashboardOperator = (() => {
   }
   const labels = {
     'operator.noop': 'No-op (changes nothing)',
+    'operator.sleep': 'Test: timed no-op',
+    'operator.exclusiveSleep': 'Test: timed no-op that pauses sampling',
     'monitor.cadence': 'Sampling interval',
     'monitor.diagnostics': 'Monitor diagnostics',
   };
-  function argsFor(action, fields) {
-    if (action === 'operator.noop') return noopArgs(fields.note);
-    if (action === 'monitor.cadence') {
-      const seconds = Number(fields.seconds);
-      if (![2, 5, 10].includes(seconds)) throw new Error('Interval must be 2, 5 or 10 seconds');
-      return { seconds };
+  // Builds arguments from the catalog's closed specs (text pattern, integer enum or range); the server re-validates.
+  function argsFromSpec(entry, fields) {
+    const args = {};
+    for (const [name, spec] of Object.entries(entry.args || {})) {
+      const raw = fields[name];
+      if (spec.type === 'text') {
+        if (typeof raw !== 'string' || !new RegExp(spec.pattern).test(raw)) throw new Error(`${name}: invalid value`);
+        args[name] = raw;
+      } else if (spec.type === 'integer') {
+        const n = Number(raw);
+        const ok = Number.isInteger(n) && String(raw).trim() !== '' && (spec.enum ? spec.enum.includes(n) : n >= spec.min && n <= spec.max);
+        if (!ok) throw new Error(spec.enum ? `${name} must be one of ${spec.enum.join(', ')}` : `${name} must be ${spec.min} to ${spec.max}`);
+        args[name] = n;
+      } else throw new Error(`${name}: unsupported argument type`);
     }
-    if (action === 'monitor.diagnostics') return {};
-    throw new Error('Unknown action');
+    return args;
+  }
+  const builtIn = {
+    'operator.noop': { args: { note: { type: 'text', pattern: '^[A-Za-z0-9 _.-]{1,32}$' } } },
+    'monitor.cadence': { args: { seconds: { type: 'integer', enum: [2, 5, 10] } } },
+    'monitor.diagnostics': { args: {} },
+  };
+  function argsFor(action, fields, entry = builtIn[action]) {
+    if (!entry) throw new Error('Unknown action');
+    return argsFromSpec(entry, fields);
   }
   function reason(code) { return reasons[code] || code || ''; }
   function describe(record) {
     let text = `${record.action}: ${states[record.state] || record.state}`;
     if (record.error) text += ` (${reason(record.error)})`;
     if (record.lateState) text += `; 4D later reported ${record.lateState} (not applied)`;
+    if (record.state === 'running' && record.progress) text += ` (${record.progress.phase} ${record.progress.percent}%)`;
+    if (record.state === 'completed' && record.unverified) text += ' (unverified: no observable effect to check)';
     if (record.action === 'monitor.cadence' && record.result) text += `; sampling every ${record.result.seconds} s`;
     return text;
   }
@@ -67,6 +87,8 @@ const DashboardOperator = (() => {
     const args = confirmation.args || {};
     if (confirmation.action === 'monitor.cadence') return `Change the sampling interval to ${args.seconds} s for this run (resets to 2 s on restart)`;
     if (confirmation.action === 'monitor.diagnostics') return 'Collect monitor diagnostics (counters only)';
+    if (confirmation.action === 'operator.sleep') return `Run a ${args.seconds} s test no-op on the 4D executor`;
+    if (confirmation.action === 'operator.exclusiveSleep') return `Run a ${args.seconds} s test no-op that pauses sampling (viewers see maintenance)`;
     return `${confirmation.action} with note "${args.note}"`;
   }
   function cadence(status) {
@@ -89,6 +111,6 @@ const DashboardOperator = (() => {
   }
   function headers() { return { 'Content-Type': 'application/json', 'X-Dashboard-Action': 'operator' }; }
   function newestFirst(records) { return [...records].sort((a, b) => b.requestedAt.localeCompare(a.requestedAt)); }
-  return { tokens, noopArgs, argsFor, labels, reason, describe, summary, cadence, diagnosticRows, secondsLeft, headers, newestFirst };
+  return { tokens, noopArgs, argsFor, argsFromSpec, labels, reason, describe, summary, cadence, diagnosticRows, secondsLeft, headers, newestFirst };
 })();
 if (typeof module !== 'undefined') module.exports = DashboardOperator;

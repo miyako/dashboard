@@ -2,6 +2,8 @@ property worker : 4D.SystemWorker
 property currentDirectory : 4D.Folder
 property state; options; event; monitor : Object
 property operator : cs._DashboardOperator
+property authorize : 4D.Function
+property busy : Integer
 property target; buffer; epoch; diagnostic; callbackWorker; transportError : Text
 property sequence : Real
 property closing; finalized : Boolean
@@ -18,6 +20,7 @@ Class constructor($target : Text; $options : Object; $state : Object; $event : O
 	This.epoch:=$state.epoch
 	This.callbackWorker:="Dashboard.callbacks."+This.epoch
 	This.sequence:=0
+	This.busy:=0
 	This.closing:=False
 	This.finalized:=False
 
@@ -68,6 +71,9 @@ Function launch()
 			return
 		End if
 		This.operator:=cs._DashboardOperator.new($operator.actions; This.epoch; cs._DashboardOperator.new().defaultFolder())
+		If (Value type($operator.authorize)=Is object)
+			This.authorize:=$operator.authorize
+		End if
 		$command+=" --operator-actions "+$adapter.quote($operator.actions.join(","))
 	End if
 	For each ($argument; OB Keys(This.options))
@@ -89,15 +95,21 @@ Function launch()
 	End if
 	This.sample(True)
 
-Function sample($initial : Boolean)
+Function sample($initial : Boolean)->$ok : Boolean
 	var $signal : 4D.Signal
 	var $payload : Object
+	$ok:=False
 	$signal:=New signal
 	CALL WORKER(This.callbackWorker; "_DashboardSample"; "sample"; This.state; This.event; This.monitor; $signal; "")
 	If (Not($signal.wait(5)))
-		This.fail("Dashboard collection timed out")
+		// One slow sample is not fatal: the refresh is answered collector_busy. Six in a row (about 30 s) are.
+		This.busy+=1
+		If ($initial | (This.busy>=6))
+			This.fail("Dashboard collection timed out")
+		End if
 		return
 	End if
+	This.busy:=0
 	If (Value type($signal.error)=Is text)
 		This.fail("Dashboard collection failed: "+$signal.error)
 		return
@@ -106,6 +118,7 @@ Function sample($initial : Boolean)
 		return
 	End if
 	$payload:=JSON Parse($signal.payload)
+	$ok:=True
 	If ($initial)
 		If (This.operator#Null)
 			This.send("hello"; New object("info"; $payload.info; "operator"; New object("version"; 1; "actions"; This.operator.actions.copy())))
@@ -255,7 +268,14 @@ Function onData($worker : 4D.SystemWorker; $event : Object)
 					This.stop()
 					return
 				End if
-				This.sample(False)
+				If (Not(This.sample(False)))
+					If (This.closing | (This.state.status="failed"))
+						return
+					End if
+					This.send("result"; New object("id"; $message.id; "ok"; False; "error"; "collector_busy"))
+					$position:=Position(Char(10); This.buffer; *)
+					continue
+				End if
 				If (This.closing | (This.state.status="failed"))
 					return
 				End if
@@ -281,10 +301,8 @@ Function onData($worker : 4D.SystemWorker; $event : Object)
 					return
 				End if
 				If ($begun.frame.state="running")
-					This.send("actionState"; This.operator.complete($message; $begun.record))
-					If (This.closing | (This.state.status="failed"))
-						return
-					End if
+					// Never execute on .workers: hand off to the cooperative executor and keep serving the pipe.
+					CALL WORKER("Dashboard.admin."+This.epoch; "_DashboardAdmin"; "run"; This.epoch; $message; $begun.record; $begun.entry; $begun.canonical; This.operator.actions; This.operator.folder.platformPath; This.authorize)
 				End if
 			Else
 				This.fail("Unknown dashboard message")
@@ -399,6 +417,10 @@ Function finish()
 		return
 	End if
 	This.finalized:=True
+	If (This.operator#Null)
+		// Queued after any running action; a result arriving after this is audited as orphaned.
+		CALL WORKER("Dashboard.admin."+This.epoch; "_DashboardAdmin"; "stop")
+	End if
 	If (Not(This.state.forceDrain))
 		_DashboardWorker("release"; ""; New object; This.state; New object; New object)
 	End if
