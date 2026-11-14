@@ -28,3 +28,19 @@ test('confirmation countdown and ordering', () => {
   assert.equal(ordered[0].requestedAt, '2026-11-14T00:00:02Z');
   assert.deepEqual(operator.headers(), { 'Content-Type': 'application/json', 'X-Dashboard-Action': 'operator' });
 });
+
+test('monitor action arguments match the server catalog', () => {
+  assert.deepEqual(operator.argsFor('monitor.cadence', { seconds: '5' }), { seconds: 5 });
+  for (const bad of ['1', '3', '', '5.5']) assert.throws(() => operator.argsFor('monitor.cadence', { seconds: bad }));
+  assert.deepEqual(operator.argsFor('monitor.diagnostics', { note: 'ignored' }), {});
+  assert.throws(() => operator.argsFor('monitor.restart', {}));
+});
+
+test('cadence and diagnostics are described without overstating', () => {
+  assert.match(operator.summary({ action: 'monitor.cadence', args: { seconds: 10 } }), /10 s for this run/);
+  assert.equal(operator.cadence({ cadence: { seconds: 5, observedIntervalsMs: [5003, 4998] } }), 'Sampling every 5 s; measured 5.0, 5.0 s.');
+  assert.match(operator.cadence({ cadence: { seconds: 2, observedIntervalsMs: [] } }), /no interval measured yet/);
+  assert.match(operator.describe({ action: 'monitor.cadence', state: 'failed', error: 'outcome_unknown', lateState: 'completed' }), /not applied/);
+  const rows = operator.diagnosticRows({ cadence: { seconds: 5 }, actionStates: { completed: 2 }, viewers: 1 });
+  assert.deepEqual(rows, [['cadence', '5 s'], ['actionStates', 'completed 2'], ['viewers', '1']]);
+});

@@ -69,6 +69,7 @@ type actionRecord struct {
 	State     string `json:"state"`
 	Error     string `json:"error,omitempty"`
 	LateState string `json:"lateState,omitempty"`
+	Result    any    `json:"result,omitempty"`
 	Requested string `json:"requestedAt"`
 	Updated   string `json:"updatedAt"`
 	actor     string
@@ -252,6 +253,10 @@ func (s *service) applyActionStateLocked(m message) error {
 			o.late++ // duplicate running frame; no state change
 		default:
 			o.finish(r, m.State, m.Error, now)
+			if m.State == "completed" {
+				// Only an in-time completion is applied; a late one never is.
+				s.applyCompletedLocked(r, now)
+			}
 		}
 		return nil
 	}
@@ -407,7 +412,7 @@ func (s *service) operatorStatusLocked(w http.ResponseWriter, session *operatorS
 	if absolute := session.created.Add(operatorAbsolute); absolute.Before(expires) {
 		expires = absolute
 	}
-	operatorJSON(w, 200, map[string]any{"actions": s.op.caps().Actions, "generation": s.op.generation,
+	operatorJSON(w, 200, map[string]any{"actions": s.op.caps().Actions, "generation": s.op.generation, "cadence": s.cadenceLocked(),
 		"busy": s.op.inflight != nil, "target": s.current.Status, "sessionExpiresAt": stamp(expires),
 		"confirmations": confirmations, "records": records})
 }

@@ -137,28 +137,12 @@ func run(args []string, input io.Reader, output, diagnostic io.Writer) error {
 	if err := service.emit(ready); err != nil {
 		return err
 	}
-	ticker := time.NewTicker(2 * time.Second)
-	defer ticker.Stop()
 	defer func() {
 		timeout, stop := context.WithTimeout(context.Background(), 2*time.Second)
 		defer stop()
 		_ = server.Shutdown(timeout)
 	}()
-	for {
-		select {
-		case <-ctx.Done():
-			return nil
-		case err := <-failures:
-			return err
-		case <-ticker.C:
-			service.expire()
-			if service.initialized() {
-				if _, err := service.request(); err != nil && !errors.Is(err, errBusy) {
-					return err
-				}
-			}
-		}
-	}
+	return service.schedule(ctx, failures)
 }
 
 func main() {

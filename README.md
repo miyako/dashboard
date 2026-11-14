@@ -205,13 +205,18 @@ authorization system. Do not expose it directly to the public internet.
 
 ### Operator mode (off by default)
 
-Operator mode is the safety substrate for future write actions. It is **off**
-unless host code opts in, and this release enables **no action that changes
-anything**: the only catalog entry, `operator.noop`, exists to prove the
-pipeline.
+Operator mode is **off** unless host code opts in, listing exactly which
+actions an operator may use. The closed catalog has three monitor-level
+actions; none administers the database or server:
+
+| Action | Effect |
+| --- | --- |
+| `operator.noop` | Nothing; proves the pipeline |
+| `monitor.cadence` | Sampling interval of 2, 5 or 10 s for this run (default 2 s, never faster) |
+| `monitor.diagnostics` | Operator-only snapshot of 20 sanitized monitor counters |
 
 ```4d
-$monitor.start(New object("operator"; New object("actions"; New collection("operator.noop"))); $event)
+$monitor.start(New object("operator"; New object("actions"; New collection("monitor.cadence"; "monitor.diagnostics"))); $event)
 ```
 
 - The CLI mints a second, independent operator token. `onStatus` (and the
@@ -230,6 +235,9 @@ $monitor.start(New object("operator"; New object("actions"; New collection("oper
   `Logs/dashboard/audit.jsonl` (rotated at 1 MiB, 4 files), as hashed IDs
   and argument digests only. If the audit record cannot be written, nothing
   runs.
+- Monitor actions take effect only after 4D validates and audits them and
+  reports `completed` in time. Operator status then shows the cadence and
+  the **measured** intervals between samples.
 - Viewers see nothing new. Operator status goes only to that operator session.
 
 The full contract is in [docs/operator-actions.md](docs/operator-actions.md).
@@ -512,7 +520,7 @@ the browser distinguishes stale, waiting and disconnected states.
 | Invocation | Result |
 | --- | --- |
 | `dashboard serve` | Authenticated loopback server; lifecycle tied to stdin |
-| `dashboard serve --operator-actions operator.noop` | Same, with opt-in operator mode for the listed catalog actions |
+| `dashboard serve --operator-actions monitor.cadence,monitor.diagnostics` | Same, with opt-in operator mode for the listed catalog actions |
 | `dashboard --version` | `{"protocol":1,"version":"0.1.5"}` + LF |
 | `dashboard inspect --text "literal"` | Protocol/argument probe: `{"protocol":1,"text":"literal"}` + LF |
 | Invalid arguments/protocol | Exit 2; structured error diagnostics on stderr |

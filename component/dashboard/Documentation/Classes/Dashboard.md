@@ -32,8 +32,10 @@ Options: `listen` (IP:port), `allowLAN` (Boolean), `tls-cert`, `tls-key`
 (absolute paths), `operator` (object). Default authenticated `127.0.0.1:0`; LAN
 requires explicit opt-in and valid TLS. Unknown/invalid options fail explicitly.
 
-`operator` is off unless given, as `New object("actions"; New collection("operator.noop"))`:
-1 to 8 unique IDs from the closed catalog, whose only entry is a no-op. When it
+`operator` is off unless given, as `New object("actions"; New collection("monitor.cadence"))`:
+1 to 8 unique IDs from the closed catalog: `operator.noop` (changes nothing),
+`monitor.cadence` (sampling every 2, 5 or 10 s for this run; never faster than
+the 2 s default) and `monitor.diagnostics` (sanitized monitor counters). When it
 is enabled, the status and shared state carry a separate secret `operatorUrl`
 (cleared on stop). Each dispatched action is audited in the host's
 `Logs/dashboard/audit.jsonl`, and nothing runs if that write fails. See
