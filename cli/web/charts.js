@@ -59,6 +59,29 @@ const DashboardCharts = (() => {
     else if (!starts.length) note += ' Nothing recorded for this range yet.';
     return note + ' Cards show latest live values; process and session timelines stay live.';
   }
+  // Status flags that seldom change live on Instance information, still updated every sample (#17).
+  const instanceStatusIDs = ['datastore.adminProtected', 'datastore.locked', 'web.running'];
+  // Which view a metric card belongs to; null hides it. Retained-license records exist only on 4D Server.
+  function placement(metric, role) {
+    if (metric.id.startsWith('license.usage.') && role !== 'server') return null;
+    if (metric.kind === 'static' || metric.id === 'app.uptime' || instanceStatusIDs.includes(metric.id)) return 'static-metrics';
+    if (metric.id.startsWith('database.')) return 'database-metrics';
+    if (metric.id.startsWith('process.')) return 'process-trends';
+    if (metric.id.startsWith('session.')) return 'session-trends';
+    return 'metrics';
+  }
+  // Live graphs glide left between redraws: the plot moves as time passes since it was drawn.
+  function scrollOffset(drawnAt, now, span) { return -Math.max(0, now - drawnAt) * 524 / span; }
+  const refreshReasons = {
+    collector_timeout: '4D did not answer within 10 s',
+    collector_busy: '4D was busy collecting; try again',
+  };
+  // Only the refresh this browser requested produces a notification; scheduled samples never do.
+  function refreshOutcome(lastAction, pendingId) {
+    if (!pendingId || !lastAction || lastAction.id !== pendingId) return null;
+    return lastAction.ok ? { kind: 'ok', text: 'Sample refreshed' }
+      : { kind: 'fail', text: `Refresh failed: ${refreshReasons[lastAction.error] || lastAction.error || 'unknown error'}` };
+  }
   function fromRaw(points) { return points.map(p => ({ at: p.at, value: p.value })); }
   // Minute buckets are drawn at their midpoint; empty buckets are gaps, never zero.
   function fromMinute(points, mode) {
@@ -141,6 +164,6 @@ const DashboardCharts = (() => {
         ? null : values.reduce((sum, e) => sum + e.cpu * 100, 0) };
     });
   }
-  return { windowMs, ranges, resolution, view, historyQuery, rangeNote, fromRaw, fromMinute, hasGraph, overlaps, mirrors, integerUnit, rate, plot, band, overlay, mirror, entities, cpu };
+  return { windowMs, ranges, resolution, view, historyQuery, rangeNote, instanceStatusIDs, placement, scrollOffset, refreshOutcome, fromRaw, fromMinute, hasGraph, overlaps, mirrors, integerUnit, rate, plot, band, overlay, mirror, entities, cpu };
 })();
 if (typeof module !== 'undefined') module.exports = DashboardCharts;
