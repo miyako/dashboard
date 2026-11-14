@@ -16,18 +16,20 @@ from pathlib import Path
 
 def classify(returncode, status, names):
     """Map a probe run to a per-case outcome: passed, error, crashed or not_run."""
-    results = {}
+    results, values = {}, {}
     cases = (status or {}).get("cases", {})
     started = (status or {}).get("started", "")
     for name in names:
         if name in cases:
             results[name] = cases[name]["status"]
+            if "value" in cases[name]:
+                values[name] = cases[name]["value"]
         elif name == started and returncode != 0:
             results[name] = "crashed"
         else:
             results[name] = "not_run"
     finished = bool((status or {}).get("finished")) and returncode == 0
-    return {"finished": finished, "returncode": returncode, "cases": results,
+    return {"finished": finished, "returncode": returncode, "cases": results, "values": values,
             "crashed": [n for n, r in results.items() if r == "crashed"]}
 
 

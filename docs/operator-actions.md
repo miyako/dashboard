@@ -198,7 +198,19 @@ See `docs/admin-actions-design.md`. Changes to this contract:
   throwaway tool4d project and reports `passed`, `error`, `crashed` or
   `not_run` per case. A crash keeps a command out of the catalog.
 
-## 9. Never
+## 9. A1: cache actions (issue #18)
+
+| Action | Tier | Args | Effect | Verify |
+| --- | --- | --- | --- | --- |
+| `cache.flush` | A | `{}` | `FLUSH CACHE` in its plain form: writes pending changes to disk and keeps the cache. The size and `*` forms are documented as reserved for testing and are never used | `none`: completes as `unverified` |
+| `cache.size` | **B** (first tier B action) | `{"sizeMiB": 100..1048576}` | `SET CACHE SIZE`, applied immediately. **Lowering** is always allowed down to 4D's 100 MiB floor. **Raising** is capped at 75% of physical memory and refused otherwise (`cache_size_policy`), with nothing changed | `native`: `Get cache size` must equal the request within 1 MiB, or the action fails `postcondition_unmet` |
+
+- Both have scope `local`: 4D refuses them in remote mode, so listing them on a remote client fails `start()`.
+- `cache.size` requires the host's `authorize` formula. Listing it without one fails `start()`, and an action reaching the executor without one is `host_denied`.
+- Probe on tool4d 21.1 (no crash): raising is exact, requests below 100 MiB come back as exactly 100 MiB, and `Cache info.maxMem` equals `Get cache size`, so the `cache.maxMem` metric shows the result.
+- Not offered: `REFRESH LICENSE`. License operations stay out of scope (owner decision on #18).
+
+## 10. Never
 
 No arbitrary method, formula, SQL, shell, file, PID, session or selector
 execution. No action results in SSE: viewers see nothing new. Operator status

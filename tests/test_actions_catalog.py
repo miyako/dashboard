@@ -40,7 +40,7 @@ class ProbeClassificationTests(unittest.TestCase):
 
     def test_clean_run_and_missing_status(self):
         status = {"finished": True, "started": "", "cases": {"a": {"status": "error"}}}
-        self.assertEqual(probe_native.classify(0, status, ["a"]), {"finished": True, "returncode": 0, "cases": {"a": "error"}, "crashed": []})
+        self.assertEqual(probe_native.classify(0, status, ["a"]), {"finished": True, "returncode": 0, "cases": {"a": "error"}, "values": {}, "crashed": []})
         self.assertEqual(probe_native.classify(1, None, ["a"])["cases"], {"a": "not_run"})
 
 

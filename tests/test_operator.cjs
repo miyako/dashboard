@@ -53,3 +53,13 @@ test('catalog specs drive argument building for any action', () => {
   assert.match(operator.describe({ action: 'operator.sleep', state: 'running', progress: { phase: 'sleeping', percent: 50 } }), /sleeping 50%/);
   assert.match(operator.describe({ action: 'operator.noop', state: 'completed', unverified: true }), /unverified/);
 });
+
+test('cache actions describe their effect and refusals plainly', () => {
+  assert.match(operator.summary({ action: 'cache.size', args: { sizeMiB: 2048 } }), /2048 MiB.*host application must approve/);
+  assert.match(operator.summary({ action: 'cache.flush', args: {} }), /pending database changes to disk/);
+  assert.match(operator.describe({ action: 'cache.size', state: 'failed', error: 'cache_size_policy' }), /75% of physical memory/);
+  assert.match(operator.describe({ action: 'cache.size', state: 'failed', error: 'host_denied' }), /did not approve/);
+  const size = { args: { sizeMiB: { type: 'integer', min: 100, max: 1048576 } } };
+  assert.deepEqual(operator.argsFor('cache.size', { sizeMiB: '2048' }, size), { sizeMiB: 2048 });
+  assert.throws(() => operator.argsFor('cache.size', { sizeMiB: '99' }, size));
+});

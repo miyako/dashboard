@@ -34,6 +34,10 @@ For each ($case; $request.cases)
 		$status.cases[$case.name]:=New object("status"; "error"; "codes"; Probe_Errors.extract("errCode"))
 	Else
 		$status.cases[$case.name]:=New object("status"; "passed"; "resultType"; Value type($result))
+		If ((Value type($result)=Is real) | (Value type($result)=Is longint) | (Value type($result)=Is boolean))
+			// Scalars only: probe snippets must never return private text or objects.
+			$status.cases[$case.name].value:=$result
+		End if
 	End if
 	$status.started:=""
 	$statusFile.setText(JSON Stringify($status))

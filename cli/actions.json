@@ -10,6 +10,10 @@
     {"id": "monitor.cadence", "tier": "A", "scope": "any", "deadlineMs": 30000, "exclusive": false, "progress": false, "verify": "cli", "approval": "operator", "transport": "any",
       "args": {"seconds": {"type": "integer", "enum": [2, 5, 10]}}},
     {"id": "monitor.diagnostics", "tier": "A", "scope": "any", "deadlineMs": 30000, "exclusive": false, "progress": false, "verify": "cli", "approval": "operator", "transport": "any",
-      "args": {}}
+      "args": {}},
+    {"id": "cache.flush", "tier": "A", "scope": "local", "deadlineMs": 60000, "exclusive": false, "progress": false, "verify": "none", "approval": "operator", "transport": "any",
+      "args": {}},
+    {"id": "cache.size", "tier": "B", "scope": "local", "deadlineMs": 60000, "exclusive": false, "progress": false, "verify": "native", "approval": "operator+host", "transport": "tls_or_loopback_only",
+      "args": {"sizeMiB": {"type": "integer", "min": 100, "max": 1048576}}}
   ]
 }

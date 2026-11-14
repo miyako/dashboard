@@ -33,6 +33,19 @@ func dispatch(t *testing.T, s *service, c *client, action, args string) string {
 	return id
 }
 
+func hostIs(host string) func(*http.Request) { return func(r *http.Request) { r.Host = host } }
+
+func loginAt(t *testing.T, s *service, host string) *client {
+	t.Helper()
+	c := &client{s: s}
+	w := c.call("POST", "session", `{"token":"`+s.op.token+`"}`, hostIs(host))
+	if w.Code != 204 {
+		t.Fatal(w.Code, w.Body)
+	}
+	c.operator = w.Result().Cookies()[0].Value
+	return c
+}
+
 func stateFrame(s *service, id, state string, mutate func(*message)) error {
 	m := frame("actionState", s.current.Seq+1)
 	m.ID, m.State = id, state
@@ -43,7 +56,7 @@ func stateFrame(s *service, id, state string, mutate func(*message)) error {
 }
 
 func TestCatalogFileIsValidAndStrict(t *testing.T) {
-	if len(catalogEntries) != 5 || entryFor("operator.exclusiveSleep").deadline() != 20*time.Second || !entryFor("operator.exclusiveSleep").Exclusive {
+	if len(catalogEntries) != 7 || entryFor("operator.exclusiveSleep").deadline() != 20*time.Second || !entryFor("operator.exclusiveSleep").Exclusive {
 		t.Fatal(catalogIDs())
 	}
 	base := `{"id":"x.y","tier":"A","scope":"any","deadlineMs":5000,"exclusive":false,"progress":false,"verify":"none","approval":"operator","transport":"any","args":%s}`

@@ -25,6 +25,9 @@ const DashboardOperator = (() => {
     audit_unavailable: 'audit log unavailable; nothing ran',
     audit_incomplete: 'completed, but the final audit record could not be written',
     rate_limited: 'too many requests; wait a minute',
+    cache_size_policy: 'refused: raising the cache above 75% of physical memory',
+    host_denied: 'the host application did not approve it',
+    postcondition_unmet: 'the command ran but 4D did not report the requested state',
     confirmation_limit: 'too many pending confirmations',
     target_unavailable: '4D is not reporting; try again when the stream is live',
     action_not_enabled: 'this action is not enabled by the host',
@@ -46,6 +49,8 @@ const DashboardOperator = (() => {
     'operator.exclusiveSleep': 'Test: timed no-op that pauses sampling',
     'monitor.cadence': 'Sampling interval',
     'monitor.diagnostics': 'Monitor diagnostics',
+    'cache.flush': 'Flush cache to disk',
+    'cache.size': 'Set cache size (needs host approval)',
   };
   // Builds arguments from the catalog's closed specs (text pattern, integer enum or range); the server re-validates.
   function argsFromSpec(entry, fields) {
@@ -87,6 +92,8 @@ const DashboardOperator = (() => {
     const args = confirmation.args || {};
     if (confirmation.action === 'monitor.cadence') return `Change the sampling interval to ${args.seconds} s for this run (resets to 2 s on restart)`;
     if (confirmation.action === 'monitor.diagnostics') return 'Collect monitor diagnostics (counters only)';
+    if (confirmation.action === 'cache.flush') return 'Write all pending database changes to disk now (the cache stays in memory)';
+    if (confirmation.action === 'cache.size') return `Set the database cache to ${args.sizeMiB} MiB, effective immediately (the host application must approve; raising is capped at 75% of physical memory)`;
     if (confirmation.action === 'operator.sleep') return `Run a ${args.seconds} s test no-op on the 4D executor`;
     if (confirmation.action === 'operator.exclusiveSleep') return `Run a ${args.seconds} s test no-op that pauses sampling (viewers see maintenance)`;
     return `${confirmation.action} with note "${args.note}"`;

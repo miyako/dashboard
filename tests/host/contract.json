@@ -2730,6 +2730,8 @@
       {
         "path": "/admin/catalogIds",
         "equals": [
+          "cache.flush",
+          "cache.size",
           "monitor.cadence",
           "monitor.diagnostics",
           "operator.exclusiveSleep",
@@ -2860,6 +2862,109 @@
           "operator.noop:running:",
           "operator.noop:completed:"
         ]
+      },
+      {
+        "path": "/cache",
+        "equals": {
+          "validate": {
+            "sizeWithoutAuthorize": {
+              "ok": false,
+              "error": "tier B and C actions require an authorize callback"
+            },
+            "sizeWithAuthorize": true,
+            "flushAlone": true
+          },
+          "execute": {
+            "flush": {
+              "state": "completed",
+              "unverified": true
+            },
+            "raise": {
+              "state": "completed"
+            },
+            "lowerToFloor": {
+              "state": "completed"
+            },
+            "overPolicy": {
+              "state": "failed",
+              "error": "cache_size_policy"
+            },
+            "noAuthorize": {
+              "state": "failed",
+              "error": "host_denied"
+            },
+            "denied": {
+              "state": "failed",
+              "error": "host_denied"
+            },
+            "restore": {
+              "state": "completed"
+            }
+          },
+          "sizes": {
+            "raise": true,
+            "lowerToFloor": true,
+            "restore": true
+          },
+          "restored": true,
+          "badArgs": "Invalid dashboard action arguments",
+          "auditStates": [
+            "cache.flush:running:",
+            "cache.flush:completed:",
+            "cache.size:running:",
+            "cache.size:completed:",
+            "cache.size:running:",
+            "cache.size:completed:",
+            "cache.size:running:",
+            "cache.size:failed:cache_size_policy",
+            "cache.size:running:",
+            "cache.size:failed:host_denied",
+            "cache.size:running:",
+            "cache.size:failed:host_denied",
+            "cache.size:running:",
+            "cache.size:completed:"
+          ]
+        }
+      },
+      {
+        "path": "/cacheLive",
+        "equals": {
+          "rejected": {
+            "status": "failed",
+            "error": "tier B and C actions require an authorize callback"
+          },
+          "status": "running",
+          "raise": {
+            "state": "completed",
+            "error": "",
+            "applied": true
+          },
+          "overPolicy": {
+            "state": "failed",
+            "error": "cache_size_policy",
+            "unchanged": true
+          },
+          "restore": {
+            "state": "completed",
+            "restored": true
+          },
+          "flush": {
+            "state": "completed",
+            "unverified": true
+          },
+          "authorizeCalls": [
+            "cache.size",
+            "cache.size",
+            "cache.size",
+            "cache.flush"
+          ],
+          "authorizeTiers": [
+            "B",
+            "B",
+            "B",
+            "A"
+          ]
+        }
       },
       {
         "path": "/abandonedSample",
