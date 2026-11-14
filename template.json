@@ -6,6 +6,6 @@
   "cli": "dashboard",
   "language": "go",
   "feature": "Read-only web dashboard for local 4D instance metrics over a versioned streaming protocol",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "feature_class": "Dashboard"
 }
