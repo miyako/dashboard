@@ -109,10 +109,11 @@ type service struct {
 	clients               map[chan []byte]bool
 	op                    *operator
 	mon                   monitorState
+	hist                  *history
 }
 
 func newService(origin, token string) *service {
-	return &service{origin: origin, token: token, cookie: nonce(), out: make(chan any, 64), clients: make(map[chan []byte]bool), mon: newMonitorState(),
+	return &service{origin: origin, token: token, cookie: nonce(), out: make(chan any, 64), clients: make(map[chan []byte]bool), mon: newMonitorState(), hist: newHistory(),
 		current: state{Status: "waiting", Info: map[string]string{}, Metrics: map[string]metric{}, Processes: map[string]entity{}, Sessions: map[string]entity{}, History: map[string][]point{}}}
 }
 
@@ -446,6 +447,7 @@ func (s *service) apply(m message) error {
 					n := v.Value.(float64)
 					value = &n
 				}
+				s.hist.record(v, at, value)
 				h := append(s.current.History[v.ID], point{m.SampledAt, value})
 				if len(h) > 60 {
 					h = h[len(h)-60:]

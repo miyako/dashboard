@@ -999,6 +999,49 @@ If ($mcService.status="running")
 		End if
 	End for each
 	$report.monitorLive.audit:=$mcAuditStates
+	// M5: the shared in-memory history, read back over HTTP from the real CLI.
+	var $hsFrom; $hsTo; $hsQuery : Text
+	var $hsRaw; $hsMinute : Object
+	var $hsBucket : Object
+	var $hsBucketTotal : Integer
+	// Time + Number is a Number in 4D: convert back to Time and roll the date across midnight.
+	var $hsDate : Date
+	var $hsSeconds : Integer
+	$hsDate:=Current date
+	$hsSeconds:=Current time+60
+	If ($hsSeconds>=86400)
+		$hsDate:=$hsDate+1
+		$hsSeconds:=$hsSeconds-86400
+	End if
+	$hsTo:=String($hsDate; ISO date GMT; Time($hsSeconds))
+	$hsDate:=Current date
+	$hsSeconds:=Current time-1800
+	If ($hsSeconds<0)
+		$hsDate:=$hsDate-1
+		$hsSeconds:=$hsSeconds+86400
+	End if
+	$hsFrom:=String($hsDate; ISO date GMT; Time($hsSeconds))
+	$hsQuery:="metric=process.count&from="+$hsFrom+"&to="+$hsTo
+	$report.monitorLive.history:=New object("unauthenticated"; Operator_http("GET"; $mcOrigin+"/api/history?"+$hsQuery+"&resolution=raw"; New object; "").status; \
+		"badResolution"; Operator_http("GET"; $mcOrigin+"/api/history?"+$hsQuery+"&resolution=hour"; New object("Cookie"; "dashboard="+$mcCookie); "").status)
+	$hsMinute:=Operator_http("GET"; $mcOrigin+"/api/history?"+$hsQuery+"&resolution=minute"; New object("Cookie"; "dashboard="+$mcCookie); "")
+	$hsRaw:=Operator_http("GET"; $mcOrigin+"/api/history?"+$hsQuery+"&resolution=raw"; New object("Cookie"; "dashboard="+$mcCookie); "")
+	$report.monitorLive.history.raw:=$hsRaw.status
+	$report.monitorLive.history.minute:=$hsMinute.status
+	If (($hsRaw.status=200) & ($hsMinute.status=200))
+		$hsQuery:=$hsRaw.body
+		$hsRaw:=JSON Parse($hsRaw.body)
+		$hsMinute:=JSON Parse($hsMinute.body)
+		$hsBucketTotal:=0
+		For each ($hsBucket; $hsMinute.points)
+			$hsBucketTotal+=$hsBucket.count+$hsBucket.gaps
+		End for each
+		$report.monitorLive.history.kind:=$hsRaw.metric.kind
+		$report.monitorLive.history.coverage:=(Value type($hsRaw.coverage.rawSince)=Is text) & (Value type($hsMinute.coverage.minuteSince)=Is text)
+		$report.monitorLive.history.rawCoversSamples:=($hsRaw.points.length>=$mcService.samples)
+		$report.monitorLive.history.bucketsMatchRaw:=(Abs($hsBucketTotal-$hsRaw.points.length)<=1)
+		$report.monitorLive.history.private:=(Position($mcToken; $hsQuery; *)>0) | (Position($mcService.epoch; JSON Stringify($hsRaw); *)>0)
+	End if
 End if
 $mcTool.stop()
 $deadline:=Milliseconds+15000

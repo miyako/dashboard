@@ -242,6 +242,19 @@ $monitor.start(New object("operator"; New object("actions"; New collection("moni
 
 The full contract is in [docs/operator-actions.md](docs/operator-actions.md).
 
+### History ranges
+
+Besides the live two-minute view, the graphs can show **15 min, 1 h, 6 h or
+24 h**. Use **Earlier**, **Later** and **Back to live** to move through
+them. The CLI keeps one shared record in memory, whether or not a browser is
+open: every sample for the last hour, then 1-minute buckets (min, max, mean,
+last and, for counters, an elapsed-time rate) for 24 hours. It covers at most
+64 graphed metrics, about 9 MB at worst. History starts empty each time the
+dashboard starts, and nothing is written to disk or browser storage. Gaps stay
+gaps, and the chart says where recording began. Viewers fetch windows from
+`GET /api/history` (viewer login required, read-only, rate limited). The
+contract is in [docs/history.md](docs/history.md).
+
 ## What measurements mean
 
 ### Synthetic database preview

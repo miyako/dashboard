@@ -53,6 +53,8 @@ func (s *service) handler() http.Handler {
 				return
 			}
 			switch r.URL.Path {
+			case "/api/history":
+				s.historyRoute(w, r)
 			case "/api/events":
 				s.events(w, r)
 			case "/api/refresh":

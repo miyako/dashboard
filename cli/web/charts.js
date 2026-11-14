@@ -40,10 +40,38 @@ const DashboardCharts = (() => {
       return { at: sample.at, value };
     });
   }
-  function plot(samples, end, { integer = false, range } = {}) {
-    const start = end - windowMs;
+  // History ranges: live keeps the two-minute window; longer ranges read /api/history.
+  const ranges = { live: windowMs, '15m': 900000, '1h': 3600000, '6h': 21600000, '24h': 86400000 };
+  function resolution(span) { return span <= 3600000 ? 'raw' : 'minute'; }
+  function view(range, end) {
+    const span = ranges[range] || windowMs;
+    return { range, windowMs: span, end, resolution: resolution(span), gapMs: resolution(span) === 'minute' ? 90000 : 15000 };
+  }
+  function historyQuery(id, v) {
+    return new URLSearchParams({ metric: id, from: new Date(v.end - v.windowMs).toISOString(), to: new Date(v.end).toISOString(), resolution: v.resolution }).toString();
+  }
+  function rangeNote(v, coverageStarts, locale) {
+    if (v.range === 'live') return 'Live: rolling two-minute window / up to 60 actual samples. Gaps mean unavailable data, not zero. Refresh collects a new sample.';
+    const time = ms => new Date(ms).toLocaleString(locale, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    let note = `History ${time(v.end - v.windowMs)} – ${time(v.end)} / ${v.resolution === 'raw' ? 'every recorded sample' : '1-minute buckets (line: mean or rate; band: min–max)'}. Gaps mean unavailable data or no recording, not zero.`;
+    const starts = coverageStarts.filter(Boolean).map(Date.parse);
+    if (starts.length && Math.min(...starts) > v.end - v.windowMs) note += ` Recording began ${time(Math.min(...starts))} (history starts empty with each dashboard run).`;
+    else if (!starts.length) note += ' Nothing recorded for this range yet.';
+    return note + ' Cards show latest live values; process and session timelines stay live.';
+  }
+  function fromRaw(points) { return points.map(p => ({ at: p.at, value: p.value })); }
+  // Minute buckets are drawn at their midpoint; empty buckets are gaps, never zero.
+  function fromMinute(points, mode) {
+    return points.map(p => {
+      const at = new Date(Date.parse(p.at) + 30000).toISOString();
+      const value = p[mode] ?? null;
+      return mode === 'mean' ? { at, value, min: p.min ?? null, max: p.max ?? null } : { at, value };
+    });
+  }
+  function plot(samples, end, { integer = false, range, windowMs: span = windowMs, gapMs = 15000 } = {}) {
+    const start = end - span;
     const visible = samples.filter(p => Date.parse(p.at) >= start && Date.parse(p.at) <= end);
-    const values = visible.filter(p => Number.isFinite(p.value)).map(p => p.value);
+    const values = visible.flatMap(p => [p.value, p.min, p.max]).filter(Number.isFinite);
     let lo = range ? range.lo : Math.min(0, ...values), hi = range ? range.hi : Math.max(1, ...values);
     if (integer && !range) {
       const step = Math.max(1, Math.ceil((hi - lo) / 3));
@@ -53,29 +81,49 @@ const DashboardCharts = (() => {
     let previousAt;
     const path = visible.map(p => {
       if (!Number.isFinite(p.value)) { drawing = false; return ''; }
-      if (previousAt !== undefined && Date.parse(p.at) - previousAt > 15000) drawing = false;
-      const x = 56 + (Date.parse(p.at) - start) * 524 / windowMs;
+      if (previousAt !== undefined && Date.parse(p.at) - previousAt > gapMs) drawing = false;
+      const x = 56 + (Date.parse(p.at) - start) * 524 / span;
       const y = 170 - (p.value - lo) * 150 / (hi - lo);
       const point = drawing && integer ? `H${x.toFixed(2)} V${y.toFixed(2)}` : `${drawing ? 'L' : 'M'}${x.toFixed(2)},${y.toFixed(2)}`;
       drawing = true; previousAt = Date.parse(p.at);
       return point;
     }).join(' ');
-    return { path, lo, hi, start, end, count: values.length };
+    return { path, band: band(visible, start, span, gapMs, lo, hi), lo, hi, start, end, windowMs: span,
+      count: visible.filter(p => Number.isFinite(p.value)).length };
   }
-  function overlay(series, end, integer = false) {
-    const scale = plot(series.flat(), end, { integer });
-    return { scale, plots: series.map(samples => plot(samples, end, { integer, range: scale })) };
+  // Closed min-max polygons per contiguous run of buckets that carry both bounds.
+  function band(visible, start, span, gapMs, lo, hi) {
+    const runs = [];
+    let run = [], previousAt;
+    for (const p of visible) {
+      const at = Date.parse(p.at);
+      if (!Number.isFinite(p.min) || !Number.isFinite(p.max) || (previousAt !== undefined && at - previousAt > gapMs)) {
+        if (run.length) runs.push(run);
+        run = [];
+      }
+      if (Number.isFinite(p.min) && Number.isFinite(p.max)) run.push(p);
+      previousAt = at;
+    }
+    if (run.length) runs.push(run);
+    const x = p => (56 + (Date.parse(p.at) - start) * 524 / span).toFixed(2);
+    const y = v => (170 - (v - lo) * 150 / (hi - lo)).toFixed(2);
+    return runs.filter(r => r.length > 1).map(r => 'M' + r.map(p => `${x(p)},${y(p.max)}`).join(' L') +
+      ' L' + [...r].reverse().map(p => `${x(p)},${y(p.min)}`).join(' L') + ' Z').join(' ');
   }
-  function mirror(series, end, integer = false) {
+  function overlay(series, end, integer = false, options = {}) {
+    const scale = plot(series.flat(), end, { integer, ...options });
+    return { scale, plots: series.map(samples => plot(samples, end, { integer, range: scale, ...options })) };
+  }
+  function mirror(series, end, integer = false, options = {}) {
     const signed = series.map((samples, i) => samples.map(sample => ({
       ...sample, value: i === 1 && Number.isFinite(sample.value) ? -sample.value : sample.value,
     })));
-    const bounds = plot(signed.flat(), end);
+    const bounds = plot(signed.flat(), end, options);
     let magnitude = Math.max(Math.abs(bounds.lo), bounds.hi);
     if (integer) magnitude = Math.max(2, Math.ceil(magnitude / 2) * 2);
     const range = { lo: -magnitude, hi: magnitude };
-    return { scale: plot(signed.flat(), end, { range }), series: signed,
-      plots: signed.map(samples => plot(samples, end, { integer, range })) };
+    return { scale: plot(signed.flat(), end, { range, ...options }), series: signed,
+      plots: signed.map(samples => plot(samples, end, { integer, range, ...options })) };
   }
   function entities(samples, kind, id) {
     return samples.map(sample => {
@@ -93,6 +141,6 @@ const DashboardCharts = (() => {
         ? null : values.reduce((sum, e) => sum + e.cpu * 100, 0) };
     });
   }
-  return { windowMs, hasGraph, overlaps, mirrors, integerUnit, rate, plot, overlay, mirror, entities, cpu };
+  return { windowMs, ranges, resolution, view, historyQuery, rangeNote, fromRaw, fromMinute, hasGraph, overlaps, mirrors, integerUnit, rate, plot, band, overlay, mirror, entities, cpu };
 })();
 if (typeof module !== 'undefined') module.exports = DashboardCharts;

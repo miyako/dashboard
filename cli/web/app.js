@@ -1,6 +1,62 @@
 'use strict';
 const $ = id => document.getElementById(id);
 let stream, lastSample, currentState, connected = false;
+let view = DashboardCharts.view('live', Date.now()), historyGeneration = 0;
+const historyCache = new Map(), historyCoverage = new Map();
+// Samples for a graph: the live SSE window, or the fetched history window for other ranges.
+function seriesFor(state, id, kind, rateMode) {
+  if (view.range === 'live') {
+    const samples = state.history[id] || [];
+    return rateMode ? DashboardCharts.rate(samples) : samples;
+  }
+  const points = historyCache.get(id) || [];
+  if (view.resolution === 'raw') {
+    const raw = DashboardCharts.fromRaw(points);
+    return rateMode ? DashboardCharts.rate(raw) : raw;
+  }
+  return DashboardCharts.fromMinute(points, rateMode ? 'rate' : kind === 'counter' ? 'last' : 'mean');
+}
+function graphedIDs(state) {
+  return Object.values(state.metrics || {}).filter(metric => DashboardCharts.hasGraph(metric)).map(metric => metric.id);
+}
+async function loadHistory() {
+  const generation = ++historyGeneration, ids = currentState ? graphedIDs(currentState) : [];
+  historyCache.clear(); historyCoverage.clear();
+  $('range-note').textContent = 'Loading history...';
+  const queue = [...ids];
+  async function worker() {
+    while (queue.length && generation === historyGeneration) {
+      const id = queue.shift();
+      try {
+        const response = await fetch('/api/history?' + DashboardCharts.historyQuery(id, view));
+        if (!response.ok) continue;
+        const body = await response.json();
+        if (generation !== historyGeneration) return;
+        historyCache.set(id, body.points);
+        historyCoverage.set(id, view.resolution === 'raw' ? body.coverage.rawSince : body.coverage.minuteSince);
+      } catch { /* A failed window stays empty: shown as a gap, never as zero. */ }
+    }
+  }
+  await Promise.all([worker(), worker(), worker(), worker()]);
+  if (generation !== historyGeneration) return;
+  $('range-note').textContent = DashboardCharts.rangeNote(view, [...historyCoverage.values()]);
+  if (currentState) render(currentState);
+}
+function setView(range, end) {
+  view = DashboardCharts.view(range, Math.min(end, Date.now()));
+  $('range').value = range;
+  for (const id of ['range-earlier', 'range-later', 'range-live']) $(id).hidden = range === 'live';
+  $('range-later').disabled = view.end >= Date.now() - 1000;
+  if (range === 'live') {
+    historyGeneration++; historyCache.clear(); historyCoverage.clear();
+    $('range-note').textContent = DashboardCharts.rangeNote(view, []);
+    if (currentState) render(currentState);
+  } else loadHistory();
+}
+$('range').addEventListener('change', event => setView(event.target.value, Date.now()));
+$('range-earlier').addEventListener('click', () => setView(view.range, view.end - view.windowMs / 2));
+$('range-later').addEventListener('click', () => setView(view.range, view.end + view.windowMs / 2));
+$('range-live').addEventListener('click', () => setView('live', Date.now()));
 const cardNodes = new Map(), graphNodes = new Map();
 const format = value => new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 }).format(value);
 const axisFormat = value => new Intl.NumberFormat(undefined, { notation: 'compact', maximumFractionDigits: 1 }).format(value);
@@ -78,7 +134,7 @@ function drawOverlay(group, state) {
   const series = group.metrics.filter(item => group.mirrored || state.metrics[item.id]).map(item => ({
     metric: state.metrics[item.id] || { availability: 'missing', reason: 'No measurements provided' },
     label: item.label, color: group.metrics.indexOf(item),
-    samples: rate ? DashboardCharts.rate(state.history[item.id] || []) : state.history[item.id] || [],
+    samples: seriesFor(state, item.id, state.metrics[item.id]?.kind || (group.mirrored ? 'counter' : 'gauge'), rate),
   }));
   node.children[1].replaceChildren(...series.map((item, i) => {
     const metric = item.metric;
@@ -95,12 +151,14 @@ function drawOverlay(group, state) {
 function drawPlot({ graph, samples, metric, unit, series, mirrored }) {
   let lines = series || [{ samples, label: metric.label }];
   const integer = DashboardCharts.integerUnit(unit);
-  const geometry = (mirrored ? DashboardCharts.mirror : DashboardCharts.overlay)(lines.map(item => item.samples), Date.now(), integer);
+  const end = view.range === 'live' ? Date.now() : view.end, options = { windowMs: view.windowMs, gapMs: view.gapMs };
+  const geometry = (mirrored ? DashboardCharts.mirror : DashboardCharts.overlay)(lines.map(item => item.samples), end, integer, options);
+  const span = view.range === 'live' ? 'in the last two minutes' : `in the selected ${$('range').selectedOptions[0].textContent} range`;
   const { scale: plot, plots } = geometry;
   if (mirrored) lines = lines.map((line, i) => ({ ...line, samples: geometry.series[i] }));
   graph.setAttribute('aria-label', mirrored
     ? `${metric.label}: cache reads, cache misses and disk reads overlap above zero; disk writes below zero; centered time axis; ${plot.count} available samples, up to ${format(plot.hi)} ${unit} in either direction`
-    : `${metric.label}: ${plot.count} available samples in the last two minutes, ${unit || 'value'} from ${format(plot.lo)} to ${format(plot.hi)}`);
+    : `${metric.label}: ${plot.count} available ${view.resolution === 'minute' && view.range !== 'live' ? 'minute buckets' : 'samples'} ${span}, ${unit || 'value'} from ${format(plot.lo)} to ${format(plot.hi)}`);
   const nodes = [svgEl('title', {}, graph.getAttribute('aria-label'))];
   const divisions = mirrored ? 4 : 3;
   for (let i = 0; i <= divisions; i++) {
@@ -112,11 +170,14 @@ function drawPlot({ graph, samples, metric, unit, series, mirrored }) {
   }
   lines.forEach((line, i) => {
     const color = 'series-' + (line.color ?? i);
+    if (plots[i].band) nodes.push(svgEl('path', { d: plots[i].band, class: 'band ' + color }));
     nodes.push(svgEl('path', { d: plots[i].path, class: 'trace ' + color }));
+    // Dots only where they stay legible; long ranges keep the line and band.
+    if (plots[i].count > 150) return;
     for (const sample of line.samples) {
       const at = Date.parse(sample.at);
       if (at < plot.start || at > plot.end || !Number.isFinite(sample.value)) continue;
-      const dot = svgEl('circle', { cx: 56 + (at - plot.start) * 524 / DashboardCharts.windowMs,
+      const dot = svgEl('circle', { cx: 56 + (at - plot.start) * 524 / plot.windowMs,
         cy: 170 - (sample.value - plot.lo) * 150 / (plot.hi - plot.lo), r: 2.5, class: 'sample-dot ' + color });
       dot.append(svgEl('title', {}, `${line.label} / ${new Date(at).toLocaleTimeString()}: ${format(mirrored ? Math.abs(sample.value) : sample.value)} ${unit}`)); nodes.push(dot);
     }
@@ -127,10 +188,10 @@ function drawPlot({ graph, samples, metric, unit, series, mirrored }) {
       svgEl('text', { x: 580, y: 190, 'text-anchor': 'end', class: 'axis' }, 'Disk write'));
   }
   for (let i = 0; i <= 2; i++) {
-    const at = plot.start + i * DashboardCharts.windowMs / 2;
+    const at = plot.start + i * plot.windowMs / 2;
     nodes.push(svgEl('text', { x: 56 + i * 262, y: mirrored ? 111 : 196,
       'text-anchor': i === 0 ? 'start' : i === 2 ? 'end' : 'middle',
-      class: 'axis time-axis' }, new Date(at).toLocaleTimeString()));
+      class: 'axis time-axis' }, view.windowMs > 3600000 ? new Date(at).toLocaleString(undefined, { weekday: 'short', hour: '2-digit', minute: '2-digit' }) : new Date(at).toLocaleTimeString()));
   }
   if (!plot.count) nodes.push(svgEl('text', { x: 318, y: mirrored ? 57 : 96, 'text-anchor': 'middle', class: 'axis' }, 'No available samples'));
   graph.replaceChildren(...nodes);
@@ -221,10 +282,10 @@ function render(state) {
     }
     let group = metric.kind === 'static' || metric.id === 'app.uptime' ? 'static-metrics' : metric.id.startsWith('database.') ? 'database-metrics' :
       metric.id.startsWith('process.') ? 'process-trends' : metric.id.startsWith('session.') ? 'session-trends' : 'metrics';
-    let samples = state.history[metric.id] || [], unit = metric.unit;
-    if (metric.kind === 'counter' && group === 'database-metrics' && $('counter-mode').value === 'rate') {
-      samples = DashboardCharts.rate(samples); unit = metric.unit ? metric.unit + '/s' : '/s';
-    }
+    let unit = metric.unit;
+    const rateMode = metric.kind === 'counter' && group === 'database-metrics' && $('counter-mode').value === 'rate';
+    if (rateMode) unit = metric.unit ? metric.unit + '/s' : '/s';
+    const samples = seriesFor(state, metric.id, metric.kind, rateMode);
     const node = drawMetric(metric, samples, metric.id, unit);
     if (unit !== metric.unit) node.children[2].textContent += ` / graph: ${unit} (latest value is total)`;
     groups[group].push(node);
