@@ -68,16 +68,28 @@ that separate convention uses host-aligned tags such as `20.2.3` and `20R3.2`.
 Do not select Follow 4D for this component's ordinary SemVer releases.
 
 ```4d
-var $monitor : cs.Dashboard.Dashboard
-var $event : Object
-var $target : Text
-$target:="macOS-universal"
-If (Is Windows)
-    $target:="Windows-x64"
+#DECLARE($params : Object)
+
+If (Count parameters=0)
+    
+    CALL WORKER(1; Current method name; {\
+    listen: "127.0.0.1:8443"; \
+    allowLAN: True})
+    
+Else
+    
+    var $monitor : cs.Dashboard.Dashboard
+    var $event : Object
+    var $target : Text
+    $target:="macOS-universal"
+    If (Is Windows)
+        $target:="Windows-x64"
+    End if
+    $monitor:=cs.Dashboard.Dashboard.new($target)
+    $event:=New object("onStatus"; Formula(On_dashboard_status($1; $2)))
+    $monitor.start($params; $event)
+    
 End if
-$monitor:=cs.Dashboard.Dashboard.new($target)
-$event:=New object("onStatus"; Formula(On_dashboard_status($1; $2)))
-$monitor.start(New object; $event)
 ```
 
 Define the host's `On_dashboard_status` method:
@@ -85,8 +97,11 @@ Define the host's `On_dashboard_status` method:
 ```4d
 #DECLARE($status : Object; $monitor : cs.Dashboard.Dashboard)
 Case of
+    : ($status.kind="starting")
+        // $status.url is not usable yet.
     : ($status.kind="running")
         // $status.url is now usable. Do not log its private token.
+        OPEN URL($status.url; *)
     : ($status.kind="sample")
         // Measurements have been sent; $status.samples has increased.
     : ($status.kind="failed")
@@ -123,16 +138,17 @@ private, randomly generated access token in its fragment. Treat it as a
 password; do not log it or include it in support reports. The page exchanges it
 for an HttpOnly, SameSite=Strict session cookie and removes it from the address
 bar. The token/session expires when the CLI stops. The component never starts
-the browser automatically.
+the browser itself; the example callback above does it with `OPEN URL`, which
+returns immediately.
 
 ```4d
 // Call during your host's shutdown handling, and whenever monitoring ends.
 $monitor.stop()
 ```
 
-To shut down from code that does not hold the facade, such as `On Exit`, use a
-fresh one. `terminate()` stops whichever dashboard is active in this instance
-and waits until it is released:
+To shut down from code that does not hold the facade, use a fresh one.
+`terminate()` stops whichever dashboard is active in this instance and waits
+until it is released, so the host's `On Exit` database method can be:
 
 ```4d
 var $monitor : cs.Dashboard.Dashboard
