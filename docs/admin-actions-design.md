@@ -247,7 +247,17 @@ reached through a selector or path supplied by a caller.
 | **A2: tier B** | Write freeze with automatic unlock, admin protection, request log with caps | Lock-hold expiry and an epoch end both release the lock; `host_denied` path; no request-log contents leave the host |
 | **A3: tier C** | Backup, new log file, server messaging and session drop | Only after gate B0 (backup scope) and **real 4D Server/client fixtures**; each with its own contract and recovery plan |
 
-## 7. Decisions needed from the owner
+## 7. Owner decisions (recorded: the recommended defaults were accepted)
+
+| # | Question | Decision |
+| --- | --- | --- |
+| 1 | Authority model for tiers B/C | The host `authorize` callback is **required** for every tier B or C action |
+| 2 | Tier A authority | Operator token plus host allowlist is enough. If the host passes `authorize`, it applies to **every** action, tier A included |
+| 3 | Maintenance bands | Visible to viewers as a time span only, with no action, actor or arguments |
+| 4 | Transport for B/C | TLS or loopback only. Plain HTTP on a non-loopback address is already rejected for every route |
+| 5 | Tier C | None enabled. `backup.start` is first in line, after gate B0 and real Server/client fixtures |
+
+### Original questions
 
 1. Is the host `authorize` callback acceptable as the authority model for tiers B and C?
 2. Should tier A also require it, or is the operator token plus host allowlist enough there?
