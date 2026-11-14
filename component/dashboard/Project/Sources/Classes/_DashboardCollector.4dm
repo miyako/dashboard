@@ -578,7 +578,8 @@ Function snapshot()->$snapshot : Object
 	var $metrics; $processes; $sessions : Collection
 	var $read; $data; $entry; $detail; $entity : Object
 	var $field; $status; $reason : Text
-	var $previous : Text
+	var $previous; $id : Text
+	var $seen : Object
 	var CLI_LastErrors : Collection
 	This.sampleCount+=1
 	$metrics:=This.staticMetrics.copy()
@@ -658,10 +659,24 @@ Function snapshot()->$snapshot : Object
 	If ($read.ok)
 		$data:=$read.data
 		If (Value type($data.processes)=Is collection)
+			$seen:=New object
 			For each ($entry; $data.processes)
 				If ($processes.length>=512)
 					break
 				End if
+				// Internal 4D processes all report ID 0 (and number 0): key them by OS thread instead.
+				$id:=""
+				If (Num($entry.ID)>0)
+					$id:="p:"+String(Num($entry.ID))
+				Else
+					If (Value type($entry.systemID)=Is text)
+						$id:="t:"+$entry.systemID
+					End if
+				End if
+				If (Not(Match regex("^[A-Za-z0-9_.:-]{1,96}$"; $id)) | ($seen[$id]#Null))
+					continue
+				End if
+				$seen[$id]:=True
 				$detail:=$entry
 				// Process info does not reach every internal process: retain the activity entry.
 				If (Value type($entry.number)=Is longint)
@@ -675,7 +690,7 @@ Function snapshot()->$snapshot : Object
 					End if
 					CLI_LastErrors:=Null
 				End if
-				$entity:=New object("id"; "p:"+String($entry.ID); "type"; String($detail.type); "state"; String($detail.state))
+				$entity:=New object("id"; $id; "type"; Substring(String($detail.type); 1; 64); "state"; Substring(String($detail.state); 1; 64))
 				If ((Value type($detail.cpuUsage)=Is real) | (Value type($detail.cpuUsage)=Is longint))
 					If (($detail.cpuUsage>=0) & ($detail.cpuUsage<=1))
 						$entity.cpu:=$detail.cpuUsage
@@ -689,10 +704,16 @@ Function snapshot()->$snapshot : Object
 			$metrics.push(This.unavailable("process.count"; "Visible processes"; "number"; "processes"; "gauge"; "unsupported"; "Process enumeration was not returned by this host"))
 		End if
 		If (Value type($data.sessions)=Is collection)
+			$seen:=New object
 			For each ($entry; $data.sessions)
 				If ($sessions.length>=512)
 					break
 				End if
+				$id:="s:"+String($entry.ID)
+				If (Not(Match regex("^[A-Za-z0-9_.:-]{1,96}$"; $id)) | ($seen[$id]#Null) | ($id="s:"))
+					continue
+				End if
+				$seen[$id]:=True
 				$previous:=Method called on error(ek local)
 				CLI_LastErrors:=Null
 				ON ERR CALL("_CaptureError"; ek local)
@@ -702,7 +723,7 @@ Function snapshot()->$snapshot : Object
 					$detail:=$entry
 				End if
 				CLI_LastErrors:=Null
-				$sessions.push(New object("id"; "s:"+$entry.ID; "type"; String($detail.type); "state"; String($detail.state)))
+				$sessions.push(New object("id"; $id; "type"; Substring(String($detail.type); 1; 64); "state"; Substring(String($detail.state); 1; 64)))
 			End for each
 			$metrics.push(This.metric("session.count"; "Visible server sessions"; "number"; "sessions"; "gauge"; $data.sessions.length))
 			$metrics.push(This.metric("session.truncated"; "Session list truncated"; "boolean"; ""; "gauge"; $data.sessions.length>512))

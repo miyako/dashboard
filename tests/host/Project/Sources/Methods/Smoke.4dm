@@ -170,6 +170,8 @@ Else
 	End if
 End if
 HOST_Phase:="real collector"
+var $entityList : Text
+var $entitySeen; $entityItem : Object
 $result:=$tool.collect()
 $report.collector:=$result
 If (Not($result.ok))
@@ -178,6 +180,17 @@ Else
 	If ($result.value.metrics.length<15)
 		$report.success:=False
 	End if
+	// The CLI rejects a frame with a duplicate or malformed entity ID; 4D reports ID 0 for every internal process.
+	For each ($entityList; New collection("processes"; "sessions"))
+		$entitySeen:=New object
+		For each ($entityItem; $result.value[$entityList])
+			If (Not(Match regex("^[A-Za-z0-9_.:-]{1,96}$"; String($entityItem.id))) | ($entitySeen[String($entityItem.id)]#Null))
+				$report.success:=False
+				$report.invalidEntity:=$entityItem
+			End if
+			$entitySeen[String($entityItem.id)]:=True
+		End for each
+	End for each
 End if
 HOST_Phase:="license usage normalization"
 var $collector : cs.Dashboard._DashboardCollector
