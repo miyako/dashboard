@@ -555,6 +555,35 @@ $operatorBegun:=$operator.begin($operatorMessage)
 $operator.complete($operatorMessage; $operatorBegun.record)
 $report.operator.rotation:=New object("first"; $rotationFolder.file("audit.1.jsonl").size; "second"; $rotationFolder.file("audit.2.jsonl").getText(); "third"; $rotationFolder.file("audit.3.jsonl").getText(); "fourth"; $rotationFolder.file("audit.4.jsonl").exists; "current"; Split string($rotationFolder.file("audit.jsonl").getText(); Char(10); sk ignore empty strings).length)
 $report.operator.folder:=New object("matchesHost"; ($operator.defaultFolder().platformPath=Folder(fk logs folder).folder("dashboard").platformPath); "notComponent"; (Position("dashboard.4dbase"; $operator.defaultFolder().platformPath)=0))
+$report.operator.monitorValidate:=$operator.validate(New object("actions"; New collection("monitor.diagnostics"; "operator.noop"; "monitor.cadence")))
+$operator:=cs.Dashboard._DashboardOperator.new(New collection("monitor.cadence"; "monitor.diagnostics"; "operator.noop"); "operator-epoch"; Folder(Temporary folder; fk platform path).folder("dashboard-operator-"+Generate UUID))
+$report.operator.monitor:=New object
+$operatorCases:=New object(\
+	"cadence2"; New object("action"; "monitor.cadence"; "args"; New object("seconds"; 2)); \
+	"cadence5"; New object("action"; "monitor.cadence"; "args"; New object("seconds"; 5)); \
+	"cadence10"; New object("action"; "monitor.cadence"; "args"; New object("seconds"; 10)); \
+	"cadence1"; New object("action"; "monitor.cadence"; "args"; New object("seconds"; 1)); \
+	"cadence3"; New object("action"; "monitor.cadence"; "args"; New object("seconds"; 3)); \
+	"cadenceFraction"; New object("action"; "monitor.cadence"; "args"; New object("seconds"; 5.5)); \
+	"cadenceText"; New object("action"; "monitor.cadence"; "args"; New object("seconds"; "5")); \
+	"cadenceExtra"; New object("action"; "monitor.cadence"; "args"; New object("seconds"; 5; "force"; True)); \
+	"cadenceMissing"; New object("action"; "monitor.cadence"; "args"; New object); \
+	"diagnostics"; New object("action"; "monitor.diagnostics"; "args"; New object); \
+	"diagnosticsArgs"; New object("action"; "monitor.diagnostics"; "args"; New object("verbose"; True)))
+For each ($name; OB Keys($operatorCases))
+	$operatorMessage:=OB Copy($operatorValid)
+	$operatorMessage.id:=Generate digest("monitor "+$name; SHA256 digest)
+	$operatorMessage.action:=$operatorCases[$name].action
+	$operatorMessage.args:=$operatorCases[$name].args
+	$operatorBegun:=$operator.begin($operatorMessage)
+	$report.operator.monitor[$name]:=New object("ok"; $operatorBegun.ok; "error"; $operatorBegun.error)
+	If ($operatorBegun.ok)
+		$report.operator.monitor[$name].state:=$operator.complete($operatorMessage; $operatorBegun.record).state
+		$report.operator.monitor[$name].argsDigest:=$operatorBegun.record.args
+	End if
+End for each
+$report.operator.monitor.expectedDigests:=New object("cadence5"; Substring(Generate digest("{\"seconds\":5}"; SHA256 digest); 1; 16); "diagnostics"; Substring(Generate digest("{}"; SHA256 digest); 1; 16))
+$operator.folder.delete(Delete with contents)
 For each ($operatorFolder; New collection($operatorFolder; $brokenFolder; $rotationFolder))
 	$operatorFolder.delete(Delete with contents)
 End for each
@@ -872,6 +901,111 @@ While ((Not($opService.finished)) & (Milliseconds<$deadline))
 	DELAY PROCESS(Current process; 6)
 End while
 $report.operatorLive.stopped:=New object("finished"; $opService.finished; "urlCleared"; ($opService.url=""); "operatorUrlCleared"; ($opService.operatorUrl=""))
+HOST_Phase:="operator monitor controls"
+var $mcTool : cs.Dashboard.Dashboard
+var $mcLog; $mcEvent; $mcService; $mcHeaders; $mcResponse; $mcStatus; $mcRecord; $mcResult : Object
+var $mcOrigin; $mcViewer; $mcToken; $mcCookie; $mcId; $mcDiagId; $mcConfirmation; $mcState; $mcAudit; $mcResultText : Text
+var $mcBefore; $mcAfter; $mcLines; $mcAuditStates : Collection
+var $mcValue : Variant
+$mcLog:=New shared object("events"; New shared collection; "action"; "")
+$mcEvent:=New object("log"; $mcLog; "onStatus"; Formula(Dashboard_callback($1; $2)))
+$mcTool:=cs.Dashboard.Dashboard.new($target)
+$mcService:=$mcTool.start(New object("operator"; New object("actions"; New collection("operator.noop"; "monitor.cadence"; "monitor.diagnostics"))); $mcEvent)
+$deadline:=Milliseconds+15000
+While (($mcService.samples<1) & ($mcService.status#"failed") & (Milliseconds<$deadline))
+	DELAY PROCESS(Current process; 6)
+End while
+$report.monitorLive:=New object("status"; $mcService.status; "error"; $mcService.error; "http"; New object)
+If ($mcService.status="running")
+	$mcOrigin:=Substring($mcService.url; 1; Position("/#token="; $mcService.url; *)-1)
+	$mcViewer:=Substring($mcService.url; Position("/#token="; $mcService.url; *)+8; 64)
+	$mcToken:=Substring($mcService.operatorUrl; Position("&operator="; $mcService.operatorUrl; *)+10; 64)
+	$mcCookie:=String(Operator_http("POST"; $mcOrigin+"/api/session"; New object("Origin"; $mcOrigin); $mcViewer).cookies.dashboard)
+	$mcHeaders:=New object("Origin"; $mcOrigin; "Cookie"; "dashboard="+$mcCookie; "X-Dashboard-Action"; "operator"; "Content-Type"; "application/json")
+	$mcResponse:=Operator_http("POST"; $mcOrigin+"/api/operator/session"; $mcHeaders; JSON Stringify(New object("token"; $mcToken)))
+	$mcHeaders.Cookie:="dashboard="+$mcCookie+"; dashboard_operator="+String($mcResponse.cookies.dashboard_operator)
+	// Real owner-side timing at the default cadence.
+	$mcBefore:=Operator_intervals($mcService; 3; 20000)
+	$mcResponse:=Operator_http("POST"; $mcOrigin+"/api/operator/request"; $mcHeaders; JSON Stringify(New object("action"; "monitor.cadence"; "args"; New object("seconds"; 5))))
+	$mcId:=String(JSON Parse($mcResponse.body).id)
+	$mcConfirmation:=String(JSON Parse($mcResponse.body).confirmation)
+	$report.monitorLive.http.cadenceRequest:=$mcResponse.status
+	$report.monitorLive.http.cadenceConfirm:=Operator_http("POST"; $mcOrigin+"/api/operator/confirm"; $mcHeaders; JSON Stringify(New object("confirmation"; $mcConfirmation; "action"; "monitor.cadence"; "args"; New object("seconds"; 5)))).status
+	$deadline:=Milliseconds+10000
+	Repeat
+		DELAY PROCESS(Current process; 3)
+		$mcStatus:=JSON Parse(Operator_http("GET"; $mcOrigin+"/api/operator/status"; New object("Cookie"; $mcHeaders.Cookie); "").body)
+		$mcRecord:=$mcStatus.records.query("id = :1"; $mcId).first()
+		$mcState:=""
+		If ($mcRecord#Null)
+			$mcState:=String($mcRecord.state)
+		End if
+	Until (($mcState="completed") | ($mcState="failed") | (Milliseconds>$deadline))
+	$report.monitorLive.cadence:=New object("state"; $mcState; "statusSeconds"; $mcStatus.cadence.seconds; "resultSeconds"; Null)
+	If ($mcRecord#Null)
+		If ($mcRecord.result#Null)
+			$report.monitorLive.cadence.resultSeconds:=$mcRecord.result.seconds
+		End if
+	End if
+	// Real owner-side timing after the approved change.
+	$mcAfter:=Operator_intervals($mcService; 3; 30000)
+	$report.monitorLive.timing:=New object("beforeCount"; $mcBefore.length; "afterCount"; $mcAfter.length; "beforeOk"; True; "afterOk"; True)
+	For each ($mcValue; $mcBefore)
+		$report.monitorLive.timing.beforeOk:=$report.monitorLive.timing.beforeOk & ($mcValue>=1500) & ($mcValue<=2700)
+	End for each
+	For each ($mcValue; $mcAfter)
+		$report.monitorLive.timing.afterOk:=$report.monitorLive.timing.afterOk & ($mcValue>=4400) & ($mcValue<=5700)
+	End for each
+	If (Not($report.monitorLive.timing.beforeOk & $report.monitorLive.timing.afterOk))
+		$report.monitorLive.timing.observed:=New object("before"; $mcBefore; "after"; $mcAfter)
+	End if
+	$mcResponse:=Operator_http("POST"; $mcOrigin+"/api/operator/request"; $mcHeaders; JSON Stringify(New object("action"; "monitor.diagnostics"; "args"; New object)))
+	$mcDiagId:=String(JSON Parse($mcResponse.body).id)
+	$mcConfirmation:=String(JSON Parse($mcResponse.body).confirmation)
+	$report.monitorLive.http.diagnosticsConfirm:=Operator_http("POST"; $mcOrigin+"/api/operator/confirm"; $mcHeaders; JSON Stringify(New object("confirmation"; $mcConfirmation; "action"; "monitor.diagnostics"; "args"; New object))).status
+	$deadline:=Milliseconds+10000
+	Repeat
+		DELAY PROCESS(Current process; 3)
+		$mcStatus:=JSON Parse(Operator_http("GET"; $mcOrigin+"/api/operator/status"; New object("Cookie"; $mcHeaders.Cookie); "").body)
+		$mcRecord:=$mcStatus.records.query("id = :1"; $mcDiagId).first()
+		$mcState:=""
+		If ($mcRecord#Null)
+			$mcState:=String($mcRecord.state)
+		End if
+	Until (($mcState="completed") | ($mcState="failed") | (Milliseconds>$deadline))
+	$report.monitorLive.diagnostics:=New object("state"; $mcState; "fields"; 0; "cadenceSeconds"; Null; "observedOk"; False; "private"; False)
+	If ($mcRecord#Null)
+		If (Value type($mcRecord.result)=Is object)
+			$mcResult:=$mcRecord.result
+			$mcResultText:=JSON Stringify($mcResult)
+			$report.monitorLive.diagnostics.fields:=OB Keys($mcResult).length
+			$report.monitorLive.diagnostics.cadenceSeconds:=$mcResult.cadence.seconds
+			$report.monitorLive.diagnostics.observedOk:=($mcResult.cadence.observedIntervalsMs.length>=2)
+			For each ($mcValue; $mcResult.cadence.observedIntervalsMs)
+				$report.monitorLive.diagnostics.observedOk:=$report.monitorLive.diagnostics.observedOk & ($mcValue>=4400) & ($mcValue<=5700)
+			End for each
+			$report.monitorLive.diagnostics.private:=(Position($mcToken; $mcResultText; *)>0) | (Position($mcViewer; $mcResultText; *)>0) | (Position($mcCookie; $mcResultText; *)>0) | (Position($mcService.epoch; $mcResultText; *)>0) | (Position($mcOrigin; $mcResultText; *)>0) | (Position($mcId; $mcResultText; *)>0)
+		End if
+	End if
+	$mcAudit:=""
+	If ($opAuditFile.exists)
+		$mcAudit:=$opAuditFile.getText()
+	End if
+	$mcAuditStates:=New collection
+	For each ($operatorRaw; Split string($mcAudit; Char(10); sk ignore empty strings))
+		$operatorLine:=JSON Parse($operatorRaw)
+		If ($operatorLine.epoch=$mcService.epoch)
+			$mcAuditStates.push($operatorLine.action+":"+$operatorLine.state+":"+$operatorLine.args)
+		End if
+	End for each
+	$report.monitorLive.audit:=$mcAuditStates
+End if
+$mcTool.stop()
+$deadline:=Milliseconds+15000
+While ((Not($mcService.finished)) & (Milliseconds<$deadline))
+	DELAY PROCESS(Current process; 6)
+End while
+$report.monitorLive.stopped:=New object("finished"; $mcService.finished; "operatorUrlCleared"; ($mcService.operatorUrl=""))
 HOST_Phase:="running failure watchdog"
 $lifecycle:=New signal
 CALL WORKER(".workers"; "Dashboard_lifecycle"; "failure"; $target; New object; $lifecycle)

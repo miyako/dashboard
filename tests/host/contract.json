@@ -2578,6 +2578,140 @@
         }
       },
       {
+        "path": "/operator/monitorValidate",
+        "equals": {
+          "ok": true,
+          "actions": [
+            "monitor.cadence",
+            "monitor.diagnostics",
+            "operator.noop"
+          ]
+        }
+      },
+      {
+        "path": "/operator/monitor",
+        "equals": {
+          "cadence2": {
+            "ok": true,
+            "state": "completed",
+            "argsDigest": "10189b390681fcc6"
+          },
+          "cadence5": {
+            "ok": true,
+            "state": "completed",
+            "argsDigest": "fb7c3d3e622a3763"
+          },
+          "cadence10": {
+            "ok": true,
+            "state": "completed",
+            "argsDigest": "ec313ea5345d7aa2"
+          },
+          "cadence1": {
+            "ok": false,
+            "error": "Invalid dashboard action arguments"
+          },
+          "cadence3": {
+            "ok": false,
+            "error": "Invalid dashboard action arguments"
+          },
+          "cadenceFraction": {
+            "ok": false,
+            "error": "Invalid dashboard action arguments"
+          },
+          "cadenceText": {
+            "ok": false,
+            "error": "Invalid dashboard action arguments"
+          },
+          "cadenceExtra": {
+            "ok": false,
+            "error": "Invalid dashboard action arguments"
+          },
+          "cadenceMissing": {
+            "ok": false,
+            "error": "Invalid dashboard action arguments"
+          },
+          "diagnostics": {
+            "ok": true,
+            "state": "completed",
+            "argsDigest": "44136fa355b3678a"
+          },
+          "diagnosticsArgs": {
+            "ok": false,
+            "error": "Invalid dashboard action arguments"
+          },
+          "expectedDigests": {
+            "cadence5": "fb7c3d3e622a3763",
+            "diagnostics": "44136fa355b3678a"
+          }
+        }
+      },
+      {
+        "path": "/monitorLive/status",
+        "equals": "running"
+      },
+      {
+        "path": "/monitorLive/error",
+        "equals": ""
+      },
+      {
+        "path": "/monitorLive/http",
+        "equals": {
+          "cadenceRequest": 201,
+          "cadenceConfirm": 202,
+          "diagnosticsConfirm": 202
+        }
+      },
+      {
+        "path": "/monitorLive/cadence",
+        "equals": {
+          "state": "completed",
+          "statusSeconds": 5,
+          "resultSeconds": 5
+        }
+      },
+      {
+        "path": "/monitorLive/diagnostics",
+        "equals": {
+          "state": "completed",
+          "fields": 20,
+          "cadenceSeconds": 5,
+          "observedOk": true,
+          "private": false
+        }
+      },
+      {
+        "path": "/monitorLive/audit",
+        "equals": [
+          "monitor.cadence:running:fb7c3d3e622a3763",
+          "monitor.cadence:completed:fb7c3d3e622a3763",
+          "monitor.diagnostics:running:44136fa355b3678a",
+          "monitor.diagnostics:completed:44136fa355b3678a"
+        ]
+      },
+      {
+        "path": "/monitorLive/stopped",
+        "equals": {
+          "finished": true,
+          "operatorUrlCleared": true
+        }
+      },
+      {
+        "path": "/monitorLive/timing/beforeCount",
+        "equals": 3
+      },
+      {
+        "path": "/monitorLive/timing/afterCount",
+        "equals": 3
+      },
+      {
+        "path": "/monitorLive/timing/beforeOk",
+        "equals": true
+      },
+      {
+        "path": "/monitorLive/timing/afterOk",
+        "equals": true
+      },
+      {
         "path": "/backup/calendar",
         "equals": [
           {

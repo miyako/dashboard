@@ -1,7 +1,10 @@
-# Operator action contract (M3)
+# Operator action contract (M3, M4)
 
-Status: substrate only. The single action, `operator.noop`, changes nothing.
-Operator mode is **off by default**; no high-risk mutator exists.
+Operator mode is **off by default**. The catalog holds three actions, each
+enabled only when the host lists it: `operator.noop` (changes nothing),
+`monitor.cadence` and `monitor.diagnostics` (M4 monitor controls, section 7).
+These are monitor controls, not database or server administration; no
+high-risk mutator exists.
 
 This contract was written before the implementation and is the reference for
 both the Go CLI (`cli/operator.go`) and the 4D component
@@ -13,6 +16,9 @@ both the Go CLI (`cli/operator.go`) and the 4D component
 | Audit location | Host `Logs` folder: `Logs/dashboard/audit.jsonl`, rotated at 1 MiB, 4 files kept |
 | Limits | Operator session 15 min idle / 60 min absolute; confirmation 60 s, single use; 1 action in flight; 6 action requests per minute; 30 s action timeout |
 | Exercising action | Built-in `operator.noop`, enabled only when the host lists it; two-step browser confirmation |
+| M4 controls | Both `monitor.cadence` and `monitor.diagnostics`, each host-listed |
+| Cadence values | 2, 5 or 10 s; default 2 s; never faster than the default; resets on restart; 15 s staleness unchanged |
+| Cadence approval | Through 4D (validation and audit); Go switches its real ticker only on 4D's in-time `completed` |
 
 ## 1. Opt-in and negotiation
 
@@ -122,7 +128,40 @@ sample. A confirmation issued before another action finished cannot be used.
 - Confirmation lifecycle events (issued, withdrawn, rejected) are not
   audited, because nothing was dispatched to 4D.
 
-## 7. Never
+## 7. Monitor controls (M4)
+
+| Action | Args | 4D does | Go does on in-time `completed` |
+| --- | --- | --- | --- |
+| `monitor.cadence` | exactly `{"seconds": 2 \| 5 \| 10}` (integer) | Validates and audits; changes nothing itself | Resets the real sampling ticker (`schedule` in `cli/monitor.go`); result `{seconds, appliedAt}` |
+| `monitor.diagnostics` | exactly `{}` | Validates and audits | Snapshots 20 owned counters into the result |
+
+- **Owner approval:** each action must be listed by host code in
+  `operator.actions`, is confirmed by an operator, then validated and audited by
+  4D before Go applies anything. `accepted` or `running` never applies a change.
+  A `failed`, timed-out (`outcome_unknown`) or late completion is never applied.
+- **Scheduler:** the Go scheduler samples at the current cadence and runs
+  housekeeping (timeouts, staleness, expiry) on its own one-second ticker, so
+  slower sampling never delays expiry. The cadence lasts for this CLI run only
+  and starts at 2 s. Every allowed value is under the 15-second staleness
+  threshold, so freshness rules are unchanged. Cadence cannot go below 2 s, so
+  collector caches (60 s encryption and backup reads) are never bypassed.
+- **Proof:** operator status carries `cadence: {seconds, since,
+  observedIntervalsMs}`: the measured gaps between the last emitted
+  scheduled requests, reset at each change. These are measured times, not
+  the setting.
+- **Diagnostics fields:** `version`, `uptimeSeconds`, `stream`,
+  `lastFrameAgeMs`, `cadence`, `scheduledRequests`, `scheduledBusySkips`,
+  `refreshResults`, `refreshTimeouts`, `lateRefreshResults`, `viewers`,
+  `stdoutQueue`, `stdoutCapacity`, `metrics`, `processes`, `sessions`,
+  `operatorSessions`, `pendingConfirmations`, `actionStates`,
+  `lateActionFrames`. They contain no URLs, tokens, cookies, epochs, IDs or
+  arguments, and are shown only to the operator who requested them.
+- **Not offered:** cancelling an owned operation. Both actions complete
+  atomically, so no cancellation path exists to test. Also excluded: global
+  cache flush or tuning, PID or session termination, restart or shutdown,
+  SQL/web lifecycle, license or key operations, and real database operations.
+
+## 8. Never
 
 No arbitrary method, formula, SQL, shell, file, PID, session or selector
 execution. No action results in SSE: viewers see nothing new. Operator status

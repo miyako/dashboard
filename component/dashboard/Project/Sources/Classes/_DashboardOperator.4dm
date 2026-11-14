@@ -12,7 +12,7 @@ Class constructor($actions : Collection; $epoch : Text; $folder : 4D.Folder)
 
 Function catalog()->$catalog : Object
 	// Object keys compare case-sensitively, unlike Collection.indexOf on Text.
-	$catalog:=New object("operator.noop"; True)
+	$catalog:=New object("operator.noop"; True; "monitor.cadence"; True; "monitor.diagnostics"; True)
 
 Function defaultFolder()->$folder : 4D.Folder
 	// The host's Logs folder (*), never the component's.
@@ -79,6 +79,23 @@ Function _arguments($message : Object)->$canonical : Text
 				return
 			End if
 			$canonical:=JSON Stringify(New object("note"; $message.args.note))
+		: ($message.action="monitor.cadence")
+			// Never faster than the 2-second default: 2, 5 or 10 seconds only.
+			If (OB Keys($message.args).length#1)
+				return
+			End if
+			If ((Value type($message.args.seconds)#Is real) & (Value type($message.args.seconds)#Is longint))
+				return
+			End if
+			If (New collection(2; 5; 10).indexOf($message.args.seconds)<0)
+				return
+			End if
+			$canonical:=JSON Stringify(New object("seconds"; $message.args.seconds))
+		: ($message.action="monitor.diagnostics")
+			If (OB Keys($message.args).length#0)
+				return
+			End if
+			$canonical:="{}"
 	End case
 
 Function begin($message : Object)->$result : Object
@@ -141,6 +158,8 @@ Function complete($message : Object; $record : Object)->$frame : Object
 	Case of
 		: ($message.action="operator.noop")
 			// Changes nothing by design: proves the pipeline without a mutator.
+		: (($message.action="monitor.cadence") | ($message.action="monitor.diagnostics"))
+			// Owner approval and audit only: the Go CLI applies these after this completed state.
 	End case
 	$record.state:="completed"
 	$frame:=New object("id"; $message.id; "state"; "completed")

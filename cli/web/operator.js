@@ -40,21 +40,55 @@ const DashboardOperator = (() => {
     if (typeof note !== 'string' || !notePattern.test(note)) throw new Error('Note: 1 to 32 letters, digits, spaces, _ . or -');
     return { note };
   }
+  const labels = {
+    'operator.noop': 'No-op (changes nothing)',
+    'monitor.cadence': 'Sampling interval',
+    'monitor.diagnostics': 'Monitor diagnostics',
+  };
+  function argsFor(action, fields) {
+    if (action === 'operator.noop') return noopArgs(fields.note);
+    if (action === 'monitor.cadence') {
+      const seconds = Number(fields.seconds);
+      if (![2, 5, 10].includes(seconds)) throw new Error('Interval must be 2, 5 or 10 seconds');
+      return { seconds };
+    }
+    if (action === 'monitor.diagnostics') return {};
+    throw new Error('Unknown action');
+  }
   function reason(code) { return reasons[code] || code || ''; }
   function describe(record) {
     let text = `${record.action}: ${states[record.state] || record.state}`;
     if (record.error) text += ` (${reason(record.error)})`;
-    if (record.lateState) text += `; 4D later reported ${record.lateState}`;
+    if (record.lateState) text += `; 4D later reported ${record.lateState} (not applied)`;
+    if (record.action === 'monitor.cadence' && record.result) text += `; sampling every ${record.result.seconds} s`;
     return text;
   }
   function summary(confirmation) {
-    return `${confirmation.action} with note "${confirmation.args && confirmation.args.note}"`;
+    const args = confirmation.args || {};
+    if (confirmation.action === 'monitor.cadence') return `Change the sampling interval to ${args.seconds} s for this run (resets to 2 s on restart)`;
+    if (confirmation.action === 'monitor.diagnostics') return 'Collect monitor diagnostics (counters only)';
+    return `${confirmation.action} with note "${args.note}"`;
+  }
+  function cadence(status) {
+    const c = status.cadence;
+    if (!c) return '';
+    const observed = c.observedIntervalsMs.length ? `measured ${c.observedIntervalsMs.map(ms => (ms / 1000).toFixed(1)).join(', ')} s` : 'no interval measured yet';
+    return `Sampling every ${c.seconds} s; ${observed}.`;
+  }
+  function diagnosticRows(result) {
+    const rows = [];
+    for (const [key, value] of Object.entries(result || {})) {
+      if (key === 'cadence') rows.push(['cadence', `${value.seconds} s`]);
+      else if (value !== null && typeof value === 'object') rows.push([key, Object.entries(value).map(([k, v]) => `${k} ${v}`).join(', ') || 'none']);
+      else rows.push([key, String(value)]);
+    }
+    return rows;
   }
   function secondsLeft(expiresAt, now) {
     return Math.max(0, Math.ceil((Date.parse(expiresAt) - now) / 1000));
   }
   function headers() { return { 'Content-Type': 'application/json', 'X-Dashboard-Action': 'operator' }; }
   function newestFirst(records) { return [...records].sort((a, b) => b.requestedAt.localeCompare(a.requestedAt)); }
-  return { tokens, noopArgs, reason, describe, summary, secondsLeft, headers, newestFirst };
+  return { tokens, noopArgs, argsFor, labels, reason, describe, summary, cadence, diagnosticRows, secondsLeft, headers, newestFirst };
 })();
 if (typeof module !== 'undefined') module.exports = DashboardOperator;

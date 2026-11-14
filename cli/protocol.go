@@ -108,10 +108,11 @@ type service struct {
 	out                   chan any
 	clients               map[chan []byte]bool
 	op                    *operator
+	mon                   monitorState
 }
 
 func newService(origin, token string) *service {
-	return &service{origin: origin, token: token, cookie: nonce(), out: make(chan any, 64), clients: make(map[chan []byte]bool),
+	return &service{origin: origin, token: token, cookie: nonce(), out: make(chan any, 64), clients: make(map[chan []byte]bool), mon: newMonitorState(),
 		current: state{Status: "waiting", Info: map[string]string{}, Metrics: map[string]metric{}, Processes: map[string]entity{}, Sessions: map[string]entity{}, History: map[string][]point{}}}
 }
 
@@ -468,6 +469,7 @@ func (s *service) apply(m message) error {
 		}
 		if m.ID == s.pending {
 			s.pending = ""
+			s.mon.refreshResults++
 			s.current.LastAction = map[string]any{"id": m.ID, "ok": *m.OK, "error": m.Error}
 		} else {
 			index := -1
@@ -481,6 +483,7 @@ func (s *service) apply(m message) error {
 				return errors.New("uncorrelated or replayed action result")
 			}
 			s.expired = append(s.expired[:index], s.expired[index+1:]...)
+			s.mon.lateRefreshCount++
 			// A late result consumes its sequence but never replays a timed-out action.
 		}
 	case "actionState":
@@ -540,6 +543,7 @@ func (s *service) expire() {
 	if s.pending != "" && time.Since(s.requestAt) > 10*time.Second {
 		s.current.LastAction = map[string]any{"id": s.pending, "ok": false, "error": "collector_timeout"}
 		s.expired = append(s.expired, s.pending)
+		s.mon.refreshTimeouts++
 		if len(s.expired) > 32 {
 			s.expired = s.expired[len(s.expired)-32:]
 		}

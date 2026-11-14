@@ -286,8 +286,23 @@ async function operatorCall(route, body) {
   if (!response.ok) throw new Error(DashboardOperator.reason(data.error) || `HTTP ${response.status}`);
   return data;
 }
+function operatorFields() {
+  const action = $('operator-action').value;
+  $('operator-note-field').hidden = action !== 'operator.noop';
+  $('operator-seconds-field').hidden = action !== 'monitor.cadence';
+}
+$('operator-action').addEventListener('change', operatorFields);
 function renderOperator(status) {
   $('operator').hidden = false;
+  const select = $('operator-action');
+  if (select.options.length !== status.actions.length) {
+    select.replaceChildren(...status.actions.map(id => { const option = el('option', DashboardOperator.labels[id] || id); option.value = id; return option; }));
+    operatorFields();
+  }
+  $('operator-cadence').textContent = DashboardOperator.cadence(status);
+  const diagnostics = DashboardOperator.newestFirst(status.records).find(record => record.action === 'monitor.diagnostics' && record.result);
+  $('operator-diagnostics').hidden = !diagnostics;
+  if (diagnostics) $('operator-diagnostics-list').replaceChildren(...DashboardOperator.diagnosticRows(diagnostics.result).flatMap(([key, value]) => [el('dt', key), el('dd', value)]));
   operatorPending = status.confirmations[0];
   $('operator-confirm').hidden = !operatorPending;
   if (operatorPending) {
@@ -313,7 +328,8 @@ async function startOperator(token) {
 $('operator-request').addEventListener('submit', async event => {
   event.preventDefault();
   try {
-    await operatorCall('request', { action: 'operator.noop', args: DashboardOperator.noopArgs($('operator-note').value) });
+    const action = $('operator-action').value;
+    await operatorCall('request', { action, args: DashboardOperator.argsFor(action, { note: $('operator-note').value, seconds: $('operator-seconds').value }) });
     $('operator-note').value = ''; operatorMessage('Review and confirm the action below.');
   } catch (error) { operatorMessage(`Request rejected: ${error.message}`); }
   operatorRefresh();
