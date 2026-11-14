@@ -175,6 +175,9 @@ func validMetric(m metric) bool {
 	if strings.HasPrefix(m.ID, "backup.") && !validBackupMetric(m) {
 		return false
 	}
+	if strings.HasPrefix(m.ID, "web.") && !validWebMetric(m) {
+		return false
+	}
 	switch m.Availability {
 	case "available":
 		switch m.Type {
@@ -242,6 +245,47 @@ func validBackupMetric(m metric) bool {
 		}
 	default:
 		return false
+	}
+	return true
+}
+
+// webMetrics is the closed host web server allowlist: type, unit and kind per ID.
+var webMetrics = map[string][3]string{
+	"web.running":               {"boolean", "", "gauge"},
+	"web.httpEnabled":           {"boolean", "", "static"},
+	"web.httpPort":              {"number", "port", "static"},
+	"web.httpsEnabled":          {"boolean", "", "static"},
+	"web.httpsPort":             {"number", "port", "static"},
+	"web.hstsEnabled":           {"boolean", "", "static"},
+	"web.hstsMaxAge":            {"number", "s", "static"},
+	"web.minTLSVersion":         {"text", "", "static"},
+	"web.perfectForwardSecrecy": {"boolean", "", "static"},
+	"web.openSSLVersion":        {"text", "", "static"},
+}
+
+var openSSLVersion = regexp.MustCompile(`^[A-Za-z0-9 ._()+-]{1,64}$`)
+
+func validWebMetric(m metric) bool {
+	shape, ok := webMetrics[m.ID]
+	if !ok || m.Type != shape[0] || m.Unit != shape[1] || m.Kind != shape[2] {
+		return false
+	}
+	if m.Availability != "available" {
+		return true
+	}
+	switch m.ID {
+	case "web.httpPort", "web.httpsPort":
+		v, ok := m.Value.(float64)
+		return ok && v >= 1 && v <= 65535 && math.Trunc(v) == v
+	case "web.hstsMaxAge":
+		v, ok := m.Value.(float64)
+		return ok && v >= 0 && v <= 2147483647 && math.Trunc(v) == v
+	case "web.minTLSVersion":
+		v, _ := m.Value.(string)
+		return v == "TLS 1.0" || v == "TLS 1.1" || v == "TLS 1.2" || v == "TLS 1.3"
+	case "web.openSSLVersion":
+		v, ok := m.Value.(string)
+		return ok && openSSLVersion.MatchString(v)
 	}
 	return true
 }

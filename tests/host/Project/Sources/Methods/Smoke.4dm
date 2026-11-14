@@ -371,6 +371,59 @@ $engineCachedAt:=$collector.encryptionReadAt
 $normalized:=$collector.engine()
 $report.engine.refreshed:=($collector.encryptionReadAt-$engineCachedAt>=60000)
 $report.engine.inSnapshot:=($collector.snapshot().metrics.query("id = :1"; "datastore.locked").length=1)
+HOST_Phase:="web server normalization"
+var $webCases; $webValid; $webCase; $webHost; $webRead : Object
+$webValid:=New object("isRunning"; False; "HTTPEnabled"; True; "HTTPPort"; 8080; "HTTPSEnabled"; False; "HTTPSPort"; 8443; "HSTSEnabled"; False; "HSTSMaxAge"; 63072000; "minTLSVersion"; 3; "perfectForwardSecrecy"; True; "openSSLVersion"; "OpenSSL 3.5.1 1 Jul 2025"; \
+	"rootFolder"; "/private/web/"; "certificateFolder"; "/private/cert/"; "IPAddressToListen"; "192.0.2.1"; "cipherSuite"; "private-cipher"; "accessKeyDefined"; True; "sessionCookieName"; "private-cookie"; "CORSSettings"; New collection(New object("host"; "private.example")))
+$webCases:=New object(\
+	"populated"; New object("ok"; True; "data"; $webValid); \
+	"failed"; New object("ok"; False; "data"; $webValid); \
+	"absent"; New object("ok"; True; "data"; Null); \
+	"invalidObject"; New object("ok"; True; "data"; "private-web"); \
+	"invalidValues"; New object("ok"; True; "data"; New object("isRunning"; "true"; "HTTPEnabled"; True; "HTTPPort"; 0; "HTTPSEnabled"; Null; "HTTPSPort"; 70000; "HSTSEnabled"; True; "HSTSMaxAge"; -1; "minTLSVersion"; 5; "perfectForwardSecrecy"; 1; "openSSLVersion"; "/private/lib/libssl")); \
+	"tls10"; New object("ok"; True; "data"; New object("minTLSVersion"; 1)); \
+	"tls11"; New object("ok"; True; "data"; New object("minTLSVersion"; 2)); \
+	"tls13"; New object("ok"; True; "data"; New object("minTLSVersion"; 4)))
+$report.web:=New object("cases"; New object)
+For each ($name; OB Keys($webCases))
+	$webCase:=New object
+	$normalized:=$collector._webMetrics($webCases[$name])
+	If ($normalized.length#10)
+		$report.success:=False
+	End if
+	For each ($measurement; $normalized)
+		$webCase[$measurement.id]:=$measurement
+	End for each
+	$report.web.cases[$name]:=$webCase
+End for each
+$report.web.cases.unimplemented:=New object
+For each ($measurement; $collector._webMetrics(New object("ok"; False; "unimplemented"; True)))
+	$report.web.cases.unimplemented[$measurement.id]:=$measurement
+End for each
+// Targeting: the collector's option-2 read must be this host's server, not the component's own.
+$webRead:=$collector.read("web")
+$report.web.read:=New object("ok"; $webRead.ok; "unimplemented"; $webRead.unimplemented=True)
+If (Application type=tool4d)
+	// tool4d implements no WEB Server command; host targeting needs a full 4D runtime.
+	$report.web.targeting:=New object("status"; "not_run"; "reason"; "tool4d does not implement WEB Server")
+Else
+	$webHost:=WEB Server
+	$report.web.targeting:=New object("status"; "passed"; "ok"; $webRead.ok; "hostRootText"; Value type($webHost.rootFolder)=Is text; "collectorRootText"; False; "matchesHost"; False; "notComponent"; False)
+End if
+If ($webRead.ok & (Application type#tool4d))
+	If (Value type($webRead.data)=Is object)
+		If (Value type($webRead.data.rootFolder)=Is text)
+			$report.web.targeting.collectorRootText:=True
+			$report.web.targeting.matchesHost:=($webRead.data.rootFolder=$webHost.rootFolder)
+			$report.web.targeting.notComponent:=(Position("dashboard.4dbase"; $webRead.data.rootFolder)=0)
+		End if
+	End if
+End if
+$report.web.live:=New object
+For each ($measurement; $collector._webMetrics($webRead))
+	$report.web.live[$measurement.id]:=$measurement
+End for each
+$report.web.inSnapshot:=($collector.snapshot().metrics.query("id = :1"; "web.running").length=1)
 HOST_Phase:="license usage normalization"
 $licenseEntries:=New collection(\
 	New object("productId"; 7; "productName"; "Client"; "productUsedCount"; 500; "productBalance"; 200; "token"; 123456; "reason"; "private caller"; "session"; New object("userName"; "private user")); \

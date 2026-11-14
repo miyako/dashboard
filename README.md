@@ -265,6 +265,7 @@ this version neither aggregates instances nor executes remote administration.
 | [Is macOS](https://developer.4d.com/docs/21/commands/is-macos), [Is Windows](https://developer.4d.com/docs/21/commands/is-windows) | Collecting platform |
 | [DataStore.getInfo()](https://developer.4d.com/docs/21/API/DataStoreClass#getinfo), [DataClass.getInfo()](https://developer.4d.com/docs/21/API/DataClassClass#getinfo) | Cached host main-datastore type/networked scalars and mapped/exposed/unexposed dataclass counts; no entities or schema names |
 | [DataStore.encryptionStatus()](https://developer.4d.com/docs/21/API/DataStoreClass#encryptionstatus), [.locked()](https://developer.4d.com/docs/21/API/DataStoreClass#locked), [.isAdminProtected()](https://developer.4d.com/docs/21/API/DataStoreClass#isadminprotected) | Host main-datastore engine posture: encrypted/key-provided flags and encryptable/encrypted table counts (60-second cache), plus per-sample write-freeze and Data Explorer protection flags; no table names, numbers or keys |
+| [WEB Server](https://developer.4d.com/docs/21/commands/web-server) (`Web server host database`) | Host web server running flag (every sample) and a closed list of current settings: HTTP/HTTPS enabled and ports, HSTS enabled and max age (seconds), minimum TLS version, perfect forward secrecy and OpenSSL version; no paths, addresses, ciphers, cookies, CORS or handlers |
 | [BACKUP INFO](https://developer.4d.com/docs/21/commands/backup-info) | Cooperative normalization contract for last/next wall times, uninterpreted status code, milliseconds duration and UTC begin timestamp; host-target scope remains unverified, so deployed host metrics are unsupported |
 
 Every measurement has explicit `available`, `missing`, `unsupported` or `error`
@@ -306,6 +307,19 @@ while a backup or VSS snapshot holds the datastore. It differs from
 `setAdminProtection()`; it is not dashboard authorization. Both flags are read
 every sample. No `provideDataKey`, `flushAndLock`, `unlock` or
 `setAdminProtection` call is made.
+
+Web server fields read `WEB Server(Web server host database)`, which explicitly
+selects the **host's** web server; without that option a component would read
+its own. Only the host's existing server is observed: the dashboard never
+starts, stops or configures a 4D web or SQL server, and its own pages are
+served by the Go CLI. `web.running` is read every sample. The other nine are
+the server object's **current settings**, not proof of negotiated traffic:
+`web.minTLSVersion` maps the 1..4 setting to `"TLS 1.0"`..`"TLS 1.3"`, and
+`web.hstsMaxAge` is in seconds. Ports are bounded to 1..65535; any value of the
+wrong type or range is an error for that field alone. Root/certificate folders,
+listening addresses, cipher suites, session cookies, CORS settings, handlers,
+rules and `accessKeyDefined` are never exported. tool4d implements no
+`WEB Server` command, so it reports all ten fields as unsupported.
 
 Backup descriptors appear in **Instance information**, not rate graphs.
 **Host backup metadata currently reports unsupported even with a local datastore.**

@@ -927,6 +927,713 @@
         "equals": true
       },
       {
+        "path": "/web/cases/populated",
+        "equals": {
+          "web.running": {
+            "id": "web.running",
+            "label": "Host web server running",
+            "type": "boolean",
+            "unit": "",
+            "kind": "gauge",
+            "availability": "available",
+            "value": false
+          },
+          "web.httpEnabled": {
+            "id": "web.httpEnabled",
+            "label": "HTTP enabled (current setting)",
+            "type": "boolean",
+            "unit": "",
+            "kind": "static",
+            "availability": "available",
+            "value": true
+          },
+          "web.httpPort": {
+            "id": "web.httpPort",
+            "label": "HTTP port (current setting)",
+            "type": "number",
+            "unit": "port",
+            "kind": "static",
+            "availability": "available",
+            "value": 8080
+          },
+          "web.httpsEnabled": {
+            "id": "web.httpsEnabled",
+            "label": "HTTPS enabled (current setting)",
+            "type": "boolean",
+            "unit": "",
+            "kind": "static",
+            "availability": "available",
+            "value": false
+          },
+          "web.httpsPort": {
+            "id": "web.httpsPort",
+            "label": "HTTPS port (current setting)",
+            "type": "number",
+            "unit": "port",
+            "kind": "static",
+            "availability": "available",
+            "value": 8443
+          },
+          "web.hstsEnabled": {
+            "id": "web.hstsEnabled",
+            "label": "HSTS enabled (current setting)",
+            "type": "boolean",
+            "unit": "",
+            "kind": "static",
+            "availability": "available",
+            "value": false
+          },
+          "web.hstsMaxAge": {
+            "id": "web.hstsMaxAge",
+            "label": "HSTS max age (current setting)",
+            "type": "number",
+            "unit": "s",
+            "kind": "static",
+            "availability": "available",
+            "value": 63072000
+          },
+          "web.minTLSVersion": {
+            "id": "web.minTLSVersion",
+            "label": "Minimum TLS version (current setting)",
+            "type": "text",
+            "unit": "",
+            "kind": "static",
+            "availability": "available",
+            "value": "TLS 1.2"
+          },
+          "web.perfectForwardSecrecy": {
+            "id": "web.perfectForwardSecrecy",
+            "label": "Perfect forward secrecy available",
+            "type": "boolean",
+            "unit": "",
+            "kind": "static",
+            "availability": "available",
+            "value": true
+          },
+          "web.openSSLVersion": {
+            "id": "web.openSSLVersion",
+            "label": "OpenSSL library version",
+            "type": "text",
+            "unit": "",
+            "kind": "static",
+            "availability": "available",
+            "value": "OpenSSL 3.5.1 1 Jul 2025"
+          }
+        }
+      },
+      {
+        "path": "/web/cases/failed",
+        "equals": {
+          "web.running": {
+            "id": "web.running",
+            "label": "Host web server running",
+            "type": "boolean",
+            "unit": "",
+            "kind": "gauge",
+            "availability": "error",
+            "reason": "Host web server read failed"
+          },
+          "web.httpEnabled": {
+            "id": "web.httpEnabled",
+            "label": "HTTP enabled (current setting)",
+            "type": "boolean",
+            "unit": "",
+            "kind": "static",
+            "availability": "error",
+            "reason": "Host web server read failed"
+          },
+          "web.httpPort": {
+            "id": "web.httpPort",
+            "label": "HTTP port (current setting)",
+            "type": "number",
+            "unit": "port",
+            "kind": "static",
+            "availability": "error",
+            "reason": "Host web server read failed"
+          },
+          "web.httpsEnabled": {
+            "id": "web.httpsEnabled",
+            "label": "HTTPS enabled (current setting)",
+            "type": "boolean",
+            "unit": "",
+            "kind": "static",
+            "availability": "error",
+            "reason": "Host web server read failed"
+          },
+          "web.httpsPort": {
+            "id": "web.httpsPort",
+            "label": "HTTPS port (current setting)",
+            "type": "number",
+            "unit": "port",
+            "kind": "static",
+            "availability": "error",
+            "reason": "Host web server read failed"
+          },
+          "web.hstsEnabled": {
+            "id": "web.hstsEnabled",
+            "label": "HSTS enabled (current setting)",
+            "type": "boolean",
+            "unit": "",
+            "kind": "static",
+            "availability": "error",
+            "reason": "Host web server read failed"
+          },
+          "web.hstsMaxAge": {
+            "id": "web.hstsMaxAge",
+            "label": "HSTS max age (current setting)",
+            "type": "number",
+            "unit": "s",
+            "kind": "static",
+            "availability": "error",
+            "reason": "Host web server read failed"
+          },
+          "web.minTLSVersion": {
+            "id": "web.minTLSVersion",
+            "label": "Minimum TLS version (current setting)",
+            "type": "text",
+            "unit": "",
+            "kind": "static",
+            "availability": "error",
+            "reason": "Host web server read failed"
+          },
+          "web.perfectForwardSecrecy": {
+            "id": "web.perfectForwardSecrecy",
+            "label": "Perfect forward secrecy available",
+            "type": "boolean",
+            "unit": "",
+            "kind": "static",
+            "availability": "error",
+            "reason": "Host web server read failed"
+          },
+          "web.openSSLVersion": {
+            "id": "web.openSSLVersion",
+            "label": "OpenSSL library version",
+            "type": "text",
+            "unit": "",
+            "kind": "static",
+            "availability": "error",
+            "reason": "Host web server read failed"
+          }
+        }
+      },
+      {
+        "path": "/web/cases/absent",
+        "equals": {
+          "web.running": {
+            "id": "web.running",
+            "label": "Host web server running",
+            "type": "boolean",
+            "unit": "",
+            "kind": "gauge",
+            "availability": "unsupported",
+            "reason": "No host web server object"
+          },
+          "web.httpEnabled": {
+            "id": "web.httpEnabled",
+            "label": "HTTP enabled (current setting)",
+            "type": "boolean",
+            "unit": "",
+            "kind": "static",
+            "availability": "unsupported",
+            "reason": "No host web server object"
+          },
+          "web.httpPort": {
+            "id": "web.httpPort",
+            "label": "HTTP port (current setting)",
+            "type": "number",
+            "unit": "port",
+            "kind": "static",
+            "availability": "unsupported",
+            "reason": "No host web server object"
+          },
+          "web.httpsEnabled": {
+            "id": "web.httpsEnabled",
+            "label": "HTTPS enabled (current setting)",
+            "type": "boolean",
+            "unit": "",
+            "kind": "static",
+            "availability": "unsupported",
+            "reason": "No host web server object"
+          },
+          "web.httpsPort": {
+            "id": "web.httpsPort",
+            "label": "HTTPS port (current setting)",
+            "type": "number",
+            "unit": "port",
+            "kind": "static",
+            "availability": "unsupported",
+            "reason": "No host web server object"
+          },
+          "web.hstsEnabled": {
+            "id": "web.hstsEnabled",
+            "label": "HSTS enabled (current setting)",
+            "type": "boolean",
+            "unit": "",
+            "kind": "static",
+            "availability": "unsupported",
+            "reason": "No host web server object"
+          },
+          "web.hstsMaxAge": {
+            "id": "web.hstsMaxAge",
+            "label": "HSTS max age (current setting)",
+            "type": "number",
+            "unit": "s",
+            "kind": "static",
+            "availability": "unsupported",
+            "reason": "No host web server object"
+          },
+          "web.minTLSVersion": {
+            "id": "web.minTLSVersion",
+            "label": "Minimum TLS version (current setting)",
+            "type": "text",
+            "unit": "",
+            "kind": "static",
+            "availability": "unsupported",
+            "reason": "No host web server object"
+          },
+          "web.perfectForwardSecrecy": {
+            "id": "web.perfectForwardSecrecy",
+            "label": "Perfect forward secrecy available",
+            "type": "boolean",
+            "unit": "",
+            "kind": "static",
+            "availability": "unsupported",
+            "reason": "No host web server object"
+          },
+          "web.openSSLVersion": {
+            "id": "web.openSSLVersion",
+            "label": "OpenSSL library version",
+            "type": "text",
+            "unit": "",
+            "kind": "static",
+            "availability": "unsupported",
+            "reason": "No host web server object"
+          }
+        }
+      },
+      {
+        "path": "/web/cases/invalidObject",
+        "equals": {
+          "web.running": {
+            "id": "web.running",
+            "label": "Host web server running",
+            "type": "boolean",
+            "unit": "",
+            "kind": "gauge",
+            "availability": "error",
+            "reason": "Invalid host web server object"
+          },
+          "web.httpEnabled": {
+            "id": "web.httpEnabled",
+            "label": "HTTP enabled (current setting)",
+            "type": "boolean",
+            "unit": "",
+            "kind": "static",
+            "availability": "error",
+            "reason": "Invalid host web server object"
+          },
+          "web.httpPort": {
+            "id": "web.httpPort",
+            "label": "HTTP port (current setting)",
+            "type": "number",
+            "unit": "port",
+            "kind": "static",
+            "availability": "error",
+            "reason": "Invalid host web server object"
+          },
+          "web.httpsEnabled": {
+            "id": "web.httpsEnabled",
+            "label": "HTTPS enabled (current setting)",
+            "type": "boolean",
+            "unit": "",
+            "kind": "static",
+            "availability": "error",
+            "reason": "Invalid host web server object"
+          },
+          "web.httpsPort": {
+            "id": "web.httpsPort",
+            "label": "HTTPS port (current setting)",
+            "type": "number",
+            "unit": "port",
+            "kind": "static",
+            "availability": "error",
+            "reason": "Invalid host web server object"
+          },
+          "web.hstsEnabled": {
+            "id": "web.hstsEnabled",
+            "label": "HSTS enabled (current setting)",
+            "type": "boolean",
+            "unit": "",
+            "kind": "static",
+            "availability": "error",
+            "reason": "Invalid host web server object"
+          },
+          "web.hstsMaxAge": {
+            "id": "web.hstsMaxAge",
+            "label": "HSTS max age (current setting)",
+            "type": "number",
+            "unit": "s",
+            "kind": "static",
+            "availability": "error",
+            "reason": "Invalid host web server object"
+          },
+          "web.minTLSVersion": {
+            "id": "web.minTLSVersion",
+            "label": "Minimum TLS version (current setting)",
+            "type": "text",
+            "unit": "",
+            "kind": "static",
+            "availability": "error",
+            "reason": "Invalid host web server object"
+          },
+          "web.perfectForwardSecrecy": {
+            "id": "web.perfectForwardSecrecy",
+            "label": "Perfect forward secrecy available",
+            "type": "boolean",
+            "unit": "",
+            "kind": "static",
+            "availability": "error",
+            "reason": "Invalid host web server object"
+          },
+          "web.openSSLVersion": {
+            "id": "web.openSSLVersion",
+            "label": "OpenSSL library version",
+            "type": "text",
+            "unit": "",
+            "kind": "static",
+            "availability": "error",
+            "reason": "Invalid host web server object"
+          }
+        }
+      },
+      {
+        "path": "/web/cases/invalidValues",
+        "equals": {
+          "web.running": {
+            "id": "web.running",
+            "label": "Host web server running",
+            "type": "boolean",
+            "unit": "",
+            "kind": "gauge",
+            "availability": "error",
+            "reason": "Invalid host web server value"
+          },
+          "web.httpEnabled": {
+            "id": "web.httpEnabled",
+            "label": "HTTP enabled (current setting)",
+            "type": "boolean",
+            "unit": "",
+            "kind": "static",
+            "availability": "available",
+            "value": true
+          },
+          "web.httpPort": {
+            "id": "web.httpPort",
+            "label": "HTTP port (current setting)",
+            "type": "number",
+            "unit": "port",
+            "kind": "static",
+            "availability": "error",
+            "reason": "Invalid host web server value"
+          },
+          "web.httpsEnabled": {
+            "id": "web.httpsEnabled",
+            "label": "HTTPS enabled (current setting)",
+            "type": "boolean",
+            "unit": "",
+            "kind": "static",
+            "availability": "error",
+            "reason": "Invalid host web server value"
+          },
+          "web.httpsPort": {
+            "id": "web.httpsPort",
+            "label": "HTTPS port (current setting)",
+            "type": "number",
+            "unit": "port",
+            "kind": "static",
+            "availability": "error",
+            "reason": "Invalid host web server value"
+          },
+          "web.hstsEnabled": {
+            "id": "web.hstsEnabled",
+            "label": "HSTS enabled (current setting)",
+            "type": "boolean",
+            "unit": "",
+            "kind": "static",
+            "availability": "available",
+            "value": true
+          },
+          "web.hstsMaxAge": {
+            "id": "web.hstsMaxAge",
+            "label": "HSTS max age (current setting)",
+            "type": "number",
+            "unit": "s",
+            "kind": "static",
+            "availability": "error",
+            "reason": "Invalid host web server value"
+          },
+          "web.minTLSVersion": {
+            "id": "web.minTLSVersion",
+            "label": "Minimum TLS version (current setting)",
+            "type": "text",
+            "unit": "",
+            "kind": "static",
+            "availability": "error",
+            "reason": "Invalid host web server value"
+          },
+          "web.perfectForwardSecrecy": {
+            "id": "web.perfectForwardSecrecy",
+            "label": "Perfect forward secrecy available",
+            "type": "boolean",
+            "unit": "",
+            "kind": "static",
+            "availability": "error",
+            "reason": "Invalid host web server value"
+          },
+          "web.openSSLVersion": {
+            "id": "web.openSSLVersion",
+            "label": "OpenSSL library version",
+            "type": "text",
+            "unit": "",
+            "kind": "static",
+            "availability": "error",
+            "reason": "Invalid host web server value"
+          }
+        }
+      },
+      {
+        "path": "/web/cases/tls10/web.minTLSVersion/value",
+        "equals": "TLS 1.0"
+      },
+      {
+        "path": "/web/cases/tls10/web.running/availability",
+        "equals": "error"
+      },
+      {
+        "path": "/web/cases/tls11/web.minTLSVersion/value",
+        "equals": "TLS 1.1"
+      },
+      {
+        "path": "/web/cases/tls11/web.running/availability",
+        "equals": "error"
+      },
+      {
+        "path": "/web/cases/tls13/web.minTLSVersion/value",
+        "equals": "TLS 1.3"
+      },
+      {
+        "path": "/web/cases/tls13/web.running/availability",
+        "equals": "error"
+      },
+      {
+        "path": "/web/cases/unimplemented",
+        "equals": {
+          "web.running": {
+            "id": "web.running",
+            "label": "Host web server running",
+            "type": "boolean",
+            "unit": "",
+            "kind": "gauge",
+            "availability": "unsupported",
+            "reason": "This 4D runtime does not implement WEB Server (for example tool4d)"
+          },
+          "web.httpEnabled": {
+            "id": "web.httpEnabled",
+            "label": "HTTP enabled (current setting)",
+            "type": "boolean",
+            "unit": "",
+            "kind": "static",
+            "availability": "unsupported",
+            "reason": "This 4D runtime does not implement WEB Server (for example tool4d)"
+          },
+          "web.httpPort": {
+            "id": "web.httpPort",
+            "label": "HTTP port (current setting)",
+            "type": "number",
+            "unit": "port",
+            "kind": "static",
+            "availability": "unsupported",
+            "reason": "This 4D runtime does not implement WEB Server (for example tool4d)"
+          },
+          "web.httpsEnabled": {
+            "id": "web.httpsEnabled",
+            "label": "HTTPS enabled (current setting)",
+            "type": "boolean",
+            "unit": "",
+            "kind": "static",
+            "availability": "unsupported",
+            "reason": "This 4D runtime does not implement WEB Server (for example tool4d)"
+          },
+          "web.httpsPort": {
+            "id": "web.httpsPort",
+            "label": "HTTPS port (current setting)",
+            "type": "number",
+            "unit": "port",
+            "kind": "static",
+            "availability": "unsupported",
+            "reason": "This 4D runtime does not implement WEB Server (for example tool4d)"
+          },
+          "web.hstsEnabled": {
+            "id": "web.hstsEnabled",
+            "label": "HSTS enabled (current setting)",
+            "type": "boolean",
+            "unit": "",
+            "kind": "static",
+            "availability": "unsupported",
+            "reason": "This 4D runtime does not implement WEB Server (for example tool4d)"
+          },
+          "web.hstsMaxAge": {
+            "id": "web.hstsMaxAge",
+            "label": "HSTS max age (current setting)",
+            "type": "number",
+            "unit": "s",
+            "kind": "static",
+            "availability": "unsupported",
+            "reason": "This 4D runtime does not implement WEB Server (for example tool4d)"
+          },
+          "web.minTLSVersion": {
+            "id": "web.minTLSVersion",
+            "label": "Minimum TLS version (current setting)",
+            "type": "text",
+            "unit": "",
+            "kind": "static",
+            "availability": "unsupported",
+            "reason": "This 4D runtime does not implement WEB Server (for example tool4d)"
+          },
+          "web.perfectForwardSecrecy": {
+            "id": "web.perfectForwardSecrecy",
+            "label": "Perfect forward secrecy available",
+            "type": "boolean",
+            "unit": "",
+            "kind": "static",
+            "availability": "unsupported",
+            "reason": "This 4D runtime does not implement WEB Server (for example tool4d)"
+          },
+          "web.openSSLVersion": {
+            "id": "web.openSSLVersion",
+            "label": "OpenSSL library version",
+            "type": "text",
+            "unit": "",
+            "kind": "static",
+            "availability": "unsupported",
+            "reason": "This 4D runtime does not implement WEB Server (for example tool4d)"
+          }
+        }
+      },
+      {
+        "path": "/web/read",
+        "equals": {
+          "ok": false,
+          "unimplemented": true
+        }
+      },
+      {
+        "path": "/web/targeting",
+        "equals": {
+          "status": "not_run",
+          "reason": "tool4d does not implement WEB Server"
+        }
+      },
+      {
+        "path": "/web/live",
+        "equals": {
+          "web.running": {
+            "id": "web.running",
+            "label": "Host web server running",
+            "type": "boolean",
+            "unit": "",
+            "kind": "gauge",
+            "availability": "unsupported",
+            "reason": "This 4D runtime does not implement WEB Server (for example tool4d)"
+          },
+          "web.httpEnabled": {
+            "id": "web.httpEnabled",
+            "label": "HTTP enabled (current setting)",
+            "type": "boolean",
+            "unit": "",
+            "kind": "static",
+            "availability": "unsupported",
+            "reason": "This 4D runtime does not implement WEB Server (for example tool4d)"
+          },
+          "web.httpPort": {
+            "id": "web.httpPort",
+            "label": "HTTP port (current setting)",
+            "type": "number",
+            "unit": "port",
+            "kind": "static",
+            "availability": "unsupported",
+            "reason": "This 4D runtime does not implement WEB Server (for example tool4d)"
+          },
+          "web.httpsEnabled": {
+            "id": "web.httpsEnabled",
+            "label": "HTTPS enabled (current setting)",
+            "type": "boolean",
+            "unit": "",
+            "kind": "static",
+            "availability": "unsupported",
+            "reason": "This 4D runtime does not implement WEB Server (for example tool4d)"
+          },
+          "web.httpsPort": {
+            "id": "web.httpsPort",
+            "label": "HTTPS port (current setting)",
+            "type": "number",
+            "unit": "port",
+            "kind": "static",
+            "availability": "unsupported",
+            "reason": "This 4D runtime does not implement WEB Server (for example tool4d)"
+          },
+          "web.hstsEnabled": {
+            "id": "web.hstsEnabled",
+            "label": "HSTS enabled (current setting)",
+            "type": "boolean",
+            "unit": "",
+            "kind": "static",
+            "availability": "unsupported",
+            "reason": "This 4D runtime does not implement WEB Server (for example tool4d)"
+          },
+          "web.hstsMaxAge": {
+            "id": "web.hstsMaxAge",
+            "label": "HSTS max age (current setting)",
+            "type": "number",
+            "unit": "s",
+            "kind": "static",
+            "availability": "unsupported",
+            "reason": "This 4D runtime does not implement WEB Server (for example tool4d)"
+          },
+          "web.minTLSVersion": {
+            "id": "web.minTLSVersion",
+            "label": "Minimum TLS version (current setting)",
+            "type": "text",
+            "unit": "",
+            "kind": "static",
+            "availability": "unsupported",
+            "reason": "This 4D runtime does not implement WEB Server (for example tool4d)"
+          },
+          "web.perfectForwardSecrecy": {
+            "id": "web.perfectForwardSecrecy",
+            "label": "Perfect forward secrecy available",
+            "type": "boolean",
+            "unit": "",
+            "kind": "static",
+            "availability": "unsupported",
+            "reason": "This 4D runtime does not implement WEB Server (for example tool4d)"
+          },
+          "web.openSSLVersion": {
+            "id": "web.openSSLVersion",
+            "label": "OpenSSL library version",
+            "type": "text",
+            "unit": "",
+            "kind": "static",
+            "availability": "unsupported",
+            "reason": "This 4D runtime does not implement WEB Server (for example tool4d)"
+          }
+        }
+      },
+      {
+        "path": "/web/inSnapshot",
+        "equals": true
+      },
+      {
         "path": "/backup/calendar",
         "equals": [
           {
