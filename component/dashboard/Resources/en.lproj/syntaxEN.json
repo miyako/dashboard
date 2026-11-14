@@ -445,6 +445,22 @@
 			],
 			"Summary": ""
 		},
+		"parameters()": {
+			"Syntax": "**.parameters**( *group* : Text )->metrics : Collection",
+			"Params": [
+				[
+					"group",
+					"Text",
+					"->"
+				],
+				[
+					"metrics",
+					"Collection",
+					"<-"
+				]
+			],
+			"Summary": ""
+		},
 		"engine()": {
 			"Syntax": "**.engine**()->metrics : Collection",
 			"Params": [
@@ -566,11 +582,16 @@
 			"Summary": ""
 		},
 		"read()": {
-			"Syntax": "**.read**( *command* : Text )->result : Object",
+			"Syntax": "**.read**( *command* : Text; *selector* : Integer )->result : Object",
 			"Params": [
 				[
 					"command",
 					"Text",
+					"->"
+				],
+				[
+					"selector",
+					"Integer",
 					"->"
 				],
 				[

@@ -178,6 +178,9 @@ func validMetric(m metric) bool {
 	if strings.HasPrefix(m.ID, "web.") && !validWebMetric(m) {
 		return false
 	}
+	if strings.HasPrefix(m.ID, "db.") && !validDatabaseParameterMetric(m) {
+		return false
+	}
 	switch m.Availability {
 	case "available":
 		switch m.Type {
@@ -284,6 +287,39 @@ func validWebMetric(m metric) bool {
 		v, _ := m.Value.(string)
 		return v == "TLS 1.0" || v == "TLS 1.1" || v == "TLS 1.2" || v == "TLS 1.3"
 	case "web.openSSLVersion":
+		v, ok := m.Value.(string)
+		return ok && openSSLVersion.MatchString(v)
+	}
+	return true
+}
+
+// databaseParameterMetrics is the closed Get database parameter allowlist: type and unit per ID; all are static.
+var databaseParameterMetrics = map[string][2]string{
+	"db.hostIsProject":         {"boolean", ""},
+	"db.hostWritable":          {"boolean", ""},
+	"db.openSSLVersion":        {"text", ""},
+	"db.libzipVersion":         {"text", ""},
+	"db.cacheUnloadMinimum":    {"number", "bytes"},
+	"db.cacheFlushPeriodicity": {"number", "s"},
+}
+
+func validDatabaseParameterMetric(m metric) bool {
+	shape, ok := databaseParameterMetrics[m.ID]
+	if !ok || m.Type != shape[0] || m.Unit != shape[1] || m.Kind != "static" {
+		return false
+	}
+	if m.Availability != "available" {
+		return true
+	}
+	switch m.Type {
+	case "number":
+		v, ok := m.Value.(float64)
+		maximum := float64(2147483647)
+		if m.Unit == "bytes" {
+			maximum = 9007199254740991
+		}
+		return ok && v >= 0 && v <= maximum && math.Trunc(v) == v
+	case "text":
 		v, ok := m.Value.(string)
 		return ok && openSSLVersion.MatchString(v)
 	}

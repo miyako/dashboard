@@ -94,6 +94,11 @@ enabled and ports, HSTS enabled and max age (seconds), minimum TLS version
 current settings. No server is started, stopped or configured, and no paths,
 addresses, ciphers, cookies or handlers are exported. Runtimes without the
 command, such as tool4d, report unsupported.
+`Get database parameter` is read for a fixed list of six selectors only: host
+is a project and host structure writable (booleans), OpenSSL and libzip
+versions, cache unload minimum (bytes) and cache flush periodicity (seconds).
+Nothing is set. The LDAP and SASL version selectors are excluded because they
+crash tool4d.
 Backup descriptors currently report unsupported even for an eligible local main
 datastore: `BACKUP INFO` normally runs in component context and its host data-file
 target has not been established. A local `ds` check is not proof of backup scope.

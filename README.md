@@ -266,6 +266,7 @@ this version neither aggregates instances nor executes remote administration.
 | [DataStore.getInfo()](https://developer.4d.com/docs/21/API/DataStoreClass#getinfo), [DataClass.getInfo()](https://developer.4d.com/docs/21/API/DataClassClass#getinfo) | Cached host main-datastore type/networked scalars and mapped/exposed/unexposed dataclass counts; no entities or schema names |
 | [DataStore.encryptionStatus()](https://developer.4d.com/docs/21/API/DataStoreClass#encryptionstatus), [.locked()](https://developer.4d.com/docs/21/API/DataStoreClass#locked), [.isAdminProtected()](https://developer.4d.com/docs/21/API/DataStoreClass#isadminprotected) | Host main-datastore engine posture: encrypted/key-provided flags and encryptable/encrypted table counts (60-second cache), plus per-sample write-freeze and Data Explorer protection flags; no table names, numbers or keys |
 | [WEB Server](https://developer.4d.com/docs/21/commands/web-server) (`Web server host database`) | Host web server running flag (every sample) and a closed list of current settings: HTTP/HTTPS enabled and ports, HSTS enabled and max age (seconds), minimum TLS version, perfect forward secrecy and OpenSSL version; no paths, addresses, ciphers, cookies, CORS or handlers |
+| [Get database parameter](https://developer.4d.com/docs/21/commands/get-database-parameter) | Closed list of six selectors: host is a project (113) and host structure writable (117), OpenSSL (94) and libzip (120) library versions read once; cache unload minimum (66, bytes) and cache flush periodicity (95, seconds) read every sample; never sets a parameter |
 | [BACKUP INFO](https://developer.4d.com/docs/21/commands/backup-info) | Cooperative normalization contract for last/next wall times, uninterpreted status code, milliseconds duration and UTC begin timestamp; host-target scope remains unverified, so deployed host metrics are unsupported |
 
 Every measurement has explicit `available`, `missing`, `unsupported` or `error`
@@ -320,6 +321,16 @@ wrong type or range is an error for that field alone. Root/certificate folders,
 listening addresses, cipher suites, session cookies, CORS settings, handlers,
 rules and `accessKeyDefined` are never exported. tool4d implements no
 `WEB Server` command, so it reports all ten fields as unsupported.
+
+Database parameter fields (`db.*`) call `Get database parameter` with a fixed
+list of six read-only or numeric selectors; no selector ID comes from outside
+and nothing is ever set. `db.hostIsProject` and `db.hostWritable` must be 0 or
+1, version strings must look like versions (no paths), cache unload minimum is
+in bytes and flush periodicity in seconds; anything else is an error for that
+field alone. On a remote client the host flags and cache settings are
+unsupported, because they describe the server's engine. **Selectors 114
+(Libldap version) and 115 (Libsasl version) are deliberately excluded:** both
+crash tool4d 21.1 with a segmentation fault, which no error handler can catch.
 
 Backup descriptors appear in **Instance information**, not rate graphs.
 **Host backup metadata currently reports unsupported even with a local datastore.**

@@ -59,8 +59,11 @@ Class constructor
 	For each ($read; This._datastoreMetrics(This.read("datastore")))
 		This.staticMetrics.push($read)
 	End for each
+	For each ($read; This.parameters("static"))
+		This.staticMetrics.push($read)
+	End for each
 
-Function read($command : Text)->$result : Object
+Function read($command : Text; $selector : Integer)->$result : Object
 	var $previous : Text
 	var $data : Variant
 	var $store; $class : Object
@@ -70,6 +73,7 @@ Function read($command : Text)->$result : Object
 	var $time : Time
 	var $number : Integer
 	var $text : Text
+	var $real : Real
 	var CLI_LastErrors : Collection
 	$previous:=Method called on error(ek local)
 	CLI_LastErrors:=Null
@@ -154,6 +158,11 @@ Function read($command : Text)->$result : Object
 		: ($command="web")
 			// Option 2 targets the host's web server; omitting it would read this component's own.
 			$data:=WEB Server(Web server host database)
+		: ($command="parameter")
+			// Callers pass only allowlisted read-only or numeric selectors; never sets a parameter.
+			$text:=""
+			$real:=Get database parameter($selector; $text)
+			$data:=New object("number"; $real; "text"; $text)
 		: ($command="adminProtected")
 			$store:=ds
 			If ($store#Null)
@@ -789,6 +798,94 @@ Function _webMetrics($read : Variant)->$metrics : Collection
 		End if
 	End for each
 
+Function _parameterDefinitions()->$definitions : Collection
+	// Closed allowlist of Get database parameter selectors; group "static" is read once, "settings" every sample.
+	// Never add 114 (Libldap version) or 115 (Libsasl version): both crash tool4d 21.1 (SIGSEGV), which no error handler can catch.
+	$definitions:=New collection(\
+		New object("id"; "db.hostIsProject"; "selector"; 113; "label"; "Host is a project database"; "type"; "boolean"; "unit"; ""; "group"; "static"; "local"; True); \
+		New object("id"; "db.hostWritable"; "selector"; 117; "label"; "Host project or structure file writable"; "type"; "boolean"; "unit"; ""; "group"; "static"; "local"; True); \
+		New object("id"; "db.openSSLVersion"; "selector"; 94; "label"; "OpenSSL library version (application)"; "type"; "text"; "unit"; ""; "group"; "static"; "local"; False); \
+		New object("id"; "db.libzipVersion"; "selector"; 120; "label"; "libzip library version"; "type"; "text"; "unit"; ""; "group"; "static"; "local"; False); \
+		New object("id"; "db.cacheUnloadMinimum"; "selector"; 66; "label"; "Cache unload minimum (current setting)"; "type"; "number"; "unit"; "bytes"; "group"; "settings"; "local"; True); \
+		New object("id"; "db.cacheFlushPeriodicity"; "selector"; 95; "label"; "Cache flush periodicity (current setting)"; "type"; "number"; "unit"; "s"; "group"; "settings"; "local"; True))
+
+Function parameters($group : Text)->$metrics : Collection
+	var $definition : Object
+	$metrics:=New collection
+	For each ($definition; This._parameterDefinitions().query("group = :1"; $group))
+		If (This.remote & $definition.local)
+			// Host flags and cache settings describe the server's engine, not this client.
+			$metrics.push(This._parameterMetric($definition; New object("ok"; True; "data"; Null; "remote"; True)))
+		Else
+			$metrics.push(This._parameterMetric($definition; This.read("parameter"; $definition.selector)))
+		End if
+	End for each
+
+Function _parameterMetric($definition : Object; $read : Variant)->$metric : Object
+	var $value : Variant
+	var $valid : Boolean
+	var $maximum : Real
+	$metric:=This.unavailable($definition.id; $definition.label; $definition.type; $definition.unit; "static"; "error"; "Database parameter read failed")
+	If (Value type($read)#Is object)
+		return
+	End if
+	If (Value type($read.remote)=Is boolean)
+		If ($read.remote)
+			$metric:=This.unavailable($definition.id; $definition.label; $definition.type; $definition.unit; "static"; "unsupported"; "Unavailable on a remote client; run a collector on the server")
+			return
+		End if
+	End if
+	If (Value type($read.unimplemented)=Is boolean)
+		If ($read.unimplemented)
+			$metric:=This.unavailable($definition.id; $definition.label; $definition.type; $definition.unit; "static"; "unsupported"; "This 4D runtime does not implement Get database parameter")
+			return
+		End if
+	End if
+	If (Value type($read.ok)#Is boolean)
+		return
+	End if
+	If (Not($read.ok))
+		return
+	End if
+	$metric:=This.unavailable($definition.id; $definition.label; $definition.type; $definition.unit; "static"; "error"; "Invalid database parameter value")
+	If (Value type($read.data)#Is object)
+		return
+	End if
+	$valid:=False
+	Case of
+		: ($definition.type="text")
+			$value:=$read.data.text
+			If (Value type($value)=Is text)
+				If ($value="")
+					$metric:=This.unavailable($definition.id; $definition.label; $definition.type; $definition.unit; "static"; "missing"; "Not reported by this 4D runtime")
+					return
+				End if
+				// Version strings only: rejects paths and other free text.
+				$valid:=Match regex("^[A-Za-z0-9 ._()+-]{1,64}$"; $value)
+			End if
+		: ($definition.type="boolean")
+			$value:=$read.data.number
+			If ((Value type($value)=Is real) | (Value type($value)=Is longint))
+				$valid:=(($value=0) | ($value=1))
+				$value:=($value=1)
+			End if
+		: ($definition.type="number")
+			$value:=$read.data.number
+			If ((Value type($value)=Is real) | (Value type($value)=Is longint))
+				$maximum:=2147483647
+				If ($definition.unit="bytes")
+					$maximum:=9007199254740991
+				End if
+				$valid:=(($value>=0) & ($value<=$maximum))
+				If ($valid)
+					$valid:=(Int($value)=$value)
+				End if
+			End if
+	End case
+	If ($valid)
+		$metric:=This.metric($definition.id; $definition.label; $definition.type; $definition.unit; "static"; $value)
+	End if
+
 Function _licenseUsageMetrics($read : Object)->$metrics : Collection
 	var $entries; $ids : Collection
 	var $entry : Variant
@@ -893,6 +990,9 @@ Function snapshot()->$snapshot : Object
 		$metrics.push($entry)
 	End for each
 	For each ($entry; This._webMetrics(This.read("web")))
+		$metrics.push($entry)
+	End for each
+	For each ($entry; This.parameters("settings"))
 		$metrics.push($entry)
 	End for each
 	For each ($entry; This.licenseUsage())
