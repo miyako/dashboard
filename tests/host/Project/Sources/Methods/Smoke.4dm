@@ -11,6 +11,7 @@ var $invalid : Variant
 var HOST_StatusFile : 4D.File
 var HOST_Phase : Text
 var HOST_PreviousHandler : Text
+var HOST_Report : Object
 $ignored:=Get database parameter(User param value; $parameter)
 If (Is Windows)
 	$requestFile:=File($parameter; fk platform path)
@@ -35,6 +36,8 @@ End if
 $tool:=cs.Dashboard.Dashboard.new($target)
 $cases:=New collection("world"; "path with spaces"; "quote \" and \\ slash"; "line\nbreak"; "日本語"; "$() ; & % !")
 $report:=New object("success"; True; "finished"; False; "cases"; New collection)
+// Same object: a crash report then includes everything gathered so far.
+HOST_Report:=$report
 $report.compiled:=$tool._cli.compiled
 HOST_Phase:="renamed executable"
 If (Is Windows)
@@ -905,8 +908,11 @@ If ($opService.status="running")
 	$deadline:=Milliseconds+10000
 	Repeat
 		DELAY PROCESS(Current process; 6)
-		$opStatus:=JSON Parse(Operator_http("GET"; $opOrigin+"/api/operator/status"; New object("Cookie"; $opHeaders.Cookie); "").body)
-		$opRecord:=$opStatus.records.query("id = :1"; $opId).first()
+		$opStatus:=Operator_json(Operator_http("GET"; $opOrigin+"/api/operator/status"; New object("Cookie"; $opHeaders.Cookie); ""))
+		$opRecord:=Null
+		If (Value type($opStatus.records)=Is collection)
+			$opRecord:=$opStatus.records.query("id = :1"; $opId).first()
+		End if
 		$opState:=""
 		$opError:=""
 		If ($opRecord#Null)
@@ -970,8 +976,11 @@ If ($mcService.status="running")
 	$deadline:=Milliseconds+10000
 	Repeat
 		DELAY PROCESS(Current process; 3)
-		$mcStatus:=JSON Parse(Operator_http("GET"; $mcOrigin+"/api/operator/status"; New object("Cookie"; $mcHeaders.Cookie); "").body)
-		$mcRecord:=$mcStatus.records.query("id = :1"; $mcId).first()
+		$mcStatus:=Operator_json(Operator_http("GET"; $mcOrigin+"/api/operator/status"; New object("Cookie"; $mcHeaders.Cookie); ""))
+		$mcRecord:=Null
+		If (Value type($mcStatus.records)=Is collection)
+			$mcRecord:=$mcStatus.records.query("id = :1"; $mcId).first()
+		End if
 		$mcState:=""
 		If ($mcRecord#Null)
 			$mcState:=String($mcRecord.state)
@@ -1002,8 +1011,11 @@ If ($mcService.status="running")
 	$deadline:=Milliseconds+10000
 	Repeat
 		DELAY PROCESS(Current process; 3)
-		$mcStatus:=JSON Parse(Operator_http("GET"; $mcOrigin+"/api/operator/status"; New object("Cookie"; $mcHeaders.Cookie); "").body)
-		$mcRecord:=$mcStatus.records.query("id = :1"; $mcDiagId).first()
+		$mcStatus:=Operator_json(Operator_http("GET"; $mcOrigin+"/api/operator/status"; New object("Cookie"; $mcHeaders.Cookie); ""))
+		$mcRecord:=Null
+		If (Value type($mcStatus.records)=Is collection)
+			$mcRecord:=$mcStatus.records.query("id = :1"; $mcDiagId).first()
+		End if
 		$mcState:=""
 		If ($mcRecord#Null)
 			$mcState:=String($mcRecord.state)
@@ -1085,6 +1097,20 @@ While ((Not($mcService.finished)) & (Milliseconds<$deadline))
 	DELAY PROCESS(Current process; 6)
 End while
 $report.monitorLive.stopped:=New object("finished"; $mcService.finished; "operatorUrlCleared"; ($mcService.operatorUrl=""))
+HOST_Phase:="abandoned sample skip"
+// A request the agent stopped waiting for must not collect late and delay the next sample.
+var $skipSampler : cs.Dashboard._DashboardSampler
+var $skipSignal : 4D.Signal
+$skipSampler:=cs.Dashboard._DashboardSampler.new(New shared object; New object; New object)
+$skipSignal:=New signal
+Use ($skipSignal)
+	$skipSignal.abandoned:=True
+End use
+$skipSampler.sample($skipSignal)
+$report.abandonedSample:=New object("skipped"; (Value type($skipSignal.payload)=Is undefined); "triggered"; $skipSignal.signaled)
+$skipSignal:=New signal
+$skipSampler.sample($skipSignal)
+$report.abandonedSample.collectedWhenAwaited:=(Value type($skipSignal.payload)=Is text) & $skipSignal.signaled
 HOST_Phase:="admin foundations live"
 var $afTool : cs.Dashboard.Dashboard
 var $afLog; $afEvent; $afService; $afHeaders; $afWait; $afHistory : Object
@@ -1118,10 +1144,10 @@ If ($afService.status="running")
 	$afWait:=Operator_wait($afOrigin; $afStatusCookie; $afId; New collection("running"); 5000)
 	DELAY PROCESS(Current process; 150)
 	$afWait:=Operator_wait($afOrigin; $afStatusCookie; $afId; New collection("running"; "completed"); 2000)
-	$report.adminLive.sleep:=New object("progressPhase"; String($afWait.record.progress.phase))
+	$report.adminLive.sleep:=New object("progressPhase"; String(Operator_field($afWait; "record.progress.phase")))
 	$afWait:=Operator_wait($afOrigin; $afStatusCookie; $afId; New collection("completed"; "failed"); 10000)
-	$report.adminLive.sleep.state:=String($afWait.record.state)
-	$report.adminLive.sleep.unverified:=($afWait.record.unverified=True)
+	$report.adminLive.sleep.state:=String(Operator_field($afWait; "record.state"))
+	$report.adminLive.sleep.unverified:=(Operator_field($afWait; "record.unverified")=True)
 	$report.adminLive.sleep.sampledDuring:=($afService.samples>=($afSamples+1))
 	// Exclusive: sampling pauses and viewers see maintenance, then it resumes.
 	$afId:=Operator_action($afOrigin; $afHeaders; "operator.exclusiveSleep"; New object("seconds"; 4))
@@ -1129,9 +1155,9 @@ If ($afService.status="running")
 	DELAY PROCESS(Current process; 60)
 	$afPaused:=$afService.samples
 	$afWait:=Operator_wait($afOrigin; $afStatusCookie; $afId; New collection("running"); 2000)
-	$report.adminLive.exclusive:=New object("target"; String($afWait.status.target))
+	$report.adminLive.exclusive:=New object("target"; String(Operator_field($afWait; "status.target")))
 	$afWait:=Operator_wait($afOrigin; $afStatusCookie; $afId; New collection("completed"; "failed"); 10000)
-	$report.adminLive.exclusive.state:=String($afWait.record.state)
+	$report.adminLive.exclusive.state:=String(Operator_field($afWait; "record.state"))
 	$report.adminLive.exclusive.pausedSamples:=($afService.samples=$afPaused)
 	$deadline:=Milliseconds+8000
 	While (($afService.samples<=$afPaused) & (Milliseconds<$deadline))
@@ -1153,12 +1179,16 @@ If ($afService.status="running")
 		$hsSeconds:=$hsSeconds+86400
 	End if
 	$hsFrom:=String($hsDate; ISO date GMT; Time($hsSeconds))
-	$afHistory:=JSON Parse(Operator_http("GET"; $afOrigin+"/api/history?metric=process.count&resolution=minute&from="+$hsFrom+"&to="+$hsTo; New object("Cookie"; "dashboard="+$afCookie); "").body)
-	$report.adminLive.exclusive.bands:=$afHistory.maintenance.length
+	$afHistory:=Operator_json(Operator_http("GET"; $afOrigin+"/api/history?metric=process.count&resolution=minute&from="+$hsFrom+"&to="+$hsTo; New object("Cookie"; "dashboard="+$afCookie); ""))
+	$report.adminLive.exclusive.bands:=0
 	$report.adminLive.exclusive.bandClosed:=False
-	If ($afHistory.maintenance.length>0)
-		$report.adminLive.exclusive.bandClosed:=(Value type($afHistory.maintenance[0].to)=Is text) & (OB Keys($afHistory.maintenance[0]).length=2)
-	End if
+	Case of
+		: (Value type($afHistory.maintenance)#Is collection)
+			$report.adminLive.exclusive.historyStatus:=$afHistory.httpStatus
+		: ($afHistory.maintenance.length>0)
+			$report.adminLive.exclusive.bands:=$afHistory.maintenance.length
+			$report.adminLive.exclusive.bandClosed:=(Value type($afHistory.maintenance[0].to)=Is text) & (OB Keys($afHistory.maintenance[0]).length=2)
+	End case
 	// A blocked collector is answered collector_busy instead of ending the monitor.
 	CALL WORKER("Dashboard.callbacks."+$afService.epoch; Formula(DELAY PROCESS(Current process; 480)))
 	DELAY PROCESS(Current process; 720)
@@ -1170,8 +1200,8 @@ If ($afService.status="running")
 	$report.adminLive.busy:=New object("status"; $afService.status; "sampledAfter"; ($afService.samples>$afSamples))
 	$afId:=Operator_action($afOrigin; $afHeaders; "monitor.diagnostics"; New object)
 	$afWait:=Operator_wait($afOrigin; $afStatusCookie; $afId; New collection("completed"; "failed"); 10000)
-	$report.adminLive.busy.collectorBusy:=(Num($afWait.record.result.collectorBusy)>=1)
-	$report.adminLive.busy.pauses:=Num($afWait.record.result.maintenancePauses)
+	$report.adminLive.busy.collectorBusy:=(Num(Operator_field($afWait; "record.result.collectorBusy"))>=1)
+	$report.adminLive.busy.pauses:=Num(Operator_field($afWait; "record.result.maintenancePauses"))
 	// Orphan: the dashboard stops while an action runs; its result is audited, never sent to a newer instance.
 	$afId:=Operator_action($afOrigin; $afHeaders; "operator.sleep"; New object("seconds"; 5))
 	$afWait:=Operator_wait($afOrigin; $afStatusCookie; $afId; New collection("running"); 5000)

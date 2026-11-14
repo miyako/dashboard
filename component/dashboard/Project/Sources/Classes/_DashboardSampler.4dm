@@ -15,6 +15,11 @@ Class constructor($state : Object; $event : Object; $monitor : Object)
 
 Function sample($signal : 4D.Signal)
 	var $payload : Object
+	If ($signal.abandoned=True)
+		// The agent gave up waiting: collecting now would only delay the next, still-awaited sample.
+		$signal.trigger()
+		return
+	End if
 	If (This.collector=Null)
 		This.collector:=cs._DashboardCollector.new()
 	End if

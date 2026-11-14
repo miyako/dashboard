@@ -4,11 +4,17 @@
 #DECLARE($origin : Text; $cookie : Text; $id : Text; $states : Collection; $timeout : Integer)->$result : Object
 var $deadline : Integer
 var $status : Variant
-var $record : Object
+var $record; $response : Object
 $deadline:=Milliseconds+$timeout
 $result:=New object("record"; Null; "status"; Null)
 Repeat
-	$status:=JSON Parse(Operator_http("GET"; $origin+"/api/operator/status"; New object("Cookie"; $cookie); "").body)
+	$response:=Operator_http("GET"; $origin+"/api/operator/status"; New object("Cookie"; $cookie); "")
+	If (($response.status#200) | (Substring($response.body; 1; 1)#"{"))
+		// Report the failed read instead of crashing on an empty or non-JSON body.
+		$result:=New object("record"; Null; "status"; Null; "httpStatus"; $response.status)
+		return
+	End if
+	$status:=JSON Parse($response.body)
 	$record:=Null
 	If (Value type($status)=Is object)
 		$record:=$status.records.query("id = :1"; $id).first()
