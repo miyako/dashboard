@@ -16,3 +16,5 @@ component/*/Resources/bin/
 .initialize-*/
 tooling/compiler/Project/DerivedData/
 tooling/compiler/Project/Sources/catalog.4DCatalog
+/cli/dashboard
+/cli/dashboard.exe
