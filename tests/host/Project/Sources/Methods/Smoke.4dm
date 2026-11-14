@@ -310,6 +310,67 @@ For each ($name; OB Keys($metadataCases))
 	$report.datastore[$name]:=$metadataCase
 End for each
 $report.datastore.cached:=(JSON Stringify($collector.staticMetrics)=JSON Stringify($collector.snapshot().metrics.slice(0; $collector.staticMetrics.length)))
+HOST_Phase:="engine posture normalization"
+var $engineCases; $engineTables; $engineCase : Object
+var $engineIndex : Integer
+var $engineCachedAt : Real
+$engineTables:=New object(\
+	"PrivateSecret"; New object("name"; "private-table"; "num"; 999; "isEncryptable"; True; "isEncrypted"; True); \
+	"PrivatePending"; New object("name"; "private-pending"; "num"; 998; "isEncryptable"; True; "isEncrypted"; False))
+$engineCases:=New object(\
+	"plain"; New object("ok"; True; "data"; New object("isEncrypted"; False; "keyProvided"; False; "tables"; New object)); \
+	"encrypted"; New object("ok"; True; "data"; New object("isEncrypted"; True; "keyProvided"; True; "tables"; $engineTables; "dataKey"; "private-key")); \
+	"keyMissing"; New object("ok"; True; "data"; New object("isEncrypted"; True; "keyProvided"; False; "tables"; New object)); \
+	"failed"; New object("ok"; False); \
+	"absent"; New object("ok"; True; "data"; Null); \
+	"remote"; New object("ok"; True; "data"; Null; "remote"; True); \
+	"invalid"; New object("ok"; True; "data"; New object("isEncrypted"; "true"; "keyProvided"; False; "tables"; New object)); \
+	"invalidMap"; New object("ok"; True; "data"; New object("isEncrypted"; False; "keyProvided"; False; "tables"; New collection)); \
+	"invalidEntry"; New object("ok"; True; "data"; New object("isEncrypted"; False; "keyProvided"; False; "tables"; New object("PrivateTable"; New object("isEncryptable"; "yes"; "isEncrypted"; False)))))
+$engineTables:=New object
+For ($engineIndex; 1; 512)
+	$engineTables["T"+String($engineIndex)]:=New object("isEncryptable"; True; "isEncrypted"; ($engineIndex%2)=0)
+End for
+$engineCases.boundary:=New object("ok"; True; "data"; New object("isEncrypted"; True; "keyProvided"; True; "tables"; OB Copy($engineTables)))
+$engineTables.T513:=New object("isEncryptable"; True; "isEncrypted"; True)
+$engineCases.overflow:=New object("ok"; True; "data"; New object("isEncrypted"; True; "keyProvided"; True; "tables"; $engineTables))
+$report.engine:=New object("encryption"; New object; "flags"; New object)
+For each ($name; OB Keys($engineCases))
+	$engineCase:=New object
+	$normalized:=$collector._encryptionMetrics($engineCases[$name])
+	If ($normalized.length#4)
+		$report.success:=False
+	End if
+	For each ($measurement; $normalized)
+		$engineCase[$measurement.id]:=$measurement
+	End for each
+	$report.engine.encryption[$name]:=$engineCase
+End for each
+$engineCases:=New object(\
+	"true"; New object("ok"; True; "data"; True); \
+	"false"; New object("ok"; True; "data"; False); \
+	"failed"; New object("ok"; False; "data"; True); \
+	"absent"; New object("ok"; True; "data"; Null); \
+	"remote"; New object("ok"; True; "data"; Null; "remote"; True); \
+	"invalid"; New object("ok"; True; "data"; "true"); \
+	"malformed"; "private-read")
+For each ($name; OB Keys($engineCases))
+	$report.engine.flags[$name]:=$collector._engineFlag("datastore.locked"; $engineCases[$name])
+End for each
+$report.engine.adminLabel:=$collector._engineFlag("datastore.adminProtected"; New object("ok"; True; "data"; False)).label
+// Live reads on this host: record what the engine actually reports, whatever its availability.
+$report.engine.live:=New object
+For each ($measurement; $collector.engine())
+	$report.engine.live[$measurement.id]:=$measurement
+End for each
+$engineCachedAt:=$collector.encryptionReadAt
+$normalized:=$collector.engine()
+$report.engine.cached:=($collector.encryptionReadAt=$engineCachedAt)
+$collector.encryptionReadAt:=Milliseconds-60000
+$engineCachedAt:=$collector.encryptionReadAt
+$normalized:=$collector.engine()
+$report.engine.refreshed:=($collector.encryptionReadAt-$engineCachedAt>=60000)
+$report.engine.inSnapshot:=($collector.snapshot().metrics.query("id = :1"; "datastore.locked").length=1)
 HOST_Phase:="license usage normalization"
 $licenseEntries:=New collection(\
 	New object("productId"; 7; "productName"; "Client"; "productUsedCount"; 500; "productBalance"; 200; "token"; 123456; "reason"; "private caller"; "session"; New object("userName"; "private user")); \

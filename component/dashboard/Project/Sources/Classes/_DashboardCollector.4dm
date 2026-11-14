@@ -5,6 +5,8 @@ property remote : Boolean
 property licenseProducts : Object
 property backupMetrics : Collection
 property backupReadAt : Real
+property encryptionMetrics : Collection
+property encryptionReadAt : Real
 
 Class constructor
 	var $system; $license; $read : Object
@@ -131,6 +133,28 @@ Function read($command : Text)->$result : Object
 						break
 					End if
 				End for each
+			Else
+				$data:=Null
+			End if
+		: ($command="encryption")
+			// Returns names/numbers of encryptable tables; only booleans and counts leave the normalizer.
+			$store:=ds
+			If ($store#Null)
+				$data:=$store.encryptionStatus()
+			Else
+				$data:=Null
+			End if
+		: ($command="locked")
+			$store:=ds
+			If ($store#Null)
+				$data:=$store.locked()
+			Else
+				$data:=Null
+			End if
+		: ($command="adminProtected")
+			$store:=ds
+			If ($store#Null)
+				$data:=$store.isAdminProtected()
 			Else
 				$data:=Null
 			End if
@@ -486,6 +510,153 @@ Function _backupMetrics($read : Object)->$metrics : Collection
 		$metrics.push($metric)
 	End for each
 
+Function engine()->$metrics : Collection
+	var $now : Real
+	var $remote; $metric : Object
+	$now:=Milliseconds
+	$remote:=New object("ok"; True; "data"; Null; "remote"; True)
+	If (This.encryptionMetrics=Null)
+		This.encryptionReadAt:=$now-60000
+	End if
+	// encryptionStatus() allocates a per-table map: read it at most once per 60 seconds.
+	If (($now<This.encryptionReadAt) | ($now-This.encryptionReadAt>=60000))
+		If (This.remote)
+			This.encryptionMetrics:=This._encryptionMetrics($remote)
+		Else
+			This.encryptionMetrics:=This._encryptionMetrics(This.read("encryption"))
+		End if
+		This.encryptionReadAt:=Milliseconds
+	End if
+	$metrics:=This.encryptionMetrics.copy()
+	If (This.remote)
+		$metrics.push(This._engineFlag("datastore.locked"; $remote))
+		$metrics.push(This._engineFlag("datastore.adminProtected"; $remote))
+	Else
+		$metrics.push(This._engineFlag("datastore.locked"; This.read("locked")))
+		$metrics.push(This._engineFlag("datastore.adminProtected"; This.read("adminProtected")))
+	End if
+
+Function _engineFlag($id : Text; $read : Variant)->$metric : Object
+	var $label : Text
+	$label:="Datastore write freeze (lock, backup or VSS)"
+	If ($id="datastore.adminProtected")
+		$label:="Data Explorer access disabled"
+	End if
+	$metric:=This.unavailable($id; $label; "boolean"; ""; "gauge"; "error"; "Datastore state read failed or invalid")
+	If (Value type($read)#Is object)
+		return
+	End if
+	If (Value type($read.ok)#Is boolean)
+		return
+	End if
+	If (Not($read.ok))
+		return
+	End if
+	If (Value type($read.remote)=Is boolean)
+		If ($read.remote)
+			$metric:=This.unavailable($id; $label; "boolean"; ""; "gauge"; "unsupported"; "Unavailable on a remote client; run a collector on the server")
+			return
+		End if
+	End if
+	Case of
+		: (Value type($read.data)=Is boolean)
+			$metric:=This.metric($id; $label; "boolean"; ""; "gauge"; $read.data)
+		: ($read.data=Null)
+			$metric:=This.unavailable($id; $label; "boolean"; ""; "gauge"; "unsupported"; "No datastore available in this host")
+	End case
+
+Function _encryptionMetrics($read : Variant)->$metrics : Collection
+	var $data; $tables : Object
+	var $entry : Variant
+	var $status; $reason; $countStatus; $countReason; $name; $field : Text
+	var $count; $encryptable; $encrypted : Integer
+	$metrics:=New collection
+	$status:="error"
+	$reason:="Datastore encryption status failed"
+	If (Value type($read)=Is object)
+		If (Value type($read.ok)=Is boolean)
+			If ($read.ok)
+				Case of
+					: ($read.remote=True)
+						$status:="unsupported"
+						$reason:="Unavailable on a remote client; run a collector on the server"
+					: ($read.data=Null)
+						$status:="unsupported"
+						$reason:="No datastore available in this host"
+					: (Value type($read.data)#Is object)
+						$reason:="Invalid encryption status"
+					Else
+						$data:=$read.data
+						$reason:="Invalid encryption status"
+						If (Value type($data.isEncrypted)=Is boolean)
+							If (Value type($data.keyProvided)=Is boolean)
+								$status:="available"
+							End if
+						End if
+				End case
+			End if
+		End if
+	End if
+	If ($status#"available")
+		$metrics.push(This.unavailable("datastore.encrypted"; "Data file encrypted"; "boolean"; ""; "static"; $status; $reason))
+		$metrics.push(This.unavailable("datastore.encryptionKeyProvided"; "Data encryption key provided"; "boolean"; ""; "static"; $status; $reason))
+		$metrics.push(This.unavailable("datastore.encryptableTables"; "Encryptable tables"; "number"; "tables"; "static"; $status; $reason))
+		$metrics.push(This.unavailable("datastore.encryptedTables"; "Encrypted tables"; "number"; "tables"; "static"; $status; $reason))
+		return
+	End if
+	$metrics.push(This.metric("datastore.encrypted"; "Data file encrypted"; "boolean"; ""; "static"; $data.isEncrypted))
+	If ($data.isEncrypted)
+		$metrics.push(This.metric("datastore.encryptionKeyProvided"; "Data encryption key provided"; "boolean"; ""; "static"; $data.keyProvided))
+	Else
+		$metrics.push(This.unavailable("datastore.encryptionKeyProvided"; "Data encryption key provided"; "boolean"; ""; "static"; "unsupported"; "Data file is not encrypted; no data key applies"))
+	End if
+	// The map lists only encryptable or encrypted tables. Names and numbers never leave this loop.
+	$countStatus:="available"
+	If (Value type($data.tables)#Is object)
+		$countStatus:="error"
+		$countReason:="Invalid encryption table map"
+	Else
+		$tables:=$data.tables
+		For each ($name; $tables)
+			$count+=1
+			If ($count>512)
+				$countStatus:="error"
+				$countReason:="Encryption table limit exceeded (512)"
+				break
+			End if
+			$entry:=$tables[$name]
+			If (Value type($entry)#Is object)
+				$countStatus:="error"
+				$countReason:="Invalid encryption table entry"
+				break
+			End if
+			If ((Value type($entry.isEncryptable)#Is boolean) | (Value type($entry.isEncrypted)#Is boolean))
+				$countStatus:="error"
+				$countReason:="Invalid encryption table entry"
+				break
+			End if
+			If ($entry.isEncryptable)
+				$encryptable+=1
+			End if
+			If ($entry.isEncrypted)
+				$encrypted+=1
+			End if
+		End for each
+	End if
+	For each ($field; New collection("encryptableTables"; "encryptedTables"))
+		$name:="Encryptable tables"
+		$count:=$encryptable
+		If ($field="encryptedTables")
+			$name:="Encrypted tables"
+			$count:=$encrypted
+		End if
+		If ($countStatus="available")
+			$metrics.push(This.metric("datastore."+$field; $name; "number"; "tables"; "static"; $count))
+		Else
+			$metrics.push(This.unavailable("datastore."+$field; $name; "number"; "tables"; "static"; $countStatus; $countReason))
+		End if
+	End for each
+
 Function _licenseUsageMetrics($read : Object)->$metrics : Collection
 	var $entries; $ids : Collection
 	var $entry : Variant
@@ -584,6 +755,9 @@ Function snapshot()->$snapshot : Object
 	This.sampleCount+=1
 	$metrics:=This.staticMetrics.copy()
 	For each ($entry; This.backup())
+		$metrics.push($entry)
+	End for each
+	For each ($entry; This.engine())
 		$metrics.push($entry)
 	End for each
 	For each ($entry; This.licenseUsage())

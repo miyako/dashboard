@@ -13,7 +13,18 @@ import sys
 import time
 import uuid
 
+from support_components import stage as stage_support
 from test_4d import _no_symlinks, _read_json
+
+
+ENGINE = {
+    "encrypted": ("boolean", "", "static", "available", False),
+    "encryptionKeyProvided": ("boolean", "", "static", "unsupported", None),
+    "encryptableTables": ("number", "tables", "static", "available", 0),
+    "encryptedTables": ("number", "tables", "static", "available", 0),
+    "locked": ("boolean", "", "gauge", "available", False),
+    "adminProtected": ("boolean", "", "gauge", "available", False),
+}
 
 
 def verify(report):
@@ -30,8 +41,19 @@ def verify(report):
         raise ValueError("Dashboard did not stop cleanly")
     metadata = report.get("datastore", {})
     expected = {"type": "4D", "networked": False, "classes": 1, "exposed": 0, "unexposed": 1}
-    if set(metadata) != {"datastore." + field for field in expected}:
+    if set(metadata) != {"datastore." + field for field in (*expected, *ENGINE)}:
         raise ValueError("Datastore metric inventory mismatch")
+    # A plain, unencrypted local data host: real reads, not normalizer fixtures.
+    for field, (kind, unit, cadence, availability, value) in ENGINE.items():
+        metric = metadata["datastore." + field]
+        keys = {"id", "label", "type", "unit", "kind", "availability"}
+        keys.add("value" if availability == "available" else "reason")
+        if (set(metric) != keys or metric["id"] != "datastore." + field
+                or metric["type"] != kind or metric["unit"] != unit
+                or metric["kind"] != cadence or metric["availability"] != availability
+                or (availability == "available"
+                    and (type(metric["value"]) is not type(value) or metric["value"] != value))):
+            raise ValueError("Invalid or private datastore engine posture: " + field)
     for field, value in expected.items():
         metric = metadata["datastore." + field]
         unit = "" if field in ("type", "networked") else "dataclasses"
@@ -126,6 +148,8 @@ def stage(root, component):
         component_ignored.append("DerivedData")
     shutil.copytree(component, host / "Components/dashboard.4dbase",
                     ignore=shutil.ignore_patterns(*component_ignored))
+    # The component's pinned helpers are deployed separately, exactly as for the host test.
+    stage_support(root, host / "Components")
     (host / "Data").mkdir()
     return host
 

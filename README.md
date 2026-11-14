@@ -264,6 +264,7 @@ this version neither aggregates instances nor executes remote administration.
 | [Is data file locked](https://developer.4d.com/docs/21/commands/is-data-file-locked) | Write protection, **not** record locks |
 | [Is macOS](https://developer.4d.com/docs/21/commands/is-macos), [Is Windows](https://developer.4d.com/docs/21/commands/is-windows) | Collecting platform |
 | [DataStore.getInfo()](https://developer.4d.com/docs/21/API/DataStoreClass#getinfo), [DataClass.getInfo()](https://developer.4d.com/docs/21/API/DataClassClass#getinfo) | Cached host main-datastore type/networked scalars and mapped/exposed/unexposed dataclass counts; no entities or schema names |
+| [DataStore.encryptionStatus()](https://developer.4d.com/docs/21/API/DataStoreClass#encryptionstatus), [.locked()](https://developer.4d.com/docs/21/API/DataStoreClass#locked), [.isAdminProtected()](https://developer.4d.com/docs/21/API/DataStoreClass#isadminprotected) | Host main-datastore engine posture: encrypted/key-provided flags and encryptable/encrypted table counts (60-second cache), plus per-sample write-freeze and Data Explorer protection flags; no table names, numbers or keys |
 | [BACKUP INFO](https://developer.4d.com/docs/21/commands/backup-info) | Cooperative normalization contract for last/next wall times, uninterpreted status code, milliseconds duration and UTC begin timestamp; host-target scope remains unverified, so deployed host metrics are unsupported |
 
 Every measurement has explicit `available`, `missing`, `unsupported` or `error`
@@ -287,6 +288,24 @@ three counts, without publishing partial totals. A genuinely empty mapped model
 can report zero; an absent datastore reports unsupported, never zero.
 Restart monitoring after schema changes. Dataclass names, primary-key names,
 table numbers, connection details and local datastore IDs never leave the collector.
+
+Engine posture reads the same host main `ds` on local and Server collectors;
+remote clients and dataless hosts report unsupported for all six fields.
+`datastore.encrypted` and `.encryptionKeyProvided` come from
+`encryptionStatus()`, read at most once per 60 seconds because the native call
+builds a per-table map. The key flag is unsupported, not false, when the data
+file is not encrypted. `datastore.encryptableTables` / `.encryptedTables` count
+entries of that map, which lists **only** encryptable or encrypted tables, never
+all physical tables: zero is a valid answer. Iteration stops after 512 entries;
+overflow or any malformed entry invalidates both counts with no partial total.
+Table names, numbers and key material never leave the collector.
+`datastore.locked` is the `flushAndLock()` write freeze, which is also true
+while a backup or VSS snapshot holds the datastore. It differs from
+`database.locked` (data file write protection) and from record locks.
+`datastore.adminProtected` is true when Data Explorer access is disabled with
+`setAdminProtection()`; it is not dashboard authorization. Both flags are read
+every sample. No `provideDataKey`, `flushAndLock`, `unlock` or
+`setAdminProtection` call is made.
 
 Backup descriptors appear in **Instance information**, not rate graphs.
 **Host backup metadata currently reports unsupported even with a local datastore.**

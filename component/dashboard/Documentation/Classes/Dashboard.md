@@ -78,6 +78,15 @@ Null datastore is unsupported. Counts exclude tables without a single primary
 key and say nothing about records, indexes or effective REST permissions.
 No names, primary keys, table numbers, paths, IDs or connection details are exported.
 Restart the monitor after schema changes; one-off `collect()` reads fresh metadata.
+Engine posture also uses the host's main `ds` and is unsupported on remote
+clients and dataless hosts. `encryptionStatus()` is read at most once per 60
+seconds: `datastore.encrypted`, `.encryptionKeyProvided` (unsupported when the
+data file is not encrypted) and `.encryptableTables` / `.encryptedTables`,
+counted from a map that lists only encryptable or encrypted tables. More than
+512 entries or a malformed entry invalidates both counts. `datastore.locked`
+(the `flushAndLock()`/backup/VSS write freeze, not data file write protection)
+and `datastore.adminProtected` (Data Explorer access disabled) are read every
+sample. No table names, numbers or keys are exported, and nothing is changed.
 Backup descriptors currently report unsupported even for an eligible local main
 datastore: `BACKUP INFO` normally runs in component context and its host data-file
 target has not been established. A local `ds` check is not proof of backup scope.
