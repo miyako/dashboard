@@ -52,6 +52,8 @@ type message struct {
 	ID        string            `json:"id,omitempty"`
 	OK        *bool             `json:"ok,omitempty"`
 	Error     string            `json:"error,omitempty"`
+	State     string            `json:"state,omitempty"`
+	Operator  *operatorCaps     `json:"operator,omitempty"`
 }
 
 type deletions struct {
@@ -105,6 +107,7 @@ type service struct {
 	expired               []string
 	out                   chan any
 	clients               map[chan []byte]bool
+	op                    *operator
 }
 
 func newService(origin, token string) *service {
@@ -355,6 +358,11 @@ func (s *service) apply(m message) error {
 				return errors.New("invalid instance information")
 			}
 		}
+		if err := s.negotiateLocked(m.Operator); err != nil {
+			return err
+		}
+	} else if m.Operator != nil {
+		return errors.New("operator declaration is only valid in hello")
 	} else if s.current.Epoch == "" || m.Epoch != s.current.Epoch || m.Seq != s.current.Seq+1 {
 		return errors.New("epoch or sequence mismatch; restart the CLI and send a fresh hello")
 	}
@@ -367,6 +375,9 @@ func (s *service) apply(m message) error {
 		if at.Before(previous) {
 			return errors.New("sample timestamp moved backwards")
 		}
+	}
+	if m.State != "" && m.Kind != "actionState" {
+		return errors.New("state is only valid in actionState")
 	}
 	switch m.Kind {
 	case "hello":
@@ -472,6 +483,10 @@ func (s *service) apply(m message) error {
 			s.expired = append(s.expired[:index], s.expired[index+1:]...)
 			// A late result consumes its sequence but never replays a timed-out action.
 		}
+	case "actionState":
+		if err := s.applyActionStateLocked(m); err != nil {
+			return err
+		}
 	default:
 		return errors.New("unsupported message kind")
 	}
@@ -533,6 +548,13 @@ func (s *service) expire() {
 	}
 	if !s.last.IsZero() && time.Since(s.last) > 15*time.Second && s.current.Status != "stale" {
 		s.current.Status = "stale"
+		if s.op != nil {
+			// A stale target invalidates every outstanding confirmation.
+			s.op.generation++
+		}
 		s.broadcastLocked()
+	}
+	if s.op != nil {
+		s.op.expire(time.Now(), s.current.Status == "stale")
 	}
 }

@@ -73,7 +73,7 @@
       },
       {
         "path": "/invalid/stderr",
-        "equals": "{\"error\":{\"code\":\"dashboard_error\",\"message\":\"expected serve [--listen IP:port] [--allow-lan --tls-cert file --tls-key file], inspect --text text, or --version\"},\"protocol\":1}\n"
+        "equals": "{\"error\":{\"code\":\"dashboard_error\",\"message\":\"expected serve [--listen IP:port] [--allow-lan --tls-cert file --tls-key file] [--operator-actions ids], inspect --text text, or --version\"},\"protocol\":1}\n"
       },
       {
         "path": "/invalid/error/code",

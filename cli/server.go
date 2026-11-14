@@ -48,6 +48,10 @@ func (s *service) handler() http.Handler {
 				http.Error(w, "authentication required", 401)
 				return
 			}
+			if strings.HasPrefix(r.URL.Path, "/api/operator/") {
+				s.operatorRoute(w, r)
+				return
+			}
 			switch r.URL.Path {
 			case "/api/events":
 				s.events(w, r)
