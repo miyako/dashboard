@@ -129,3 +129,29 @@ test('range note never presents unrecorded time as data', () => {
   assert.match(charts.rangeNote(v, [], 'en-US'), /Nothing recorded/);
   assert.match(charts.rangeNote(charts.view('24h', Date.parse(at(86400))), [at(0)], 'en-US'), /1-minute buckets/);
 });
+
+test('issue 17: placement hides license records off Server and moves three status flags', () => {
+  const m = (id, kind = 'gauge', type = 'number') => ({ id, kind, type });
+  assert.equal(charts.placement(m('license.usage.records'), 'standalone'), null);
+  assert.equal(charts.placement(m('license.usage.product.REST'), 'client'), null);
+  assert.equal(charts.placement(m('license.usage.records'), undefined), null);
+  assert.equal(charts.placement(m('license.usage.records'), 'server'), 'metrics');
+  for (const id of ['datastore.adminProtected', 'datastore.locked', 'web.running'])
+    assert.equal(charts.placement(m(id, 'gauge', 'boolean'), 'standalone'), 'static-metrics');
+  // Only the three named flags move; other live booleans stay where they were.
+  assert.equal(charts.placement(m('database.locked', 'gauge', 'boolean'), 'standalone'), 'database-metrics');
+  assert.equal(charts.placement(m('process.truncated', 'gauge', 'boolean'), 'standalone'), 'process-trends');
+  assert.equal(charts.placement(m('app.cpuUsage'), 'standalone'), 'metrics');
+  assert.equal(charts.placement(m('system.cores', 'static'), 'standalone'), 'static-metrics');
+});
+
+test('issue 17: smooth scroll offset and refresh notifications', () => {
+  assert.equal(charts.scrollOffset(1000, 1000, 120000), -0);
+  assert.equal(charts.scrollOffset(1000, 2000, 120000).toFixed(3), (-524 / 120).toFixed(3));
+  assert.equal(charts.scrollOffset(2000, 1000, 120000), -0, 'never scrolls backwards');
+  assert.equal(charts.refreshOutcome({ id: 'a', ok: true }, null), null, 'scheduled samples are silent');
+  assert.equal(charts.refreshOutcome({ id: 'a', ok: true }, 'b'), null);
+  assert.deepEqual(charts.refreshOutcome({ id: 'b', ok: true }, 'b'), { kind: 'ok', text: 'Sample refreshed' });
+  assert.match(charts.refreshOutcome({ id: 'b', ok: false, error: 'collector_timeout' }, 'b').text, /did not answer within 10 s/);
+  assert.equal(charts.refreshOutcome({ id: 'b', ok: false, error: 'collector_busy' }, 'b').kind, 'fail');
+});

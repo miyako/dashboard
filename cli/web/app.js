@@ -150,7 +150,9 @@ function drawOverlay(group, state) {
   graphNodes.set(key, item); drawPlot(item);
   return node;
 }
-function drawPlot({ graph, samples, metric, unit, series, mirrored }) {
+let clipCounter = 0;
+function drawPlot(item) {
+  const { graph, samples, metric, unit, series, mirrored } = item;
   let lines = series || [{ samples, label: metric.label }];
   const integer = DashboardCharts.integerUnit(unit);
   const end = view.range === 'live' ? Date.now() : view.end, options = { windowMs: view.windowMs, gapMs: view.gapMs };
@@ -170,10 +172,12 @@ function drawPlot({ graph, samples, metric, unit, series, mirrored }) {
     const tick = mirrored ? Math.abs(value) : value;
     nodes.push(svgEl('text', { x: 48, y: y + 4, 'text-anchor': 'end', class: 'axis' }, integer ? new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(tick) : axisFormat(tick)));
   }
+  // Data layer: clipped to the plot area so it can glide left between redraws (#17); axes stay fixed.
+  const moving = [];
   lines.forEach((line, i) => {
     const color = 'series-' + (line.color ?? i);
-    if (plots[i].band) nodes.push(svgEl('path', { d: plots[i].band, class: 'band ' + color }));
-    nodes.push(svgEl('path', { d: plots[i].path, class: 'trace ' + color }));
+    if (plots[i].band) moving.push(svgEl('path', { d: plots[i].band, class: 'band ' + color }));
+    moving.push(svgEl('path', { d: plots[i].path, class: 'trace ' + color }));
     // Dots only where they stay legible; long ranges keep the line and band.
     if (plots[i].count > 150) return;
     for (const sample of line.samples) {
@@ -181,7 +185,7 @@ function drawPlot({ graph, samples, metric, unit, series, mirrored }) {
       if (at < plot.start || at > plot.end || !Number.isFinite(sample.value)) continue;
       const dot = svgEl('circle', { cx: 56 + (at - plot.start) * 524 / plot.windowMs,
         cy: 170 - (sample.value - plot.lo) * 150 / (plot.hi - plot.lo), r: 2.5, class: 'sample-dot ' + color });
-      dot.append(svgEl('title', {}, `${line.label} / ${new Date(at).toLocaleTimeString()}: ${format(mirrored ? Math.abs(sample.value) : sample.value)} ${unit}`)); nodes.push(dot);
+      dot.append(svgEl('title', {}, `${line.label} / ${new Date(at).toLocaleTimeString()}: ${format(mirrored ? Math.abs(sample.value) : sample.value)} ${unit}`)); moving.push(dot);
     }
   });
   // Anonymous maintenance spans (history ranges only): shaded, never interpolated across.
@@ -190,8 +194,19 @@ function drawPlot({ graph, samples, metric, unit, series, mirrored }) {
     if (to <= from) continue;
     const rect = svgEl('rect', { x: 56 + (from - plot.start) * 524 / plot.windowMs, y: 20, width: Math.max(1, (to - from) * 524 / plot.windowMs), height: 150, class: 'maintenance-band' });
     rect.append(svgEl('title', {}, `Maintenance ${new Date(from).toLocaleTimeString()} – ${band.to ? new Date(to).toLocaleTimeString() : 'ongoing'}`));
-    nodes.splice(1, 0, rect);
+    moving.unshift(rect);
   }
+  const clipID = 'plot-clip-' + (++clipCounter);
+  const clip = svgEl('clipPath', { id: clipID });
+  clip.append(svgEl('rect', { x: 50, y: 0, width: 536, height: 205 }));
+  const layer = svgEl('g', { class: 'plot-layer' });
+  layer.append(...moving);
+  const clipped = svgEl('g', { 'clip-path': `url(#${clipID})` });
+  clipped.append(layer);
+  const defs = svgEl('defs');
+  defs.append(clip);
+  nodes.push(defs, clipped);
+  item.layer = layer; item.drawnAt = end;
   if (mirrored) {
     nodes.push(svgEl('line', { x1: 56, x2: 580, y1: 95, y2: 95, class: 'zero-axis' }),
       svgEl('text', { x: 580, y: 12, 'text-anchor': 'end', class: 'axis' }, 'Read / cache'),
@@ -206,6 +221,20 @@ function drawPlot({ graph, samples, metric, unit, series, mirrored }) {
   if (!plot.count) nodes.push(svgEl('text', { x: 318, y: mirrored ? 57 : 96, 'text-anchor': 'middle', class: 'axis' }, 'No available samples'));
   graph.replaceChildren(...nodes);
 }
+// Smooth live scrolling: between the one-second redraws, shift each visible data layer by elapsed time.
+// Off for history ranges and for users who prefer reduced motion; requestAnimationFrame pauses in hidden tabs.
+const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
+function glide() {
+  if (view.range === 'live' && !reducedMotion.matches) {
+    const now = Date.now();
+    for (const item of graphNodes.values()) {
+      if (!item.layer || !item.graph.isConnected || item.graph.closest('[hidden]')) continue;
+      item.layer.setAttribute('transform', `translate(${DashboardCharts.scrollOffset(item.drawnAt, now, view.windowMs).toFixed(2)} 0)`);
+    }
+  }
+  requestAnimationFrame(glide);
+}
+requestAnimationFrame(glide);
 function redrawGraphs() {
   for (const item of graphNodes.values()) if (item.graph.isConnected && !item.graph.closest('[hidden]')) drawPlot(item);
   if (currentState && !$('view-activity').hidden && !$('activity-tracking').hidden) timelines(currentState);
@@ -291,8 +320,8 @@ function render(state) {
       }
       continue;
     }
-    let group = metric.kind === 'static' || metric.id === 'app.uptime' ? 'static-metrics' : metric.id.startsWith('database.') ? 'database-metrics' :
-      metric.id.startsWith('process.') ? 'process-trends' : metric.id.startsWith('session.') ? 'session-trends' : 'metrics';
+    const group = DashboardCharts.placement(metric, state.info?.role);
+    if (!group) continue;
     let unit = metric.unit;
     const rateMode = metric.kind === 'counter' && group === 'database-metrics' && $('counter-mode').value === 'rate';
     if (rateMode) unit = metric.unit ? metric.unit + '/s' : '/s';
@@ -309,7 +338,8 @@ function render(state) {
   $('info').replaceChildren(...Object.entries(state.info || {}).flatMap(([key, value]) => [el('dt', key), el('dd', value)]));
   $('scope').textContent = `Collecting instance: ${state.info?.role || 'unknown'} / ${state.info?.platform || 'unknown'} (not automatically server-wide)`;
   table('processes', state.processes, state); table('sessions', state.sessions, state); timelines(state);
-  if (state.lastAction) $('action').textContent = state.lastAction.ok ? 'Sample refreshed' : `Refresh failed: ${state.lastAction.error}`;
+  const outcome = DashboardCharts.refreshOutcome(state.lastAction, pendingRefresh);
+  if (outcome) { pendingRefresh = null; toast(outcome.text, outcome.kind); }
 }
 $('counter-mode').addEventListener('change', () => { if (currentState) render(currentState); });
 for (const prefix of ['process', 'session']) $(prefix + '-identity').addEventListener('change', () => timelines(currentState));
@@ -331,13 +361,25 @@ $('auth').addEventListener('submit', async event => {
   event.preventDefault();
   try { await authenticate($('token').value); } catch (error) { $('status').textContent = error.message; }
 });
+// Transient notifications (#17): text plus a symbol, never color alone; failures stay longer; click dismisses.
+let toastTimer, pendingRefresh = null;
+function toast(text, kind = 'info') {
+  const node = $('toast');
+  node.textContent = `${{ ok: '\u2713', fail: '\u2715', info: '\u2139' }[kind]} ${text}`;
+  node.className = 'toast toast-' + kind; node.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { node.hidden = true; }, kind === 'fail' ? 8000 : 4000);
+}
+$('toast').addEventListener('click', () => { $('toast').hidden = true; });
 $('refresh').addEventListener('click', async () => {
   $('refresh').disabled = true;
   try {
     const response = await fetch('/api/refresh', { method: 'POST', headers: { 'X-Dashboard-Action': 'refresh' } });
-    if (!response.ok) throw new Error(await response.text());
-    $('action').textContent = 'Refresh requested...';
-  } catch (error) { $('action').textContent = `Refresh failed: ${error.message}`; }
+    if (response.status === 409) throw new Error('sampling is paused for a maintenance action');
+    if (!response.ok) throw new Error((await response.text()).trim() || `HTTP ${response.status}`);
+    // The outcome arrives with the matching lastAction in the stream (or collector_timeout after 10 s).
+    pendingRefresh = (await response.json()).id;
+  } catch (error) { pendingRefresh = null; toast(`Refresh failed: ${error.message}`, 'fail'); }
   finally { $('refresh').disabled = !connected; }
 });
 setInterval(() => {
@@ -348,7 +390,7 @@ let operatorTimer, operatorPending;
 function operatorMessage(text) { $('operator-message').textContent = text; }
 function stopOperator(text) {
   clearInterval(operatorTimer); operatorTimer = undefined; operatorPending = undefined;
-  $('operator').hidden = true; if (text) $('action').textContent = text;
+  $('operator').hidden = true; if (text) toast(text, 'info');
 }
 async function operatorCall(route, body) {
   const response = await fetch('/api/operator/' + route, { method: 'POST', headers: DashboardOperator.headers(), body: JSON.stringify(body) });
@@ -410,7 +452,7 @@ async function startOperator(token) {
     await operatorCall('session', { token });
     await operatorRefresh();
     operatorTimer = setInterval(operatorRefresh, 2000);
-  } catch (error) { $('action').textContent = `Operator access failed: ${error.message}`; }
+  } catch (error) { toast(`Operator access failed: ${error.message}`, 'fail'); }
 }
 $('operator-request').addEventListener('submit', async event => {
   event.preventDefault();
