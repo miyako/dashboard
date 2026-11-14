@@ -72,21 +72,21 @@ Do not select Follow 4D for this component's ordinary SemVer releases.
 
 If (Count parameters=0)
     
-    CALL WORKER(1; Current method name; {\
-    listen: "127.0.0.1:8443"; \
-    allowLAN: True})
+    CALL WORKER(1; Current method name; {listen: "127.0.0.1:8443"})
     
 Else
     
-    var $monitor : cs.Dashboard.Dashboard
-    var $event : Object
     var $target : Text
     $target:="macOS-universal"
     If (Is Windows)
         $target:="Windows-x64"
     End if
-    $monitor:=cs.Dashboard.Dashboard.new($target)
+    
+    var $event : Object
     $event:=New object("onStatus"; Formula(On_dashboard_status($1; $2)))
+    
+    var $monitor : cs.Dashboard.Dashboard
+    $monitor:=cs.Dashboard.Dashboard.new($target)
     $monitor.start($params; $event)
     
 End if
