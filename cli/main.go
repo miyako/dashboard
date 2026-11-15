@@ -19,7 +19,7 @@ import (
 	"unicode/utf8"
 )
 
-const version = "0.1.7"
+const version = "0.1.8"
 
 func nonce() string {
 	var b [32]byte
