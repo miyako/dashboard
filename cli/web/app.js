@@ -88,17 +88,19 @@ function tabs(ids) {
   buttons.forEach((button, i) => {
     button.addEventListener('click', () => activate(button));
     button.addEventListener('keydown', event => {
+      // Hidden tabs (Logs without an operator session) are skipped.
+      const visible = buttons.filter(item => !item.hidden), at = visible.indexOf(button);
       let index;
-      if (event.key === 'ArrowRight') index = (i + 1) % buttons.length;
-      else if (event.key === 'ArrowLeft') index = (i + buttons.length - 1) % buttons.length;
+      if (event.key === 'ArrowRight') index = (at + 1) % visible.length;
+      else if (event.key === 'ArrowLeft') index = (at + visible.length - 1) % visible.length;
       else if (event.key === 'Home') index = 0;
-      else if (event.key === 'End') index = buttons.length - 1;
+      else if (event.key === 'End') index = visible.length - 1;
       else return;
-      event.preventDefault(); buttons[index].focus(); activate(buttons[index]);
+      event.preventDefault(); visible[index].focus(); activate(visible[index]);
     });
   });
 }
-tabs(['live', 'static', 'database', 'activity']); tabs(['snapshot', 'tracking']);
+tabs(['live', 'static', 'database', 'activity', 'logs']); tabs(['snapshot', 'tracking']);
 function drawMetric(metric, samples = [], key = metric.id, unit = metric.unit) {
   let node = cardNodes.get(key);
   if (!node) {
@@ -390,6 +392,7 @@ let operatorTimer, operatorPending;
 function operatorMessage(text) { $('operator-message').textContent = text; }
 function stopOperator(text) {
   clearInterval(operatorTimer); operatorTimer = undefined; operatorPending = undefined;
+  clearInterval(logState.timer); Object.assign(logState, { view: null, lines: [] }); $('tab-logs').hidden = true; $('log-viewer').hidden = true;
   $('operator').hidden = true; if (text) toast(text, 'info');
 }
 async function operatorCall(route, body) {
@@ -447,10 +450,74 @@ async function operatorRefresh() {
     if (response.ok) renderOperator(await response.json());
   } catch { /* The viewer stream reports connectivity. */ }
 }
+// Logs tab (operator only; docs/log-browsing-design.md). At most 2000 lines in memory, never persisted.
+const logState = { view: null, before: null, after: null, lines: [], timer: undefined };
+async function logsGet(route) {
+  const response = await fetch('/api/operator/logs/' + route);
+  let data = {};
+  try { data = await response.json(); } catch { /* error bodies are JSON; a 404 page may not be. */ }
+  if (!response.ok) throw Object.assign(new Error(DashboardOperator.logReason(data.error) || `HTTP ${response.status}`), { status: response.status });
+  return data;
+}
+function renderLogLines() {
+  $('log-lines').replaceChildren(...logState.lines.map(line => { const li = el('li', line.text); if (line.truncated) li.className = 'truncated'; return li; }));
+}
+function addLogPage(page, direction) {
+  const merged = DashboardOperator.mergeLines(logState.lines, page.lines, direction, 2000);
+  logState.lines = merged.lines;
+  if (direction === 'backward' || !logState.before) logState.before = page.before;
+  if (direction === 'forward' || !logState.after) logState.after = page.after;
+  if (direction === 'forward' && merged.evicted) logState.before = logState.lines.length ? logState.lines[0].cursor : logState.before;
+  $('log-older').disabled = page.atStart === true && direction === 'backward';
+  const box = $('log-lines'), stick = box.scrollTop + box.clientHeight >= box.scrollHeight - 4;
+  renderLogLines();
+  if (direction === 'forward' && stick) box.scrollTop = box.scrollHeight;
+}
+function logFailure(error) {
+  $('log-note').textContent = error.message;
+  if (error.status === 410) { $('log-follow').checked = false; clearInterval(logState.timer); }
+}
+async function openLog(file) {
+  clearInterval(logState.timer); $('log-follow').checked = false;
+  $('log-note').textContent = 'Waiting for 4D to approve and record this…';
+  try {
+    const opened = await operatorCall('logs/open', { file: file.id });
+    Object.assign(logState, { view: opened.view, before: null, after: null, lines: [] });
+    $('log-title').textContent = opened.file.name; $('log-viewer').hidden = false;
+    addLogPage(opened.page, 'forward');
+    $('log-lines').scrollTop = $('log-lines').scrollHeight;
+    $('log-note').textContent = `Showing the last ${opened.page.lines.length} lines.`;
+  } catch (error) { $('log-note').textContent = `Not opened: ${error.message}`; }
+}
+$('log-older').addEventListener('click', async () => {
+  if (!logState.view) return;
+  try { addLogPage(await logsGet('page?' + DashboardOperator.logsQuery(logState.view, logState.before, 'backward', 200)), 'backward'); }
+  catch (error) { logFailure(error); }
+});
+$('log-follow').addEventListener('change', () => {
+  clearInterval(logState.timer);
+  if (!$('log-follow').checked || !logState.view) return;
+  logState.timer = setInterval(async () => {
+    try { addLogPage(await logsGet('page?' + DashboardOperator.logsQuery(logState.view, logState.after, 'forward', 500)), 'forward'); }
+    catch (error) { logFailure(error); }
+  }, 2000);
+});
+async function loadLogFiles() {
+  try {
+    const { files } = await logsGet('files');
+    $('tab-logs').hidden = false;
+    $('log-files').replaceChildren(...files.map(file => {
+      const li = el('li'), button = el('button', DashboardOperator.logFileLabel(file));
+      button.type = 'button'; button.addEventListener('click', () => openLog(file)); li.append(button); return li;
+    }));
+    if (!files.length) $('log-files').replaceChildren(el('li', 'No log files of the enabled families yet.'));
+  } catch (error) { if (error.status === 404) $('tab-logs').hidden = true; }
+}
 async function startOperator(token) {
   try {
     await operatorCall('session', { token });
     await operatorRefresh();
+    loadLogFiles();
     operatorTimer = setInterval(operatorRefresh, 2000);
   } catch (error) { toast(`Operator access failed: ${error.message}`, 'fail'); }
 }

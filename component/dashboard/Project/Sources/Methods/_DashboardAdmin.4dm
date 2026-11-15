@@ -10,6 +10,11 @@ Case of
 		$operator:=cs._DashboardOperator.new($actions; $epoch; Folder($folderPath; fk platform path))
 		$frame:=$operator.execute($message; $record; $entry; $canonical; $authorize)
 		CALL WORKER(".workers"; "_DashboardRelay"; "final"; $epoch; $frame; $record; $folderPath)
+	: ($operation="logAccess")
+		// $entry carries the log family; nothing is read here, only authorized and audited.
+		$operator:=cs._DashboardOperator.new($actions; $epoch; Folder($folderPath; fk platform path))
+		$frame:=$operator.logAccess($message; $entry; $authorize)
+		CALL WORKER(".workers"; "_DashboardRelay"; "logResult"; $epoch; $frame; Null; $folderPath)
 	: ($operation="stop")
 		KILL WORKER
 End case

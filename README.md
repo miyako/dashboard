@@ -267,6 +267,16 @@ and any action in flight is audited as orphaned. Tune or disable it with
 `New object("restart"; New object("max"; 0))`. See
 [docs/restart-strategy.md](docs/restart-strategy.md).
 
+### Log browsing (operator only)
+
+With `New object("logs"; New object("families"; New collection("dashboard.audit")))` and operator
+mode, operators get a **Logs** tab that pages through the dashboard's own audit log and can follow
+new lines. 4D approves and records every open before a byte is shown, and fails closed. Files are
+read by the CLI, confined to the host Logs folder and refused if a file is a link, has been
+swapped, rotated or truncated. There is no export and nothing is kept in the browser. 4D's own logs
+(diagnostic, debug, request) come in later phases; see
+[docs/log-browsing-design.md](docs/log-browsing-design.md).
+
 ### Administrative actions (foundations only)
 
 The groundwork for administrative actions is in place. The first two real

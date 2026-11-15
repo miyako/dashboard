@@ -1,0 +1,6 @@
+{
+  "version": 1,
+  "families": [
+    {"id": "dashboard.audit", "dir": "dashboard", "pattern": "^audit(\\.[1-3])?\\.jsonl$", "format": "jsonl", "sensitivity": "normal"}
+  ]
+}
