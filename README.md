@@ -72,7 +72,8 @@ Do not select Follow 4D for this component's ordinary SemVer releases.
 
 If (Count parameters=0)
     
-    CALL WORKER(1; Current method name; {listen: "127.0.0.1:8443"})
+    // Process 1 exists in standalone 4D and on clients, not on 4D Server: use a named worker there.
+    CALL WORKER((Application type=4D Server) ? "Dashboard" : 1; Current method name; {listen: "127.0.0.1:8443"})
     
 Else
     
@@ -110,6 +111,18 @@ Case of
         // The owned CLI has exited and its registration has been removed.
 End case
 ```
+
+**Where to start and stop it.** Collectors measure the instance they run in, so start the
+dashboard where you want measurements:
+
+| Host | Start from | Stop from |
+| --- | --- | --- |
+| Standalone 4D | `On Startup` | `On Exit` |
+| 4D Server | `On Server Startup` | `On Server Shutdown` |
+| Remote client | Usually nowhere. `On Startup` also runs on clients, so guard it, for example with `If (Application type=4D Local mode)`, unless you want that client's own metrics | `On Exit` |
+
+Stop it with `cs.Dashboard.Dashboard.new().terminate()`, which ends this instance's dashboard
+whichever object started it.
 
 `start(options; event)` returns immediately. The callback receives immutable
 notification snapshots with `kind`, `status`, `url`, `error`, `samples`, `epoch`,
