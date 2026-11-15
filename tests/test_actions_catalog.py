@@ -39,7 +39,7 @@ class LogCatalogTests(unittest.TestCase):
     def test_secret_bearing_families_are_never_in_the_catalog(self):
         catalog = json.loads((ROOT / "cli" / "logs.json").read_text())
         patterns = " ".join(f["pattern"] for f in catalog["families"])
-        for excluded in ("HTTPDebugLog", "4DHTTPClientLog", "4DSMTPLog", "4DPOP3Log", "4DIMAPLog", "ordaRequests"):
+        for excluded in ("HTTPDebugLog", "4DHTTPClientLog", "4DSMTPLog", "4DPOP3Log", "4DIMAPLog", "ordaRequests", "Logweb"):
             self.assertNotIn(excluded, patterns)
         for family in catalog["families"]:
             self.assertTrue(family["pattern"].startswith("^") and family["pattern"].endswith("$"))
