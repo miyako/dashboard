@@ -226,7 +226,7 @@ def test_4d(root, tool4d, component=None):
                            encoding="utf-8")
         subprocess.run([str(Path(tool4d).resolve()), str(host / "Project" / "Host.4DProject"),
                         "--skip-onstartup", "--startup-method=Smoke", "--dataless",
-                        "--user-param=" + str(request)], check=True, timeout=120)
+                        "--user-param=" + str(request)], check=True, timeout=300)
         _no_symlinks(staged_output, recursive=False)
         if not staged_output.is_file() or staged_output.is_symlink():
             raise ValueError("tool4d did not write host-status.json; host execution is unverified")

@@ -8,6 +8,12 @@ $process:=Try(Process info(Current process))
 If ($process#Null)
 	$entry.preemptive:=$process.preemptive
 End if
+If (($status.kind="restarting") | (Num($status.restarts)>0))
+	// Restart fields only: earlier callback events stay byte-identical.
+	$entry.restarts:=Num($status.restarts)
+	$entry.reason:=$status.reason
+	$entry.urlCleared:=($status.url="")
+End if
 If ($status.kind="running")
 	$entry.portObserved:=($status.portCheck.availability="available")
 	$entry.listening:=$status.portCheck.listening

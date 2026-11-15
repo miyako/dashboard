@@ -102,6 +102,12 @@ Case of
 				_DashboardWorker("stop"; ""; New object; Dashboard_State; New object; New object)
 			End if
 		End if
+	: ($operation="tick")
+		If (Dashboard_Live#Null)
+			If (Dashboard_Live.baseEpoch=$state.epoch)
+				Dashboard_Live.tick()
+			End if
+		End if
 	: ($operation="active")
 		Use ($signal)
 			$signal.active:=(Dashboard_State#Null)

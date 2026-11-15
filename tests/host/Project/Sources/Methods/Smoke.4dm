@@ -829,7 +829,8 @@ $report.occupiedPort.blockerStopped:=$blocker.terminated
 HOST_Phase:="IPv6 loopback and unexpected exit"
 $callbackLog:=New shared object("events"; New shared collection; "action"; "")
 $event:=New object("log"; $callbackLog; "onStatus"; Formula(Dashboard_callback($1; $2)))
-$service:=$tool.start(New object("listen"; "[::1]:0"); $event)
+// Restarts disabled: this phase checks that an unexpected exit still fails when the host opts out.
+$service:=$tool.start(New object("listen"; "[::1]:0"; "restart"; New object("max"; 0)); $event)
 $deadline:=Milliseconds+10000
 While (($service.samples<1) & Not($service.finished) & (Milliseconds<$deadline))
 	DELAY PROCESS(Current process; 6)
@@ -1139,6 +1140,31 @@ For each ($operatorRaw; Split string($cacheFolder.file("audit.jsonl").getText();
 	$report.cache.auditStates.push($operatorLine.action+":"+$operatorLine.state+":"+String($operatorLine.error))
 End for each
 $cacheFolder.delete(Delete with contents)
+HOST_Phase:="restart policy units"
+var $rsAgent : cs.Dashboard._DashboardAgent
+var $rsPolicies : Object
+var $rsName : Text
+$rsAgent:=cs.Dashboard._DashboardAgent.new($target; New object; New shared object("epoch"; "restart-units"); New object; New object)
+$report.restartUnits:=New object("policy"; New object; "reason"; New object; "delay"; New collection)
+$rsPolicies:=New object("absent"; Null; "disabled"; New object("max"; 0); "tuned"; New object("max"; 2; "windowSeconds"; 60; "initialDelayMs"; 250; "livenessSeconds"; 15); \
+	"tooMany"; New object("max"; 11); "unknownKey"; New object("retries"; 1); "fraction"; New object("max"; 2.5); "notObject"; "always"; "livenessTooShort"; New object("livenessSeconds"; 14))
+For each ($rsName; OB Keys($rsPolicies))
+	If ($rsName="absent")
+		$report.restartUnits.policy[$rsName]:=$rsAgent.restartPolicyFrom()
+	Else
+		$report.restartUnits.policy[$rsName]:=$rsAgent.restartPolicyFrom($rsPolicies[$rsName])
+	End if
+End for each
+$report.restartUnits.reason.signal:=$rsAgent.restartReason(Null; True; False)
+$report.restartUnits.reason.cliError:=$rsAgent.restartReason(2; True; False)
+$report.restartUnits.reason.exitZero:=$rsAgent.restartReason(0; True; False)
+$report.restartUnits.reason.exitOne:=$rsAgent.restartReason(1; True; False)
+$report.restartUnits.reason.beforeReady:=$rsAgent.restartReason(Null; False; False)
+$report.restartUnits.reason.hung:=$rsAgent.restartReason(2; True; True)
+For each ($rsName; New collection("0"; "1"; "2"; "3"; "4"; "6"; "10"))
+	$report.restartUnits.delay.push($rsAgent.restartDelay(Num($rsName); 1000))
+End for each
+$report.restartUnits.delay.push($rsAgent.restartDelay(0; 250))
 HOST_Phase:="abandoned sample skip"
 // A request the agent stopped waiting for must not collect late and delay the next sample.
 var $skipSampler : cs.Dashboard._DashboardSampler
@@ -1328,6 +1354,95 @@ End while
 If (Int(Get cache size/1048576)#$caOriginalMiB)
 	SET CACHE SIZE($caOriginalMiB*1048576)
 End if
+HOST_Phase:="CLI restart live"
+var $rlTool : cs.Dashboard.Dashboard
+var $rlLog; $rlEvent; $rlService; $rlHeaders; $rlWait : Object
+var $rlOrigin; $rlViewer; $rlToken; $rlCookie; $rlFirstUrl; $rlId; $rlAudit : Text
+var $rlPid; $rlPort; $rlSamples : Integer
+var $rlRestartEvents : Collection
+$rlLog:=New shared object("events"; New shared collection; "action"; "")
+$rlEvent:=New object("log"; $rlLog; "onStatus"; Formula(Dashboard_callback($1; $2)))
+$rlTool:=cs.Dashboard.Dashboard.new($target)
+$rlService:=$rlTool.start(New object("operator"; New object("actions"; New collection("operator.sleep")); \
+	"restart"; New object("max"; 2; "windowSeconds"; 600; "initialDelayMs"; 250; "livenessSeconds"; 15)); $rlEvent)
+$deadline:=Milliseconds+15000
+While (($rlService.samples<1) & ($rlService.status#"failed") & (Milliseconds<$deadline))
+	DELAY PROCESS(Current process; 6)
+End while
+$report.restartLive:=New object("initial"; $rlService.status)
+If ($rlService.status="running")
+	$rlFirstUrl:=$rlService.url
+	$rlPort:=$rlService.port
+	// An action running when the CLI dies is audited as orphaned, never replayed into the new run.
+	$rlOrigin:=Substring($rlService.url; 1; Position("/#token="; $rlService.url; *)-1)
+	$rlViewer:=Substring($rlService.url; Position("/#token="; $rlService.url; *)+8; 64)
+	$rlToken:=Substring($rlService.operatorUrl; Position("&operator="; $rlService.operatorUrl; *)+10; 64)
+	$rlCookie:=String(Operator_http("POST"; $rlOrigin+"/api/session"; New object("Origin"; $rlOrigin); $rlViewer).cookies.dashboard)
+	$rlHeaders:=New object("Origin"; $rlOrigin; "Cookie"; "dashboard="+$rlCookie; "X-Dashboard-Action"; "operator"; "Content-Type"; "application/json")
+	$rlHeaders.Cookie:="dashboard="+$rlCookie+"; dashboard_operator="+String(Operator_http("POST"; $rlOrigin+"/api/operator/session"; $rlHeaders; JSON Stringify(New object("token"; $rlToken))).cookies.dashboard_operator)
+	$rlId:=Operator_action($rlOrigin; $rlHeaders; "operator.sleep"; New object("seconds"; 4))
+	$rlWait:=Operator_wait($rlOrigin; $rlHeaders.Cookie; $rlId; New collection("running"); 5000)
+	// 1. Crash: SIGKILL while running.
+	$rlPid:=Restart_pid($rlPort)
+	$report.restartLive.pidFound:=($rlPid>0)
+	Restart_signal("-9"; $rlPid)
+	$deadline:=Milliseconds+15000
+	While ((($rlService.status#"running") | ($rlService.restarts<1)) & ($rlService.status#"failed") & (Milliseconds<$deadline))
+		DELAY PROCESS(Current process; 6)
+	End while
+	$rlSamples:=$rlService.samples
+	$deadline:=Milliseconds+10000
+	While (($rlService.samples<=$rlSamples) & (Milliseconds<$deadline))
+		DELAY PROCESS(Current process; 6)
+	End while
+	$report.restartLive.crash:=New object("status"; $rlService.status; "restarts"; $rlService.restarts; "reason"; $rlService.lastRestartReason; \
+		"newUrl"; ($rlService.url#$rlFirstUrl) & ($rlService.url#""); "sampling"; ($rlService.samples>$rlSamples); \
+		"oldUrlClosed"; (Operator_http("GET"; $rlOrigin+"/app.js"; New object; "").status=0))
+	// 2. Hang: SIGSTOP; liveness (15 s) closes stdin, forces after 3.5 s, then restarts.
+	$rlPid:=Restart_pid($rlService.port)
+	Restart_signal("-STOP"; $rlPid)
+	$deadline:=Milliseconds+40000
+	While ((($rlService.status#"running") | ($rlService.restarts<2)) & ($rlService.status#"failed") & (Milliseconds<$deadline))
+		DELAY PROCESS(Current process; 6)
+	End while
+	$report.restartLive.hung:=New object("status"; $rlService.status; "restarts"; $rlService.restarts; "reason"; $rlService.lastRestartReason)
+	Restart_signal("-9"; $rlPid)
+	// 3. Budget: max 2 in the window, so the next crash fails the dashboard.
+	Restart_signal("-9"; Restart_pid($rlService.port))
+	$deadline:=Milliseconds+15000
+	While ((Not($rlService.finished)) & (Milliseconds<$deadline))
+		DELAY PROCESS(Current process; 6)
+	End while
+	$report.restartLive.limit:=New object("status"; $rlService.status; "finished"; $rlService.finished; "restarts"; $rlService.restarts; \
+		"limitError"; (Position("Dashboard CLI restart limit reached (crashed)"; $rlService.error; *)=1))
+End if
+$rlTool.stop()
+$deadline:=Milliseconds+15000
+While ((Not($rlService.finished)) & (Milliseconds<$deadline))
+	DELAY PROCESS(Current process; 6)
+End while
+$rlRestartEvents:=New collection
+For each ($entry; $rlLog.events)
+	If ($entry.kind="restarting")
+		$rlRestartEvents.push(New object("reason"; $entry.reason; "restarts"; $entry.restarts; "urlCleared"; $entry.urlCleared))
+	End if
+End for each
+$report.restartLive.events:=$rlRestartEvents
+$deadline:=Milliseconds+10000
+$rlAudit:=""
+Repeat
+	DELAY PROCESS(Current process; 30)
+	If ($opAuditFile.exists)
+		$rlAudit:=$opAuditFile.getText()
+	End if
+Until ((Position("\"state\":\"orphaned\""; $rlAudit; *)>0) | (Milliseconds>$deadline))
+$report.restartLive.audit:=New collection
+For each ($operatorRaw; Split string($rlAudit; Char(10); sk ignore empty strings))
+	$operatorLine:=JSON Parse($operatorRaw)
+	If (Position($rlService.epoch; String($operatorLine.epoch); *)=1)
+		$report.restartLive.audit.push($operatorLine.action+":"+$operatorLine.state+":"+String($operatorLine.error)+":"+Choose(Position(".r"; String($operatorLine.epoch); *)>0; "restarted-run"; "first-run"))
+	End if
+End for each
 HOST_Phase:="running failure watchdog"
 $lifecycle:=New signal
 CALL WORKER(".workers"; "Dashboard_lifecycle"; "failure"; $target; New object; $lifecycle)

@@ -15,6 +15,11 @@ If (Dashboard_Live#Null)
 End if
 If ($live)
 	Dashboard_Live.send("actionState"; $frame)
+	If ($operation="final")
+		// The pause for an exclusive action is over: restart the liveness clock.
+		Dashboard_Live.exclusiveRunning:=False
+		Dashboard_Live.lastFrameAt:=Milliseconds
+	End if
 	return
 End if
 If ($operation="final")

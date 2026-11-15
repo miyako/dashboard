@@ -2967,6 +2967,121 @@
         }
       },
       {
+        "path": "/restartUnits",
+        "equals": {
+          "policy": {
+            "absent": {
+              "ok": true,
+              "policy": {
+                "max": 5,
+                "windowSeconds": 600,
+                "initialDelayMs": 1000,
+                "livenessSeconds": 45
+              }
+            },
+            "disabled": {
+              "ok": true,
+              "policy": {
+                "max": 0,
+                "windowSeconds": 600,
+                "initialDelayMs": 1000,
+                "livenessSeconds": 45
+              }
+            },
+            "tuned": {
+              "ok": true,
+              "policy": {
+                "max": 2,
+                "windowSeconds": 60,
+                "initialDelayMs": 250,
+                "livenessSeconds": 15
+              }
+            },
+            "tooMany": {
+              "ok": false,
+              "error": "restart.max must be an integer from 0 to 10"
+            },
+            "unknownKey": {
+              "ok": false,
+              "error": "restart must be an object of max, windowSeconds, initialDelayMs and livenessSeconds"
+            },
+            "fraction": {
+              "ok": false,
+              "error": "restart.max must be an integer from 0 to 10"
+            },
+            "notObject": {
+              "ok": false,
+              "error": "restart must be an object of max, windowSeconds, initialDelayMs and livenessSeconds"
+            },
+            "livenessTooShort": {
+              "ok": false,
+              "error": "restart.livenessSeconds must be an integer from 15 to 300"
+            }
+          },
+          "reason": {
+            "signal": "crashed",
+            "cliError": "",
+            "exitZero": "exited",
+            "exitOne": "exited",
+            "beforeReady": "",
+            "hung": "unresponsive"
+          },
+          "delay": [
+            1000,
+            2000,
+            4000,
+            8000,
+            16000,
+            60000,
+            60000,
+            250
+          ]
+        }
+      },
+      {
+        "path": "/restartLive",
+        "equals": {
+          "initial": "running",
+          "pidFound": true,
+          "crash": {
+            "status": "running",
+            "restarts": 1,
+            "reason": "crashed",
+            "newUrl": true,
+            "sampling": true,
+            "oldUrlClosed": true
+          },
+          "hung": {
+            "status": "running",
+            "restarts": 2,
+            "reason": "unresponsive"
+          },
+          "limit": {
+            "status": "failed",
+            "finished": true,
+            "restarts": 2,
+            "limitError": true
+          },
+          "events": [
+            {
+              "reason": "crashed",
+              "restarts": 1,
+              "urlCleared": true
+            },
+            {
+              "reason": "unresponsive",
+              "restarts": 2,
+              "urlCleared": true
+            }
+          ],
+          "audit": [
+            "operator.sleep:running::first-run",
+            "operator.sleep:completed::first-run",
+            "operator.sleep:orphaned:completed:first-run"
+          ]
+        }
+      },
+      {
         "path": "/abandonedSample",
         "equals": {
           "skipped": true,
