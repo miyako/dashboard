@@ -116,8 +116,37 @@ const DashboardOperator = (() => {
   function secondsLeft(expiresAt, now) {
     return Math.max(0, Math.ceil((Date.parse(expiresAt) - now) / 1000));
   }
+  // Log viewer helpers (docs/log-browsing-design.md): bounded, never persisted.
+  const logReasons = {
+    rotated: 'the log was rotated or replaced; reopen it from the list',
+    truncated: 'the log was truncated; reopen it from the list',
+    host_denied: 'the host application did not approve opening this log',
+    audit_unavailable: 'the audit log could not be written, so nothing was shown',
+    authorization_timeout: '4D did not approve in time; try again',
+    open_pending: 'another log is still being opened',
+    transport_not_allowed: 'logs are only available over TLS or on this machine',
+    unknown_log_file: 'that file is no longer available',
+    target_unavailable: '4D is not reporting right now',
+    rate_limited: 'too many requests; wait a moment',
+  };
+  function logReason(code) { return logReasons[code] || reason(code); }
+  function logsQuery(view, cursor, direction, limit) {
+    return new URLSearchParams({ view, cursor, direction, limit: String(limit) }).toString();
+  }
+  // Keeps at most `cap` lines, evicting from the end far from where the reader is moving.
+  function mergeLines(existing, incoming, direction, cap) {
+    const merged = direction === 'backward' ? [...incoming, ...existing] : [...existing, ...incoming];
+    if (merged.length <= cap) return { lines: merged, evicted: 0 };
+    return direction === 'backward'
+      ? { lines: merged.slice(0, cap), evicted: merged.length - cap }
+      : { lines: merged.slice(merged.length - cap), evicted: merged.length - cap };
+  }
+  function logFileLabel(file) {
+    const kib = file.size / 1024;
+    return `${file.name} — ${kib < 1024 ? kib.toFixed(1) + ' KiB' : (kib / 1024).toFixed(1) + ' MiB'}, ${new Date(file.modified).toLocaleString()}`;
+  }
   function headers() { return { 'Content-Type': 'application/json', 'X-Dashboard-Action': 'operator' }; }
   function newestFirst(records) { return [...records].sort((a, b) => b.requestedAt.localeCompare(a.requestedAt)); }
-  return { tokens, noopArgs, argsFor, argsFromSpec, labels, reason, describe, summary, cadence, diagnosticRows, secondsLeft, headers, newestFirst };
+  return { logReason, logsQuery, mergeLines, logFileLabel, tokens, noopArgs, argsFor, argsFromSpec, labels, reason, describe, summary, cadence, diagnosticRows, secondsLeft, headers, newestFirst };
 })();
 if (typeof module !== 'undefined') module.exports = DashboardOperator;

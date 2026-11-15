@@ -1,6 +1,14 @@
 # Log browsing: design (#19, part 2)
 
-Status: **design accepted** (section 10 records the decisions). Nothing is implemented yet. It builds on operator mode (M3),
+Status: **design accepted** (section 10 records the decisions). **L1 is implemented**: the
+`dashboard.audit` family only, with the file map, open, paging and follow, and the fail-closed
+`logAccess` round-trip. L0 (confirming 4D's own log formats on full 4D) and L2–L4 are not started.
+
+Found while implementing L1: `Folder(fk logs folder; *).path` returns the filesystem alias `/LOGS/`,
+not a real path, so the component converts `platformPath` to POSIX. A headless tool4d project's Logs
+folder is under `~/Library/Application Support/tool4d/<project>/Logs`. Routes live under
+`/api/operator/logs/`, because the operator cookie is scoped to `/api/operator/`. "Tail" is a
+forward page from the `after` cursor. It builds on operator mode (M3),
 the shared catalog pattern (A0), the host `authorize` callback (A0/A1) and the restart strategy.
 
 ## 1. Why this is the riskiest feature so far

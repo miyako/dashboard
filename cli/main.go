@@ -46,7 +46,7 @@ func run(args []string, input io.Reader, output, diagnostic io.Writer) error {
 		return encoder.Encode(map[string]any{"protocol": 1, "text": args[2]})
 	}
 	if len(args) == 0 || args[0] != "serve" {
-		return errors.New("expected serve [--listen IP:port] [--allow-lan --tls-cert file --tls-key file] [--operator-actions ids], inspect --text text, or --version")
+		return errors.New("expected serve [--listen IP:port] [--allow-lan --tls-cert file --tls-key file] [--operator-actions ids [--logs-root dir --log-families ids]], inspect --text text, or --version")
 	}
 	flags := flag.NewFlagSet("serve", flag.ContinueOnError)
 	flags.SetOutput(diagnostic)
@@ -55,6 +55,8 @@ func run(args []string, input io.Reader, output, diagnostic io.Writer) error {
 	cert := flags.String("tls-cert", "", "TLS certificate")
 	key := flags.String("tls-key", "", "TLS key")
 	operatorActions := flags.String("operator-actions", "", "comma-separated operator action IDs; operator mode stays off when omitted")
+	logsRoot := flags.String("logs-root", "", "host Logs folder (absolute); log browsing stays off when omitted")
+	logFamilyList := flags.String("log-families", "", "comma-separated log family IDs from the log catalog")
 	if err := flags.Parse(args[1:]); err != nil {
 		return err
 	}
@@ -73,6 +75,22 @@ func run(args []string, input io.Reader, output, diagnostic io.Writer) error {
 	var actions map[string]bool
 	if *operatorActions != "" {
 		if actions, err = parseOperatorActions(*operatorActions); err != nil {
+			return err
+		}
+	}
+	var logs *logsConfig
+	if (*logsRoot == "") != (*logFamilyList == "") {
+		return errors.New("--logs-root and --log-families must be given together")
+	}
+	if *logsRoot != "" {
+		if actions == nil {
+			return errors.New("log browsing requires operator mode (--operator-actions)")
+		}
+		families, err := parseLogFamilies(*logFamilyList)
+		if err != nil {
+			return err
+		}
+		if logs, err = newLogs(*logsRoot, families); err != nil {
 			return err
 		}
 	}
@@ -105,6 +123,7 @@ func run(args []string, input io.Reader, output, diagnostic io.Writer) error {
 	if actions != nil {
 		service.op = newOperator(actions)
 	}
+	service.logs = logs
 	server := &http.Server{Handler: service.handler(), TLSConfig: tlsConfig, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 5 * time.Second, IdleTimeout: 30 * time.Second, MaxHeaderBytes: 8192}
 	failures := make(chan error, 3)
 	go func() {
@@ -133,6 +152,9 @@ func run(args []string, input io.Reader, output, diagnostic io.Writer) error {
 	if service.op != nil {
 		ready["operator"] = service.op.caps()
 		ready["operatorUrl"] = service.origin + "/#token=" + service.token + "&operator=" + service.op.token
+	}
+	if service.logs != nil {
+		ready["logs"] = service.logs.caps()
 	}
 	if err := service.emit(ready); err != nil {
 		return err

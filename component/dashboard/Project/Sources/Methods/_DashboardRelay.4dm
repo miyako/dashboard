@@ -13,6 +13,14 @@ If (Dashboard_Live#Null)
 		End if
 	End if
 End if
+If ($live & ($operation="logResult"))
+	Dashboard_Live.send("logAccessResult"; $frame)
+	return
+End if
+If ($operation="logResult")
+	// The CLI that asked is gone; the executor already wrote the audit record.
+	return
+End if
 If ($live)
 	Dashboard_Live.send("actionState"; $frame)
 	If ($operation="final")

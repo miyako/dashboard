@@ -63,3 +63,15 @@ test('cache actions describe their effect and refusals plainly', () => {
   assert.deepEqual(operator.argsFor('cache.size', { sizeMiB: '2048' }, size), { sizeMiB: 2048 });
   assert.throws(() => operator.argsFor('cache.size', { sizeMiB: '99' }, size));
 });
+
+test('log viewer keeps a bounded window and explains failures', () => {
+  const lines = n => Array.from({ length: n }, (_, i) => ({ text: String(i) }));
+  const forward = operator.mergeLines(lines(1500), lines(800), 'forward', 2000);
+  assert.equal(forward.lines.length, 2000); assert.equal(forward.evicted, 300); assert.equal(forward.lines[0].text, '300');
+  const backward = operator.mergeLines(lines(1500), lines(800), 'backward', 2000);
+  assert.equal(backward.lines.length, 2000); assert.equal(backward.lines.at(-1).text, '1199');
+  assert.match(operator.logReason('rotated'), /reopen it/);
+  assert.match(operator.logReason('audit_unavailable'), /nothing was shown/);
+  assert.deepEqual(Object.fromEntries(new URLSearchParams(operator.logsQuery('v', 'c.1', 'backward', 200))), { view: 'v', cursor: 'c.1', direction: 'backward', limit: '200' });
+  assert.match(operator.logFileLabel({ name: 'audit.jsonl', size: 2048, modified: '2026-11-15T00:00:00Z' }), /audit\.jsonl — 2\.0 KiB/);
+});

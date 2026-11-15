@@ -1165,6 +1165,58 @@ For each ($rsName; New collection("0"; "1"; "2"; "3"; "4"; "6"; "10"))
 	$report.restartUnits.delay.push($rsAgent.restartDelay(Num($rsName); 1000))
 End for each
 $report.restartUnits.delay.push($rsAgent.restartDelay(0; 250))
+HOST_Phase:="log access units"
+var $lgOperator : cs.Dashboard._DashboardOperator
+var $lgFolder; $lgBroken : 4D.Folder
+var $lgMessage; $lgCheck : Object
+var $lgCases : Object
+var $lgName : Text
+$lgOperator:=cs.Dashboard._DashboardOperator.new()
+$report.logUnits:=New object("validate"; New object; "check"; New object; "access"; New object)
+$report.logUnits.catalog:=OB Keys($lgOperator.logCatalog())
+$report.logUnits.validate.noOperator:=$lgOperator.validateLogs(New object("families"; New collection("dashboard.audit")); False)
+$report.logUnits.validate.unknownFamily:=$lgOperator.validateLogs(New object("families"; New collection("4d.httpDebug")); True)
+$report.logUnits.validate.extraKey:=$lgOperator.validateLogs(New object("families"; New collection("dashboard.audit"); "root"; "/etc"); True)
+$report.logUnits.validate.valid:=$lgOperator.validateLogs(New object("families"; New collection("dashboard.audit")); True)
+$lgFolder:=Folder(Temporary folder; fk platform path).folder("dashboard-logs-"+Generate UUID)
+$lgOperator:=cs.Dashboard._DashboardOperator.new(New collection("operator.noop"); "log-epoch"; $lgFolder)
+$lgOperator.relay:=False
+$lgMessage:=New object("protocol"; 1; "kind"; "logAccess"; "epoch"; "log-epoch"; "id"; Generate digest("log one"; SHA256 digest); "op"; "open"; "family"; "dashboard.audit"; "file"; "audit.jsonl"; "actor"; "0123456789abcdef")
+$lgCases:=New object(\
+	"valid"; New object; \
+	"wrongEpoch"; New object("epoch"; "other-epoch"); \
+	"otherFamily"; New object("family"; "4d.diagnostic"); \
+	"pathFile"; New object("file"; "../audit.jsonl"); \
+	"patternMismatch"; New object("file"; "audit.9.jsonl"); \
+	"searchOp"; New object("op"; "search"); \
+	"extraField"; New object("path"; "/etc/passwd"); \
+	"duplicate"; New object)
+For each ($lgName; OB Keys($lgCases))
+	$lgCheck:=OB Copy($lgMessage)
+	For each ($parameter; OB Keys($lgCases[$lgName]))
+		$lgCheck[$parameter]:=$lgCases[$lgName][$parameter]
+	End for each
+	$lgCheck:=$lgOperator.checkLogAccess($lgCheck; New collection("dashboard.audit"))
+	$report.logUnits.check[$lgName]:=New object("ok"; $lgCheck.ok; "error"; $lgCheck.error)
+End for each
+$lgCheck:=$lgOperator.logCatalog()["dashboard.audit"]
+$report.logUnits.access.allowed:=$lgOperator.logAccess($lgMessage; $lgCheck; Null)
+$report.logUnits.access.denied:=$lgOperator.logAccess($lgMessage; $lgCheck; Formula(False))
+$report.logUnits.access.sensitiveWithoutAuthorize:=$lgOperator.logAccess($lgMessage; New object("id"; "test.sensitive"; "sensitivity"; "sensitive"); Null)
+$lgBroken:=Folder(Temporary folder; fk platform path).folder("dashboard-logs-"+Generate UUID)
+$lgBroken.folder("audit.jsonl").create()
+$lgOperator.folder:=$lgBroken
+$report.logUnits.access.auditUnavailable:=$lgOperator.logAccess($lgMessage; $lgCheck; Null)
+For each ($lgName; New collection("allowed"; "denied"; "sensitiveWithoutAuthorize"; "auditUnavailable"))
+	OB REMOVE($report.logUnits.access[$lgName]; "id")
+End for each
+$report.logUnits.auditStates:=New collection
+For each ($operatorRaw; Split string($lgFolder.file("audit.jsonl").getText(); Char(10); sk ignore empty strings))
+	$operatorLine:=JSON Parse($operatorRaw)
+	$report.logUnits.auditStates.push($operatorLine.action+":"+$operatorLine.state+":"+String($operatorLine.error))
+End for each
+$lgFolder.delete(Delete with contents)
+$lgBroken.delete(Delete with contents)
 HOST_Phase:="abandoned sample skip"
 // A request the agent stopped waiting for must not collect late and delay the next sample.
 var $skipSampler : cs.Dashboard._DashboardSampler
@@ -1443,6 +1495,87 @@ For each ($operatorRaw; Split string($rlAudit; Char(10); sk ignore empty strings
 		$report.restartLive.audit.push($operatorLine.action+":"+$operatorLine.state+":"+String($operatorLine.error)+":"+Choose(Position(".r"; String($operatorLine.epoch); *)>0; "restarted-run"; "first-run"))
 	End if
 End for each
+HOST_Phase:="log browsing live"
+var $lbTool : cs.Dashboard.Dashboard
+var $lbService; $lbRejected; $lbHeaders; $lbFiles; $lbOpen; $lbOlder; $lbNewer; $lbFile : Object
+var $lbOrigin; $lbViewer; $lbToken; $lbCookie; $lbAudit; $lbLine; $lbId : Text
+var $lbJson : Boolean
+// Logs need operator mode: refused at start without it.
+$lbRejected:=cs.Dashboard.Dashboard.new($target).start(New object("logs"; New object("families"; New collection("dashboard.audit"))))
+$deadline:=Milliseconds+10000
+While ((Not($lbRejected.finished)) & (Milliseconds<$deadline))
+	DELAY PROCESS(Current process; 6)
+End while
+$report.logLive:=New object("rejected"; New object("status"; $lbRejected.status; "error"; $lbRejected.error))
+$lbTool:=cs.Dashboard.Dashboard.new($target)
+$lbService:=$lbTool.start(New object("operator"; New object("actions"; New collection("operator.noop")); "logs"; New object("families"; New collection("dashboard.audit"))); New object)
+$deadline:=Milliseconds+15000
+While (($lbService.samples<1) & ($lbService.status#"failed") & (Milliseconds<$deadline))
+	DELAY PROCESS(Current process; 6)
+End while
+$report.logLive.status:=$lbService.status
+If ($lbService.status#"running")
+	$report.logLive.error:=$lbService.error
+End if
+If ($lbService.status="running")
+	$lbOrigin:=Substring($lbService.url; 1; Position("/#token="; $lbService.url; *)-1)
+	$lbViewer:=Substring($lbService.url; Position("/#token="; $lbService.url; *)+8; 64)
+	$lbToken:=Substring($lbService.operatorUrl; Position("&operator="; $lbService.operatorUrl; *)+10; 64)
+	$lbCookie:=String(Operator_http("POST"; $lbOrigin+"/api/session"; New object("Origin"; $lbOrigin); $lbViewer).cookies.dashboard)
+	$lbHeaders:=New object("Origin"; $lbOrigin; "Cookie"; "dashboard="+$lbCookie; "X-Dashboard-Action"; "operator"; "Content-Type"; "application/json")
+	$report.logLive.viewerOnly:=Operator_http("GET"; $lbOrigin+"/api/operator/logs/files"; New object("Cookie"; "dashboard="+$lbCookie); "").status
+	$lbHeaders.Cookie:="dashboard="+$lbCookie+"; dashboard_operator="+String(Operator_http("POST"; $lbOrigin+"/api/operator/session"; $lbHeaders; JSON Stringify(New object("token"; $lbToken))).cookies.dashboard_operator)
+	$lbFiles:=Operator_json(Operator_http("GET"; $lbOrigin+"/api/operator/logs/files"; New object("Cookie"; $lbHeaders.Cookie); ""))
+	$lbFile:=Null
+	If (Value type($lbFiles.files)=Is collection)
+		$lbFile:=$lbFiles.files.query("name = :1"; "audit.jsonl").first()
+		$report.logLive.files:=New object("count"; $lbFiles.files.length; "auditListed"; ($lbFile#Null); "noPaths"; (Position(Folder(fk logs folder).path; JSON Stringify($lbFiles); *)=0))
+	End if
+	If ($lbFile#Null)
+		$lbOpen:=Operator_json(Operator_http("POST"; $lbOrigin+"/api/operator/logs/open"; $lbHeaders; JSON Stringify(New object("file"; $lbFile.id))))
+		$report.logLive.open:=New object("httpStatus"; $lbOpen.httpStatus; "view"; (Value type($lbOpen.view)=Is text); "lines"; False; "json"; False)
+		If (Value type($lbOpen.page)=Is object)
+			$report.logLive.open.lines:=($lbOpen.page.lines.length>0)
+			$lbJson:=($lbOpen.page.lines.length>0)
+			For each ($lbLine; $lbOpen.page.lines.extract("text"))
+				$lbJson:=$lbJson & (Substring($lbLine; 1; 6)="{\"v\":1")
+			End for each
+			$report.logLive.open.json:=$lbJson
+			// Older lines exist: the earlier phases wrote many audit records.
+			$lbOlder:=Operator_json(Operator_http("GET"; $lbOrigin+"/api/operator/logs/page?view="+$lbOpen.view+"&cursor="+$lbOpen.page.before+"&direction=backward&limit=50"; New object("Cookie"; $lbHeaders.Cookie); ""))
+			$report.logLive.older:=(Value type($lbOlder.lines)=Is collection)
+			// Follow: an action appends audit records that a forward read from "after" returns.
+			$lbId:=Operator_action($lbOrigin; $lbHeaders; "operator.noop"; New object("note"; "follow check"))
+			Operator_wait($lbOrigin; $lbHeaders.Cookie; $lbId; New collection("completed"; "failed"); 10000)
+			$lbNewer:=Operator_json(Operator_http("GET"; $lbOrigin+"/api/operator/logs/page?view="+$lbOpen.view+"&cursor="+$lbOpen.page.after+"&direction=forward&limit=500"; New object("Cookie"; $lbHeaders.Cookie); ""))
+			$report.logLive.follow:=New object("newLines"; 0; "hasNoop"; False)
+			If (Value type($lbNewer.lines)=Is collection)
+				$report.logLive.follow.newLines:=$lbNewer.lines.length
+				For each ($lbLine; $lbNewer.lines.extract("text"))
+					$report.logLive.follow.hasNoop:=$report.logLive.follow.hasNoop | (Position("\"action\":\"operator.noop\""; $lbLine; *)>0)
+				End for each
+			End if
+			// A tampered cursor is refused.
+			$report.logLive.tampered:=Operator_http("GET"; $lbOrigin+"/api/operator/logs/page?view="+$lbOpen.view+"&cursor=0.x&direction=forward&limit=10"; New object("Cookie"; $lbHeaders.Cookie); "").status
+		End if
+	End if
+	$lbAudit:=""
+	If ($opAuditFile.exists)
+		$lbAudit:=$opAuditFile.getText()
+	End if
+	$report.logLive.openAudited:=False
+	For each ($operatorRaw; Split string($lbAudit; Char(10); sk ignore empty strings))
+		$operatorLine:=JSON Parse($operatorRaw)
+		If (($operatorLine.epoch=$lbService.epoch) & ($operatorLine.action="logs.open") & ($operatorLine.state="completed"))
+			$report.logLive.openAudited:=True
+		End if
+	End for each
+End if
+$lbTool.stop()
+$deadline:=Milliseconds+15000
+While ((Not($lbService.finished)) & (Milliseconds<$deadline))
+	DELAY PROCESS(Current process; 6)
+End while
 HOST_Phase:="running failure watchdog"
 $lifecycle:=New signal
 CALL WORKER(".workers"; "Dashboard_lifecycle"; "failure"; $target; New object; $lifecycle)

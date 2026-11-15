@@ -73,7 +73,7 @@
       },
       {
         "path": "/invalid/stderr",
-        "equals": "{\"error\":{\"code\":\"dashboard_error\",\"message\":\"expected serve [--listen IP:port] [--allow-lan --tls-cert file --tls-key file] [--operator-actions ids], inspect --text text, or --version\"},\"protocol\":1}\n"
+        "equals": "{\"error\":{\"code\":\"dashboard_error\",\"message\":\"expected serve [--listen IP:port] [--allow-lan --tls-cert file --tls-key file] [--operator-actions ids [--logs-root dir --log-families ids]], inspect --text text, or --version\"},\"protocol\":1}\n"
       },
       {
         "path": "/invalid/error/code",
@@ -3079,6 +3079,117 @@
             "operator.sleep:completed::first-run",
             "operator.sleep:orphaned:completed:first-run"
           ]
+        }
+      },
+      {
+        "path": "/logUnits",
+        "equals": {
+          "validate": {
+            "noOperator": {
+              "ok": false,
+              "error": "log browsing requires operator mode"
+            },
+            "unknownFamily": {
+              "ok": false,
+              "error": "logs families must be unique catalog IDs"
+            },
+            "extraKey": {
+              "ok": false,
+              "error": "logs must be an object with a families collection"
+            },
+            "valid": {
+              "ok": true,
+              "families": [
+                "dashboard.audit"
+              ]
+            }
+          },
+          "check": {
+            "valid": {
+              "ok": true
+            },
+            "wrongEpoch": {
+              "ok": false,
+              "error": "Dashboard log access for another epoch"
+            },
+            "otherFamily": {
+              "ok": false,
+              "error": "Dashboard log family not enabled"
+            },
+            "pathFile": {
+              "ok": false,
+              "error": "Dashboard log file outside its family"
+            },
+            "patternMismatch": {
+              "ok": false,
+              "error": "Dashboard log file outside its family"
+            },
+            "searchOp": {
+              "ok": false,
+              "error": "Invalid dashboard log access frame"
+            },
+            "extraField": {
+              "ok": false,
+              "error": "Invalid dashboard log access frame"
+            },
+            "duplicate": {
+              "ok": false,
+              "error": "Duplicate dashboard log access"
+            }
+          },
+          "access": {
+            "allowed": {
+              "ok": true
+            },
+            "denied": {
+              "ok": false,
+              "error": "host_denied"
+            },
+            "sensitiveWithoutAuthorize": {
+              "ok": false,
+              "error": "host_denied"
+            },
+            "auditUnavailable": {
+              "ok": false,
+              "error": "audit_unavailable"
+            }
+          },
+          "catalog": [
+            "dashboard.audit"
+          ],
+          "auditStates": [
+            "logs.open:completed:",
+            "logs.open:failed:host_denied",
+            "logs.open:failed:host_denied"
+          ]
+        }
+      },
+      {
+        "path": "/logLive",
+        "equals": {
+          "rejected": {
+            "status": "failed",
+            "error": "log browsing requires operator mode"
+          },
+          "status": "running",
+          "viewerOnly": 401,
+          "files": {
+            "count": 1,
+            "auditListed": true,
+            "noPaths": true
+          },
+          "open": {
+            "view": true,
+            "lines": true,
+            "json": true
+          },
+          "older": true,
+          "follow": {
+            "newLines": 2,
+            "hasNoop": true
+          },
+          "tampered": 400,
+          "openAudited": true
         }
       },
       {

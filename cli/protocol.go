@@ -59,6 +59,7 @@ type message struct {
 	Exclusive  bool          `json:"exclusive,omitempty"`
 	Progress   *progressInfo `json:"progress,omitempty"`
 	Unverified bool          `json:"unverified,omitempty"`
+	Logs       *logsCaps     `json:"logs,omitempty"`
 }
 
 type progressInfo struct {
@@ -120,6 +121,7 @@ type service struct {
 	op                    *operator
 	mon                   monitorState
 	hist                  *history
+	logs                  *logsConfig
 }
 
 func newService(origin, token string) *service {
@@ -373,7 +375,10 @@ func (s *service) apply(m message) error {
 		if err := s.negotiateLocked(m.Operator); err != nil {
 			return err
 		}
-	} else if m.Operator != nil {
+		if err := s.negotiateLogsLocked(m.Logs); err != nil {
+			return err
+		}
+	} else if m.Operator != nil || m.Logs != nil {
 		return errors.New("operator declaration is only valid in hello")
 	} else if s.current.Epoch == "" || m.Epoch != s.current.Epoch || m.Seq != s.current.Seq+1 {
 		return errors.New("epoch or sequence mismatch; restart the CLI and send a fresh hello")
@@ -504,6 +509,10 @@ func (s *service) apply(m message) error {
 		}
 	case "actionState":
 		if err := s.applyActionStateLocked(m); err != nil {
+			return err
+		}
+	case "logAccessResult":
+		if err := s.applyLogAccessResultLocked(m); err != nil {
 			return err
 		}
 	default:

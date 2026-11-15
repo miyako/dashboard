@@ -318,7 +318,7 @@ func (s *service) operatorRoute(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	route := strings.TrimPrefix(r.URL.Path, "/api/operator/")
-	if route == "status" {
+	if route == "status" || route == "logs/files" || route == "logs/page" {
 		if r.Method != "GET" {
 			operatorError(w, 405, "get_required")
 			return
@@ -337,31 +337,25 @@ func (s *service) operatorRoute(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	if strings.HasPrefix(route, "logs/") {
+		// Log routes manage the lock themselves: an open waits for 4D outside it.
+		s.logsRoute(w, r, strings.TrimPrefix(route, "logs/"), body)
+		return
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	now := time.Now()
 	s.op.expire(now, s.current.Status == "stale")
 	s.settleLocked(now)
 	if route == "session" {
-		s.operatorSessionLocked(w, body, now)
+		s.operatorSessionCreateLocked(w, body, now)
 		return
 	}
-	cookie, err := r.Cookie("dashboard_operator")
-	if err != nil {
-		operatorError(w, 401, "operator_authentication_required")
-		return
-	}
-	var session *operatorSession
-	for id, candidate := range s.op.sessions {
-		if sameSecret(id, cookie.Value) {
-			session = candidate
-		}
-	}
+	session := s.operatorSessionLocked(r)
 	if session == nil {
 		operatorError(w, 401, "operator_authentication_required")
 		return
 	}
-	session.seen = now
 	switch route {
 	case "status":
 		s.operatorStatusLocked(w, session, now)
@@ -393,7 +387,24 @@ func (s *service) operatorRoute(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *service) operatorSessionLocked(w http.ResponseWriter, body []byte, now time.Time) {
+// operatorSessionLocked returns the live operator session for the request's cookie, refreshing its idle clock.
+func (s *service) operatorSessionLocked(r *http.Request) *operatorSession {
+	cookie, err := r.Cookie("dashboard_operator")
+	if err != nil {
+		return nil
+	}
+	now := time.Now()
+	s.op.expire(now, s.current.Status == "stale")
+	for id, candidate := range s.op.sessions {
+		if sameSecret(id, cookie.Value) {
+			candidate.seen = now
+			return candidate
+		}
+	}
+	return nil
+}
+
+func (s *service) operatorSessionCreateLocked(w http.ResponseWriter, body []byte, now time.Time) {
 	var req struct {
 		Token *string `json:"token"`
 	}

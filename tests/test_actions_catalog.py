@@ -30,6 +30,21 @@ class ActionCatalogTests(unittest.TestCase):
                     self.assertTrue(spec["pattern"].startswith("^") and spec["pattern"].endswith("$"))
 
 
+class LogCatalogTests(unittest.TestCase):
+    def test_go_and_4d_ship_byte_identical_log_catalogs(self):
+        go = (ROOT / "cli" / "logs.json").read_bytes()
+        component = (ROOT / "component" / "dashboard" / "Resources" / "logs.json").read_bytes()
+        self.assertEqual(go, component, "copy cli/logs.json to component/dashboard/Resources/logs.json")
+
+    def test_secret_bearing_families_are_never_in_the_catalog(self):
+        catalog = json.loads((ROOT / "cli" / "logs.json").read_text())
+        patterns = " ".join(f["pattern"] for f in catalog["families"])
+        for excluded in ("HTTPDebugLog", "4DHTTPClientLog", "4DSMTPLog", "4DPOP3Log", "4DIMAPLog", "ordaRequests", "Logweb"):
+            self.assertNotIn(excluded, patterns)
+        for family in catalog["families"]:
+            self.assertTrue(family["pattern"].startswith("^") and family["pattern"].endswith("$"))
+
+
 class ProbeClassificationTests(unittest.TestCase):
     def test_crash_is_attributed_to_the_started_case(self):
         status = {"finished": False, "started": "b", "cases": {"a": {"status": "passed"}}}

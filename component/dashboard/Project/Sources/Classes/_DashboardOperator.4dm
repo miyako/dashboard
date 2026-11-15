@@ -37,6 +37,138 @@ Function catalog()->$catalog : Object
 		$catalog[$entry.id]:=$entry
 	End for each
 
+Function logCatalog()->$catalog : Object
+	// Log families keyed by ID, from Resources/logs.json (byte-identical to the CLI's copy).
+	var $file : 4D.File
+	var $parsed : Variant
+	var $family : Object
+	$catalog:=New object
+	$file:=Folder(fk resources folder).file("logs.json")
+	If (Not($file.exists))
+		return
+	End if
+	$parsed:=JSON Parse($file.getText())
+	If (Value type($parsed)#Is object)
+		return
+	End if
+	If (Value type($parsed.families)#Is collection)
+		return
+	End if
+	For each ($family; $parsed.families)
+		$catalog[$family.id]:=$family
+	End for each
+
+Function validateLogs($value : Variant; $operatorEnabled : Boolean)->$result : Object
+	var $catalog; $seen : Object
+	var $id : Variant
+	var $families : Collection
+	$result:=New object("ok"; False; "error"; "logs must be an object with a families collection")
+	If (Value type($value)#Is object)
+		return
+	End if
+	If ((OB Keys($value).length#1) | (Value type($value.families)#Is collection))
+		return
+	End if
+	If (Not($operatorEnabled))
+		$result.error:="log browsing requires operator mode"
+		return
+	End if
+	If (($value.families.length<1) | ($value.families.length>8))
+		$result.error:="logs families must list 1 to 8 catalog IDs"
+		return
+	End if
+	$catalog:=This.logCatalog()
+	$seen:=New object
+	$families:=New collection
+	For each ($id; $value.families)
+		If (Value type($id)#Is text)
+			$result.error:="logs families must be unique catalog IDs"
+			return
+		End if
+		If ((Value type($catalog[$id])#Is object) | ($seen[$id]=True))
+			$result.error:="logs families must be unique catalog IDs"
+			return
+		End if
+		$seen[$id]:=True
+		$families.push($id)
+	End for each
+	$result:=New object("ok"; True; "families"; $families.orderBy())
+
+Function checkLogAccess($message : Object; $families : Collection)->$result : Object
+	// Strict validation of a CLI logAccess frame; returns the family entry when valid.
+	var $field : Text
+	var $family : Object
+	$result:=New object("ok"; False; "error"; "Invalid dashboard log access frame")
+	If (JSON Stringify(OB Keys($message).orderBy())#JSON Stringify(New collection("actor"; "epoch"; "family"; "file"; "id"; "kind"; "op"; "protocol")))
+		return
+	End if
+	For each ($field; New collection("actor"; "epoch"; "family"; "file"; "id"; "op"))
+		If (Value type($message[$field])#Is text)
+			return
+		End if
+	End for each
+	If (Not(Match regex("^[a-f0-9]{64}$"; $message.id)) | Not(Match regex("^[a-f0-9]{16}$"; $message.actor)) | ($message.op#"open"))
+		return
+	End if
+	If ((Length($message.epoch)#Length(This.epoch)) | (Position(This.epoch; $message.epoch; *)#1))
+		$result.error:="Dashboard log access for another epoch"
+		return
+	End if
+	If ($families.indexOf($message.family)<0)
+		$result.error:="Dashboard log family not enabled"
+		return
+	End if
+	$family:=This.logCatalog()[$message.family]
+	If ($family=Null)
+		return
+	End if
+	If (Not(Match regex("^[A-Za-z0-9._-]{1,128}$"; $message.file)) | Not(Match regex($family.pattern; $message.file)))
+		$result.error:="Dashboard log file outside its family"
+		return
+	End if
+	If (This.seen.indexOf($message.id)>=0)
+		$result.error:="Duplicate dashboard log access"
+		return
+	End if
+	This.seen.push($message.id)
+	If (This.seen.length>64)
+		This.seen.shift()
+	End if
+	$result:=New object("ok"; True; "family"; $family)
+
+Function logAccess($message : Object; $family : Object; $authorize : 4D.Function)->$frame : Object
+	// Runs on the executor: host authorization (required for sensitive families), then the audit record, fail-closed.
+	var $answer : Variant
+	var $started : Integer
+	var $canonical : Text
+	var $record : Object
+	$canonical:=JSON Stringify(New object("family"; $message.family; "file"; $message.file))
+	$record:=New object("v"; 1; "at"; ""; "epoch"; This.epoch; "action"; "logs."+$message.op; 		"id"; Substring(Generate digest($message.id; SHA256 digest); 1; 16); "actor"; $message.actor; 		"args"; Substring(Generate digest($canonical; SHA256 digest); 1; 16); "state"; "completed")
+	$frame:=New object("id"; $message.id; "ok"; True)
+	If (($authorize#Null) | ($family.sensitivity="sensitive"))
+		$answer:=False
+		If ($authorize#Null)
+			$started:=Milliseconds
+			$answer:=Try($authorize.call(Null; New object("action"; "logs."+$message.op; "args"; JSON Parse($canonical); "actor"; $message.actor; "tier"; "logs")))
+			If ((Last errors#Null) | ((Milliseconds-$started)>5000))
+				$answer:=False
+			End if
+		End if
+		If (Value type($answer)#Is boolean)
+			$answer:=False
+		End if
+		If (Not($answer))
+			$record.state:="failed"
+			$record.error:="host_denied"
+			This.audit($record)
+			return New object("id"; $message.id; "ok"; False; "error"; "host_denied")
+		End if
+	End if
+	If (Not(This.audit($record)))
+		// Fail closed: no byte of a log is served without its audit record.
+		return New object("id"; $message.id; "ok"; False; "error"; "audit_unavailable")
+	End if
+
 Function defaultFolder()->$folder : 4D.Folder
 	// The host's Logs folder (*), never the component's.
 	$folder:=Folder(fk logs folder; *).folder("dashboard")

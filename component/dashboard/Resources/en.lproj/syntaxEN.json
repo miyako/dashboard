@@ -448,6 +448,9 @@
 		"baseEpoch": {
 			"Syntax": "baseEpoch : Text"
 		},
+		"logFamilies": {
+			"Syntax": "logFamilies : Collection"
+		},
 		"target": {
 			"Syntax": "target : Text"
 		},
@@ -898,6 +901,96 @@
 			],
 			"Summary": ""
 		},
+		"validate()": {
+			"Syntax": "**.validate**( *value* : Variant; *catalog* : Object )->result : Object",
+			"Params": [
+				[
+					"value",
+					"Variant",
+					"->"
+				],
+				[
+					"catalog",
+					"Object",
+					"->"
+				],
+				[
+					"result",
+					"Object",
+					"<-"
+				]
+			],
+			"Summary": ""
+		},
+		"validateLogs()": {
+			"Syntax": "**.validateLogs**( *value* : Variant; *operatorEnabled* : Boolean )->result : Object",
+			"Params": [
+				[
+					"value",
+					"Variant",
+					"->"
+				],
+				[
+					"operatorEnabled",
+					"Boolean",
+					"->"
+				],
+				[
+					"result",
+					"Object",
+					"<-"
+				]
+			],
+			"Summary": ""
+		},
+		"audit()": {
+			"Syntax": "**.audit**( *record* : Object )->ok : Boolean",
+			"Params": [
+				[
+					"record",
+					"Object",
+					"->"
+				],
+				[
+					"ok",
+					"Boolean",
+					"<-"
+				]
+			],
+			"Summary": ""
+		},
+		"checkLogAccess()": {
+			"Syntax": "**.checkLogAccess**( *message* : Object; *families* : Collection )->result : Object",
+			"Params": [
+				[
+					"message",
+					"Object",
+					"->"
+				],
+				[
+					"families",
+					"Collection",
+					"->"
+				],
+				[
+					"result",
+					"Object",
+					"<-"
+				]
+			],
+			"Summary": ""
+		},
+		"catalog()": {
+			"Syntax": "**.catalog**()->catalog : Object",
+			"Params": [
+				[
+					"catalog",
+					"Object",
+					"<-"
+				]
+			],
+			"Summary": ""
+		},
 		"execute()": {
 			"Syntax": "**.execute**( *message* : Object; *record* : Object; *entry* : Object; *canonical* : Text; *authorize* : 4D.Function )->frame : Object",
 			"Params": [
@@ -928,6 +1021,17 @@
 				],
 				[
 					"frame",
+					"Object",
+					"<-"
+				]
+			],
+			"Summary": ""
+		},
+		"logCatalog()": {
+			"Syntax": "**.logCatalog**()->catalog : Object",
+			"Params": [
+				[
+					"catalog",
 					"Object",
 					"<-"
 				]
@@ -966,37 +1070,26 @@
 			],
 			"Summary": ""
 		},
-		"audit()": {
-			"Syntax": "**.audit**( *record* : Object )->ok : Boolean",
+		"logAccess()": {
+			"Syntax": "**.logAccess**( *message* : Object; *family* : Object; *authorize* : 4D.Function )->frame : Object",
 			"Params": [
 				[
-					"record",
+					"message",
 					"Object",
 					"->"
 				],
 				[
-					"ok",
-					"Boolean",
-					"<-"
-				]
-			],
-			"Summary": ""
-		},
-		"validate()": {
-			"Syntax": "**.validate**( *value* : Variant; *catalog* : Object )->result : Object",
-			"Params": [
-				[
-					"value",
-					"Variant",
-					"->"
-				],
-				[
-					"catalog",
+					"family",
 					"Object",
 					"->"
 				],
 				[
-					"result",
+					"authorize",
+					"4D.Function",
+					"->"
+				],
+				[
+					"frame",
 					"Object",
 					"<-"
 				]
@@ -1009,17 +1102,6 @@
 				[
 					"folder",
 					"4D.Folder",
-					"<-"
-				]
-			],
-			"Summary": ""
-		},
-		"catalog()": {
-			"Syntax": "**.catalog**()->catalog : Object",
-			"Params": [
-				[
-					"catalog",
-					"Object",
 					"<-"
 				]
 			],

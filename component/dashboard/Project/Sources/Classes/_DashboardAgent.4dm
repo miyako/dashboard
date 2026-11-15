@@ -8,7 +8,7 @@ property target; buffer; epoch; baseEpoch; diagnostic; callbackWorker; transport
 property sequence; lastFrameAt; restartAt; hungAt : Real
 property closing; finalized; ready; hung; restartPending; exclusiveRunning : Boolean
 property restartPolicy : Object
-property restartTimes : Collection
+property restartTimes; logFamilies : Collection
 
 Class constructor($target : Text; $options : Object; $state : Object; $event : Object; $monitor : Object)
 	This.target:=$target
@@ -86,6 +86,23 @@ Function launch()
 		End if
 		$command+=" --operator-actions "+$adapter.quote($operator.actions.join(","))
 	End if
+	If (Value type(This.options.logs)#Is undefined)
+		// Log browsing (docs/log-browsing-design.md): the CLI reads the host Logs folder; 4D authorizes and audits.
+		var $logs : Object
+		var $logsFolder : 4D.Folder
+		$logs:=cs._DashboardOperator.new().validateLogs(This.options.logs; This.operator#Null)
+		If (Not($logs.ok))
+			This.fail($logs.error)
+			return
+		End if
+		This.logFamilies:=$logs.families
+		$logsFolder:=Folder(fk logs folder; *)
+		If (Not($logsFolder.exists))
+			$logsFolder.create()
+		End if
+		// Folder.path is a filesystem alias ("/LOGS/") here, not a real path: convert the platform path instead.
+		$command+=" --logs-root "+$adapter.quote(Choose(Is Windows; $logsFolder.platformPath; Convert path system to POSIX($logsFolder.platformPath)))+" --log-families "+$adapter.quote(This.logFamilies.join(","))
+	End if
 	var $policy : Object
 	$policy:=This.restartPolicyFrom(This.options.restart)
 	If (Not($policy.ok))
@@ -94,7 +111,7 @@ Function launch()
 	End if
 	This.restartPolicy:=$policy.policy
 	For each ($argument; OB Keys(This.options))
-		If (New collection("listen"; "tls-cert"; "tls-key"; "allowLAN"; "operator"; "restart").indexOf($argument)<0)
+		If (New collection("listen"; "tls-cert"; "tls-key"; "allowLAN"; "operator"; "restart"; "logs").indexOf($argument)<0)
 			This.fail("Unknown dashboard option")
 			return
 		End if
@@ -318,11 +335,15 @@ Function sample($initial : Boolean)->$ok : Boolean
 	$payload:=JSON Parse($signal.payload)
 	$ok:=True
 	If ($initial)
+		var $hello : Object
+		$hello:=New object("info"; $payload.info)
 		If (This.operator#Null)
-			This.send("hello"; New object("info"; $payload.info; "operator"; New object("version"; 1; "actions"; This.operator.actions.copy())))
-		Else
-			This.send("hello"; New object("info"; $payload.info))
+			$hello.operator:=New object("version"; 1; "actions"; This.operator.actions.copy())
 		End if
+		If (This.logFamilies#Null)
+			$hello.logs:=New object("version"; 1; "families"; This.logFamilies.copy())
+		End if
+		This.send("hello"; $hello)
 	End if
 	This.send("snapshot"; $payload.snapshot)
 
@@ -442,6 +463,21 @@ Function onData($worker : 4D.SystemWorker; $event : Object)
 				If (Not(This._operatorReady($message)))
 					return
 				End if
+				If (This.logFamilies=Null)
+					If (Value type($message.logs)#Is undefined)
+						This.fail("Unexpected dashboard log negotiation")
+						return
+					End if
+				Else
+					If (Value type($message.logs)#Is object)
+						This.fail("Missing dashboard log negotiation")
+						return
+					End if
+					If ((Num($message.logs.version)#1) | (JSON Stringify($message.logs.families)#JSON Stringify(This.logFamilies)))
+						This.fail("Dashboard log families differ from the request")
+						return
+					End if
+				End if
 				$manager:=cs.workers.worker.new(cs._DashboardServer)
 				If (Not($manager.start($port; New object("agent"; This))))
 					This.fail("Dashboard instance registration failed: "+JSON Stringify($manager.errors))
@@ -490,6 +526,21 @@ Function onData($worker : 4D.SystemWorker; $event : Object)
 					This.state.samples+=1
 				End use
 				This.notify("sample")
+			: ($message.kind="logAccess")
+				If ((This.operator=Null) | (This.logFamilies=Null))
+					This.fail("Unexpected dashboard log access")
+					This.stop()
+					return
+				End if
+				var $logCheck : Object
+				$logCheck:=This.operator.checkLogAccess($message; This.logFamilies)
+				If (Not($logCheck.ok))
+					This.fail($logCheck.error)
+					This.stop()
+					return
+				End if
+				// Host code (authorize) never runs on .workers: the executor authorizes, audits and answers.
+				CALL WORKER("Dashboard.admin."+This.epoch; "_DashboardAdmin"; "logAccess"; This.epoch; $message; Null; $logCheck.family; ""; This.operator.actions; This.operator.folder.platformPath; This.authorize)
 			: ($message.kind="action")
 				If (This.operator=Null)
 					This.fail("Unexpected dashboard action")
