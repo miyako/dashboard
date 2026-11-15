@@ -584,7 +584,7 @@ the browser distinguishes stale, waiting and disconnected states.
 | --- | --- |
 | `dashboard serve` | Authenticated loopback server; lifecycle tied to stdin |
 | `dashboard serve --operator-actions monitor.cadence,monitor.diagnostics` | Same, with opt-in operator mode for the listed catalog actions |
-| `dashboard --version` | `{"protocol":1,"version":"0.1.8"}` + LF |
+| `dashboard --version` | `{"protocol":1,"version":"0.1.9"}` + LF |
 | `dashboard inspect --text "literal"` | Protocol/argument probe: `{"protocol":1,"text":"literal"}` + LF |
 | Invalid arguments/protocol | Exit 2; structured error diagnostics on stderr |
 
