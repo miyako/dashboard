@@ -1,6 +1,6 @@
 # Log browsing: design (#19, part 2)
 
-Status: **proposal for review**. Nothing here is implemented. It builds on operator mode (M3),
+Status: **design accepted** (section 10 records the decisions). Nothing is implemented yet. It builds on operator mode (M3),
 the shared catalog pattern (A0), the host `authorize` callback (A0/A1) and the restart strategy.
 
 ## 1. Why this is the riskiest feature so far
@@ -182,7 +182,17 @@ need a separate decision with its own controls; masking HTTP headers is not a pr
 | **L3** | Search with budget and continuation | Large synthetic files (1 GiB) stay within the memory and time budgets |
 | **L4** | Sensitive families (`4d.debug`, `4d.requests`, `4d.tcpudp`) behind `authorize` | Denial paths, audit of each open and search |
 
-## 10. Decisions needed
+## 10. Owner decisions (recorded: the recommended defaults were accepted)
+
+| # | Question | Decision |
+| --- | --- | --- |
+| 1 | Who reads | The CLI reads files directly from the confined host Logs folder; 4D authorizes and audits |
+| 2 | Audit granularity | Every **open** and **search**, fail-closed; paging within an opened view is not audited per page |
+| 3 | Sensitive families | `4d.debug`, `4d.requests`, `4d.requests.process` and `4d.tcpudp` require the host `authorize` formula. HTTP debug, HTTP client, SMTP/POP3/IMAP and ORDA logs stay excluded |
+| 4 | Network | TLS or loopback only, like tier B and C actions |
+| 5 | Export | No download or export in the first version |
+
+### Original questions
 
 1. **Who reads:** do you agree the CLI reads files directly, with 4D authorizing and auditing each
    open and search? Recommended.
