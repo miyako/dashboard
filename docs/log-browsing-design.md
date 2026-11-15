@@ -52,6 +52,24 @@ What this means for the design:
 - Still **to confirm** on full 4D: the web access log and backup journal names and formats, which
   the reference page does not cover.
 
+### L0 results on full 4D 21.2 (build 21.100653, standalone, 2026-11-15)
+
+Run through the local test host (`dashboard-testhost`, `Native_logs_l0`), in a throwaway, data-free
+copy, with synthetic events only:
+
+| File | Observed | Consequence |
+| --- | --- | --- |
+| `4DDiagnosticLog_1.txt` | No product suffix on standalone 4D (tool4d adds `Tool`). `seq time [component] LEVEL - message`. 4D's own messages are **localized** (Japanese here, multibyte UTF-8) and can include IP addresses. The file **keeps lines from earlier runs** | Pattern `^4DDiagnosticLog(Server\|Tool)?(_\d+)?\.txt$` confirmed; sensitive, as planned; UTF-8 handling is required |
+| `4DDebugLog_1.txt` | The tabular format matches tool4d. `operation_parameters` contains the exact `LOG EVENT` text and command arguments | Confirmed sensitive; host approval required |
+| `Logweb.txt` | WLF format with a `#Fields:` header that includes **`cs(cookie)`**, plus `c-ip`, `cs(user-agent)`, `cs-uri-query` and `cs(host)` | **Secret-bearing (session cookies): moved to the excluded families**, not opt-in |
+| `4DRequestsLog` | Not written by standalone 4D (4D Server only) | Needs a 4D Server fixture before L4 |
+| Backup journal | Needs a data file and a backup | Still to confirm, with a data-file fixture |
+
+Also measured: the Logs folder sits outside the project copy, so it persists across runs and tests
+must not assume it is empty. Host targeting of the web server is confirmed on full 4D (the collector
+reads the host's server, not the component's). `WEB Server.start()` needs `IPAddressToListen` as a
+**collection**; a text value fails with error 1029.
+
 ## 3. Architecture: the CLI reads, 4D authorizes and audits
 
 ```
@@ -96,7 +114,7 @@ A `cli/logs.json` catalog (byte-identical copy in the component, like `actions.j
 | `4d.requests` | `^4DRequestsLog(Server)?(_\d+)?\.txt$` | header, TSV | **sensitive (SQL, logins)** | opt-in, `authorize` required |
 | `4d.requests.process` | `^4DRequestsLog_ProcessInfo(Server)?(_\d+)?\.txt$` | header, TSV | **sensitive (IPs, users)** | opt-in, `authorize` required |
 | `4d.tcpudp` | `^4DTCPUDPLog(_\d+)?\.txt$` | TSV-like | sensitive (payload bytes) | opt-in, `authorize` required |
-| **excluded** | `HTTPDebugLog*`, `4DHTTPClientLog*`, `4DSMTPLog*`, `4DPOP3Log*`, `4DIMAPLog*`, ORDA request logs | | **secret-bearing** | not offered |
+| **excluded** | `HTTPDebugLog*`, `4DHTTPClientLog*`, `4DSMTPLog*`, `4DPOP3Log*`, `4DIMAPLog*`, ORDA request logs, **`Logweb*.txt` (WLF logs cookies; L0)** | | **secret-bearing** | not offered |
 
 Excluded families cannot be listed: their names never match a catalog pattern. Offering them would
 need a separate decision with its own controls; masking HTTP headers is not a promise this design makes.
