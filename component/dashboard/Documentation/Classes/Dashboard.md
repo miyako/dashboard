@@ -29,7 +29,9 @@ not overwritten. Callbacks must return promptly.
 Returns shared `{status,url,error,samples,epoch,port,finished,callbackError,...}`
 for compatibility; polling is optional, not the required callback interface.
 Options: `listen` (IP:port), `allowLAN` (Boolean), `tls-cert`, `tls-key`
-(absolute paths), `operator` (object). Default authenticated `127.0.0.1:0`; LAN
+(absolute paths), `operator` (object), `restart` (object: `max` 0–10, where 0
+disables; `windowSeconds`; `initialDelayMs`; `livenessSeconds`; see
+`docs/restart-strategy.md`). Default authenticated `127.0.0.1:0`; LAN
 requires explicit opt-in and valid TLS. Unknown/invalid options fail explicitly.
 
 `operator` is off unless given, as `New object("actions"; New collection("monitor.cadence"))`:

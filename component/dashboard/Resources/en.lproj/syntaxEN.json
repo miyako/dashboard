@@ -164,92 +164,6 @@
 			"Params": [],
 			"Summary": ""
 		},
-		"get hideWindow()": {
-			"Syntax": "**.get hideWindow**()->value : Boolean",
-			"Params": [
-				[
-					"value",
-					"Boolean",
-					"<-"
-				]
-			],
-			"Summary": ""
-		},
-		"send()": {
-			"Syntax": "**.send**( *kind* : Text; *payload* : Object )",
-			"Params": [
-				[
-					"kind",
-					"Text",
-					"->"
-				],
-				[
-					"payload",
-					"Object",
-					"->"
-				]
-			],
-			"Summary": ""
-		},
-		"get encoding()": {
-			"Syntax": "**.get encoding**()->value : Text",
-			"Params": [
-				[
-					"value",
-					"Text",
-					"<-"
-				]
-			],
-			"Summary": ""
-		},
-		"force()": {
-			"Syntax": "**.force**()",
-			"Params": [],
-			"Summary": ""
-		},
-		"sample()": {
-			"Syntax": "**.sample**( *initial* : Boolean )->ok : Boolean",
-			"Params": [
-				[
-					"initial",
-					"Boolean",
-					"->"
-				],
-				[
-					"ok",
-					"Boolean",
-					"<-"
-				]
-			],
-			"Summary": ""
-		},
-		"get dataType()": {
-			"Syntax": "**.get dataType**()->value : Text",
-			"Params": [
-				[
-					"value",
-					"Text",
-					"<-"
-				]
-			],
-			"Summary": ""
-		},
-		"onDataError()": {
-			"Syntax": "**.onDataError**( *worker* : 4D.SystemWorker; *event* : Object )",
-			"Params": [
-				[
-					"worker",
-					"4D.SystemWorker",
-					"->"
-				],
-				[
-					"event",
-					"Object",
-					"->"
-				]
-			],
-			"Summary": ""
-		},
 		"onTerminate()": {
 			"Syntax": "**.onTerminate**( *worker* : 4D.SystemWorker; *event* : Object )",
 			"Params": [
@@ -282,15 +196,132 @@
 			],
 			"Summary": ""
 		},
-		"notify()": {
-			"Syntax": "**.notify**( *kind* : Text )",
+		"send()": {
+			"Syntax": "**.send**( *kind* : Text; *payload* : Object )",
 			"Params": [
 				[
 					"kind",
 					"Text",
 					"->"
+				],
+				[
+					"payload",
+					"Object",
+					"->"
 				]
 			],
+			"Summary": ""
+		},
+		"get hideWindow()": {
+			"Syntax": "**.get hideWindow**()->value : Boolean",
+			"Params": [
+				[
+					"value",
+					"Boolean",
+					"<-"
+				]
+			],
+			"Summary": ""
+		},
+		"notify()": {
+			"Syntax": "**.notify**( *kind* : Text; *extra* : Object )",
+			"Params": [
+				[
+					"kind",
+					"Text",
+					"->"
+				],
+				[
+					"extra",
+					"Object",
+					"->"
+				]
+			],
+			"Summary": ""
+		},
+		"onDataError()": {
+			"Syntax": "**.onDataError**( *worker* : 4D.SystemWorker; *event* : Object )",
+			"Params": [
+				[
+					"worker",
+					"4D.SystemWorker",
+					"->"
+				],
+				[
+					"event",
+					"Object",
+					"->"
+				]
+			],
+			"Summary": ""
+		},
+		"get dataType()": {
+			"Syntax": "**.get dataType**()->value : Text",
+			"Params": [
+				[
+					"value",
+					"Text",
+					"<-"
+				]
+			],
+			"Summary": ""
+		},
+		"force()": {
+			"Syntax": "**.force**()",
+			"Params": [],
+			"Summary": ""
+		},
+		"sample()": {
+			"Syntax": "**.sample**( *initial* : Boolean )->ok : Boolean",
+			"Params": [
+				[
+					"initial",
+					"Boolean",
+					"->"
+				],
+				[
+					"ok",
+					"Boolean",
+					"<-"
+				]
+			],
+			"Summary": ""
+		},
+		"tick()": {
+			"Syntax": "**.tick**()",
+			"Params": [],
+			"Summary": ""
+		},
+		"scheduleRestart()": {
+			"Syntax": "**.scheduleRestart**( *reason* : Text )->result : Object",
+			"Params": [
+				[
+					"reason",
+					"Text",
+					"->"
+				],
+				[
+					"result",
+					"Object",
+					"<-"
+				]
+			],
+			"Summary": ""
+		},
+		"get encoding()": {
+			"Syntax": "**.get encoding**()->value : Text",
+			"Params": [
+				[
+					"value",
+					"Text",
+					"<-"
+				]
+			],
+			"Summary": ""
+		},
+		"relaunch()": {
+			"Syntax": "**.relaunch**()",
+			"Params": [],
 			"Summary": ""
 		},
 		"launch()": {
@@ -298,11 +329,106 @@
 			"Params": [],
 			"Summary": ""
 		},
+		"restartDelay()": {
+			"Syntax": "**.restartDelay**( *count* : Integer; *initialMs* : Integer )->delay : Integer",
+			"Params": [
+				[
+					"count",
+					"Integer",
+					"->"
+				],
+				[
+					"initialMs",
+					"Integer",
+					"->"
+				],
+				[
+					"delay",
+					"Integer",
+					"<-"
+				]
+			],
+			"Summary": ""
+		},
+		"spawn()": {
+			"Syntax": "**.spawn**()",
+			"Params": [],
+			"Summary": ""
+		},
+		"restartReason()": {
+			"Syntax": "**.restartReason**( *exitCode* : Variant; *ready* : Boolean; *hung* : Boolean )->reason : Text",
+			"Params": [
+				[
+					"exitCode",
+					"Variant",
+					"->"
+				],
+				[
+					"ready",
+					"Boolean",
+					"->"
+				],
+				[
+					"hung",
+					"Boolean",
+					"->"
+				],
+				[
+					"reason",
+					"Text",
+					"<-"
+				]
+			],
+			"Summary": ""
+		},
+		"restartPolicyFrom()": {
+			"Syntax": "**.restartPolicyFrom**( *value* : Variant )->result : Object",
+			"Params": [
+				[
+					"value",
+					"Variant",
+					"->"
+				],
+				[
+					"result",
+					"Object",
+					"<-"
+				]
+			],
+			"Summary": ""
+		},
+		"restartTimes": {
+			"Syntax": "restartTimes : Collection"
+		},
+		"restartPolicy": {
+			"Syntax": "restartPolicy : Object"
+		},
+		"exclusiveRunning": {
+			"Syntax": "exclusiveRunning : Boolean"
+		},
+		"restartPending": {
+			"Syntax": "restartPending : Boolean"
+		},
+		"hung": {
+			"Syntax": "hung : Boolean"
+		},
+		"ready": {
+			"Syntax": "ready : Boolean"
+		},
 		"finalized": {
 			"Syntax": "finalized : Boolean"
 		},
-		"closing": {
-			"Syntax": "closing : Boolean"
+		"hungAt": {
+			"Syntax": "hungAt : Real"
+		},
+		"lastFrameAt": {
+			"Syntax": "lastFrameAt : Real"
+		},
+		"restartAt": {
+			"Syntax": "restartAt : Real"
+		},
+		"buffer": {
+			"Syntax": "buffer : Text"
 		},
 		"sequence": {
 			"Syntax": "sequence : Real"
@@ -310,14 +436,23 @@
 		"diagnostic": {
 			"Syntax": "diagnostic : Text"
 		},
+		"authorize": {
+			"Syntax": "authorize : 4D.Function"
+		},
+		"closing": {
+			"Syntax": "closing : Boolean"
+		},
+		"command": {
+			"Syntax": "command : Text"
+		},
+		"baseEpoch": {
+			"Syntax": "baseEpoch : Text"
+		},
 		"target": {
 			"Syntax": "target : Text"
 		},
-		"operator": {
-			"Syntax": "operator : cs.Dashboard._DashboardOperator"
-		},
-		"buffer": {
-			"Syntax": "buffer : Text"
+		"run": {
+			"Syntax": "run : Integer"
 		},
 		"options": {
 			"Syntax": "options : Object"
@@ -331,6 +466,9 @@
 		"busy": {
 			"Syntax": "busy : Integer"
 		},
+		"operator": {
+			"Syntax": "operator : cs.Dashboard._DashboardOperator"
+		},
 		"transportError": {
 			"Syntax": "transportError : Text"
 		},
@@ -339,9 +477,6 @@
 		},
 		"epoch": {
 			"Syntax": "epoch : Text"
-		},
-		"authorize": {
-			"Syntax": "authorize : 4D.Function"
 		},
 		"currentDirectory": {
 			"Syntax": "currentDirectory : 4D.Folder"

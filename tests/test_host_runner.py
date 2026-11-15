@@ -257,7 +257,7 @@ class HostRunnerTests(unittest.TestCase):
     def fake_host(self, args, **kwargs):
         self.assertIsInstance(args, list)
         self.assertNotIn("shell", kwargs)
-        self.assertEqual(kwargs, {"check": True, "timeout": 120})
+        self.assertEqual(kwargs, {"check": True, "timeout": 300})
         self.assertIn("--startup-method=Smoke", args)
         request_path = Path(next(arg.split("=", 1)[1] for arg in args if arg.startswith("--user-param=")))
         self.assertIn("日本語", str(request_path))

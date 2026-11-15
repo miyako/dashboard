@@ -255,6 +255,18 @@ gaps, and the chart says where recording began. Viewers fetch windows from
 `GET /api/history` (viewer login required, read-only, rate limited). The
 contract is in [docs/history.md](docs/history.md).
 
+### CLI restarts
+
+If the CLI crashes, exits unexpectedly or stops responding for 45 s, the
+component restarts it, waiting 1, 2, 4, 8 then 16 s, at most 5 times in 10
+minutes. It never restarts after a requested stop, a startup or configuration
+error, a protocol violation, or an error the CLI reported itself (exit 2).
+A restart means new tokens and a new URL, which `onStatus` delivers with
+`kind:"running"` after a `kind:"restarting"`. In-memory history starts over,
+and any action in flight is audited as orphaned. Tune or disable it with
+`New object("restart"; New object("max"; 0))`. See
+[docs/restart-strategy.md](docs/restart-strategy.md).
+
 ### Administrative actions (foundations only)
 
 The groundwork for administrative actions is in place. The first two real

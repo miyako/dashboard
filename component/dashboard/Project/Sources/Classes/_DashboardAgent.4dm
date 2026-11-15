@@ -3,10 +3,12 @@ property currentDirectory : 4D.Folder
 property state; options; event; monitor : Object
 property operator : cs._DashboardOperator
 property authorize : 4D.Function
-property busy : Integer
-property target; buffer; epoch; diagnostic; callbackWorker; transportError : Text
-property sequence : Real
-property closing; finalized : Boolean
+property busy; run : Integer
+property target; buffer; epoch; baseEpoch; diagnostic; callbackWorker; transportError; command : Text
+property sequence; lastFrameAt; restartAt; hungAt : Real
+property closing; finalized; ready; hung; restartPending; exclusiveRunning : Boolean
+property restartPolicy : Object
+property restartTimes : Collection
 
 Class constructor($target : Text; $options : Object; $state : Object; $event : Object; $monitor : Object)
 	This.target:=$target
@@ -17,12 +19,21 @@ Class constructor($target : Text; $options : Object; $state : Object; $event : O
 	This.buffer:=""
 	This.diagnostic:=""
 	This.transportError:=""
+	// Instance identity (state.epoch) never changes; the protocol epoch gets ".r<n>" for each restarted CLI run.
+	This.baseEpoch:=$state.epoch
 	This.epoch:=$state.epoch
-	This.callbackWorker:="Dashboard.callbacks."+This.epoch
+	This.run:=0
+	This.callbackWorker:="Dashboard.callbacks."+This.baseEpoch
 	This.sequence:=0
 	This.busy:=0
 	This.closing:=False
 	This.finalized:=False
+	This.ready:=False
+	This.hung:=False
+	This.restartPending:=False
+	This.exclusiveRunning:=False
+	This.restartTimes:=New collection
+	This.command:=""
 
 Function launch()
 	var $resolved : Object
@@ -31,7 +42,6 @@ Function launch()
 	var $adapter : cs._Process
 	var CLI_LastErrors : Collection
 	This.notify("starting")
-	CALL WORKER("Dashboard.startup."+This.epoch; "_DashboardStop"; This.state; True)
 	$resolved:=cs._CLI.new("dashboard"; This.target).resolve()
 	If (Not($resolved.ok))
 		This.fail($resolved.error.code)
@@ -76,17 +86,37 @@ Function launch()
 		End if
 		$command+=" --operator-actions "+$adapter.quote($operator.actions.join(","))
 	End if
+	var $policy : Object
+	$policy:=This.restartPolicyFrom(This.options.restart)
+	If (Not($policy.ok))
+		This.fail($policy.error)
+		return
+	End if
+	This.restartPolicy:=$policy.policy
 	For each ($argument; OB Keys(This.options))
-		If (New collection("listen"; "tls-cert"; "tls-key"; "allowLAN"; "operator").indexOf($argument)<0)
+		If (New collection("listen"; "tls-cert"; "tls-key"; "allowLAN"; "operator"; "restart").indexOf($argument)<0)
 			This.fail("Unknown dashboard option")
 			return
 		End if
 	End for each
 	This.currentDirectory:=$resolved.file.parent
+	This.command:=$command
+	// One timer per instance drives restart delays, liveness and forced stops; see docs/restart-strategy.md.
+	CALL WORKER("Dashboard.watch."+This.baseEpoch; "_DashboardWatch"; This.state)
+	This.spawn()
+
+Function spawn()
+	// Starts one CLI run with the validated command; used for the first run and every restart.
+	var $previous : Text
+	var CLI_LastErrors : Collection
+	CALL WORKER("Dashboard.startup."+This.epoch; "_DashboardStop"; This.state; True)
+	This.ready:=False
+	This.hung:=False
+	This.lastFrameAt:=Milliseconds
 	$previous:=Method called on error(ek local)
 	CLI_LastErrors:=Null
 	ON ERR CALL("_CaptureError"; ek local)
-	This.worker:=4D.SystemWorker.new($command; This)
+	This.worker:=4D.SystemWorker.new(This.command; This)
 	ON ERR CALL($previous; ek local)
 	If ((This.worker=Null) | (CLI_LastErrors#Null))
 		CLI_LastErrors:=Null
@@ -94,6 +124,170 @@ Function launch()
 		return
 	End if
 	This.sample(True)
+
+Function restartPolicyFrom($value : Variant)->$result : Object
+	// Pure: validates the optional restart option; defaults per docs/restart-strategy.md.
+	var $key : Text
+	var $limits; $policy : Object
+	$policy:=New object("max"; 5; "windowSeconds"; 600; "initialDelayMs"; 1000; "livenessSeconds"; 45)
+	$result:=New object("ok"; True; "policy"; $policy)
+	If (Value type($value)=Is undefined)
+		return
+	End if
+	$result:=New object("ok"; False; "error"; "restart must be an object of max, windowSeconds, initialDelayMs and livenessSeconds")
+	If (Value type($value)#Is object)
+		return
+	End if
+	$limits:=New object("max"; New collection(0; 10); "windowSeconds"; New collection(60; 3600); "initialDelayMs"; New collection(250; 10000); "livenessSeconds"; New collection(15; 300))
+	For each ($key; OB Keys($value))
+		If (Value type($limits[$key])#Is collection)
+			return
+		End if
+		If ((Value type($value[$key])#Is real) & (Value type($value[$key])#Is longint))
+			return
+		End if
+		If ((Int($value[$key])#$value[$key]) | ($value[$key]<$limits[$key][0]) | ($value[$key]>$limits[$key][1]))
+			$result.error:="restart."+$key+" must be an integer from "+String($limits[$key][0])+" to "+String($limits[$key][1])
+			return
+		End if
+		$policy[$key]:=$value[$key]
+	End for each
+	$result:=New object("ok"; True; "policy"; $policy)
+
+Function restartReason($exitCode : Variant; $ready : Boolean; $hung : Boolean)->$reason : Text
+	// Pure classification of an exit we did not request; "" means do not restart.
+	$reason:=""
+	Case of
+		: ($hung)
+			$reason:="unresponsive"
+		: (Not($ready))
+			// Startup failures are configuration problems: report, never loop.
+		: ((Value type($exitCode)#Is real) & (Value type($exitCode)#Is longint))
+			// 4D reports no exit code when the process was killed by a signal.
+			$reason:="crashed"
+		: ($exitCode=2)
+			// The CLI reported its own error on stderr (protocol, backpressure, listener).
+		Else
+			$reason:="exited"
+	End case
+
+Function restartDelay($count : Integer; $initialMs : Integer)->$delay : Integer
+	// Pure: initial × 2^count, capped at 60 s.
+	var $index : Integer
+	$delay:=$initialMs
+	For ($index; 1; $count)
+		$delay:=$delay*2
+		If ($delay>=60000)
+			$delay:=60000
+			return
+		End if
+	End for
+
+Function scheduleRestart($reason : Text)->$result : Object
+	var $now : Real
+	var $recent : Collection
+	var $delay : Integer
+	var $oldEpoch : Text
+	$result:=New object("scheduled"; False; "limited"; False)
+	If (This.restartPolicy=Null)
+		return
+	End if
+	If (This.restartPolicy.max=0)
+		return
+	End if
+	$now:=Milliseconds
+	var $time : Real
+	$recent:=New collection
+	For each ($time; This.restartTimes)
+		If ($time>($now-(This.restartPolicy.windowSeconds*1000)))
+			$recent.push($time)
+		End if
+	End for each
+	This.restartTimes:=$recent
+	If (This.restartTimes.length>=This.restartPolicy.max)
+		$result.limited:=True
+		return
+	End if
+	$delay:=This.restartDelay(This.restartTimes.length; This.restartPolicy.initialDelayMs)
+	This.restartTimes.push($now)
+	$oldEpoch:=This.epoch
+	// Release this run's port registration; a queued executor action finishes and is audited as orphaned.
+	If (This.state.port>0)
+		cs.workers.worker.new(cs._DashboardServer).terminate(This.state.port)
+	End if
+	If (This.operator#Null)
+		CALL WORKER("Dashboard.admin."+$oldEpoch; "_DashboardAdmin"; "stop")
+	End if
+	This.worker:=Null
+	This.buffer:=""
+	This.sequence:=0
+	This.busy:=0
+	This.ready:=False
+	This.hung:=False
+	This.exclusiveRunning:=False
+	This.diagnostic:=""
+	This.transportError:=""
+	This.restartPending:=True
+	This.restartAt:=$now+$delay
+	Use (This.state)
+		This.state.status:="restarting"
+		This.state.url:=""
+		This.state.operatorUrl:=""
+		This.state.port:=0
+		This.state.restarts:=This.state.restarts+1
+		This.state.lastRestartReason:=$reason
+	End use
+	This.notify("restarting"; New object("reason"; $reason; "attempt"; This.restartTimes.length; "delayMs"; $delay))
+	$result.scheduled:=True
+
+Function relaunch()
+	This.restartPending:=False
+	If (This.state.stopRequested | This.closing)
+		This.closing:=True
+		This.finish()
+		return
+	End if
+	This.run+=1
+	This.epoch:=This.baseEpoch+".r"+String(This.run)
+	If (This.operator#Null)
+		This.operator.epoch:=This.epoch
+	End if
+	This.spawn()
+
+Function tick()
+	// Once a second from Dashboard.watch.<epoch>: restart delay, forced stop of a hung CLI, liveness.
+	If (This.finalized)
+		return
+	End if
+	If (This.restartPending)
+		If (This.state.stopRequested)
+			This.restartPending:=False
+			This.closing:=True
+			This.finish()
+			return
+		End if
+		If (Milliseconds>=This.restartAt)
+			This.relaunch()
+		End if
+		return
+	End if
+	If (This.worker=Null)
+		return
+	End if
+	If (This.hung)
+		If ((Milliseconds-This.hungAt)>3500)
+			This.worker.terminate()
+		End if
+		return
+	End if
+	If (This.ready & Not(This.closing) & Not(This.exclusiveRunning) & (This.restartPolicy#Null))
+		If ((Milliseconds-This.lastFrameAt)>(This.restartPolicy.livenessSeconds*1000))
+			// Controlled stop: close stdin, force after 3.5 s, then onTerminate restarts it.
+			This.hung:=True
+			This.hungAt:=Milliseconds
+			This.worker.closeInput()
+		End if
+	End if
 
 Function sample($initial : Boolean)->$ok : Boolean
 	var $signal : 4D.Signal
@@ -132,9 +326,15 @@ Function sample($initial : Boolean)->$ok : Boolean
 	End if
 	This.send("snapshot"; $payload.snapshot)
 
-Function notify($kind : Text)
+Function notify($kind : Text; $extra : Object)
 	var $status : Object
-	$status:=New object("kind"; $kind; "status"; This.state.status; "url"; This.state.url; "operatorUrl"; This.state.operatorUrl; "error"; This.state.error; "samples"; This.state.samples; "epoch"; This.state.epoch; "port"; This.state.port; "finished"; This.state.finished)
+	var $key : Text
+	$status:=New object("kind"; $kind; "status"; This.state.status; "url"; This.state.url; "operatorUrl"; This.state.operatorUrl; "error"; This.state.error; "samples"; This.state.samples; "epoch"; This.state.epoch; "port"; This.state.port; "finished"; This.state.finished; "restarts"; Num(This.state.restarts))
+	If ($extra#Null)
+		For each ($key; OB Keys($extra))
+			$status[$key]:=$extra[$key]
+		End for each
+	End if
 	CALL WORKER(This.callbackWorker; "_DashboardSample"; "notify"; This.state; This.event; This.monitor; Null; $kind; $status)
 
 Function get dataType()->$value : Text
@@ -172,13 +372,14 @@ Function onData($worker : 4D.SystemWorker; $event : Object)
 	var $message : Variant
 	var $begun : Object
 	var CLI_LastErrors : Collection
-	If (This.closing)
+	If (This.closing | This.hung)
 		return
 	End if
 	If (This.state.stopRequested)
 		This.stop()
 		return
 	End if
+	This.lastFrameAt:=Milliseconds
 	This.buffer+=$event.data
 	If (Length(This.buffer)>262144)
 		This.fail("Dashboard output exceeded the frame limit")
@@ -254,6 +455,7 @@ Function onData($worker : 4D.SystemWorker; $event : Object)
 					End if
 					This.state.status:="running"
 				End use
+				This.ready:=True
 				_DashboardWorker("adopted"; ""; New object; This.state; New object; New object)
 				This.notify("running")
 			: ($message.kind="request")
@@ -306,6 +508,10 @@ Function onData($worker : 4D.SystemWorker; $event : Object)
 				End if
 				If ($begun.frame.state="running")
 					// Never execute on .workers: hand off to the cooperative executor and keep serving the pipe.
+					If ($begun.entry.exclusive=True)
+						// The CLI pauses sampling during exclusive actions: liveness is not checked meanwhile.
+						This.exclusiveRunning:=True
+					End if
 					CALL WORKER("Dashboard.admin."+This.epoch; "_DashboardAdmin"; "run"; This.epoch; $message; $begun.record; $begun.entry; $begun.canonical; This.operator.actions; This.operator.folder.platformPath; This.authorize)
 				End if
 			Else
@@ -369,6 +575,24 @@ Function onTerminate($worker : 4D.SystemWorker; $event : Object)
 		End use
 	End if
 	If (Not(This.closing) & (This.state.status#"failed"))
+		var $reason : Text
+		var $restart : Object
+		$reason:=This.restartReason($worker.exitCode; This.ready; This.hung)
+		If (This.state.stopRequested | This.state.forceDrain)
+			// A requested stop (including its forced escalation) never restarts.
+			$reason:=""
+		End if
+		If ($reason#"")
+			$restart:=This.scheduleRestart($reason)
+			If ($restart.scheduled)
+				return
+			End if
+			If ($restart.limited)
+				This.fail("Dashboard CLI restart limit reached ("+$reason+")"+Choose(Length(This.diagnostic)>0; ": "+This.diagnostic; ""))
+				This.finish()
+				return
+			End if
+		End if
 		If (Length(This.diagnostic)>0)
 			This.fail(This.diagnostic)
 		Else
