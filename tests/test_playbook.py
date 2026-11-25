@@ -52,7 +52,7 @@ class PlaybookTests(unittest.TestCase):
                 for required in ("prefix-free", "v0.1.0", "20.2.3", "20R3.2", reference):
                     self.assertIn(required, text)
                 self.assertNotIn("--tag v0.1.0", text)
-        self.assertIn('"tag": "0.1.0"', (ROOT / "README.md").read_text())
+        self.assertRegex((ROOT / "README.md").read_text(), r'"tag": "\d+\.\d+\.\d+"')
 
     def test_credential_setup_matches_optional_signed_workflow(self):
         workflow = (ROOT / ".github/workflows/build.yml").read_text()

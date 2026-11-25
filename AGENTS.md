@@ -769,13 +769,13 @@ The helper's JSON statuses are strictly `passed` / `failed` / `not_run`.
 | ZIP/package integrity | Names, source stripping, modes, explicit directories, libraries | Not runtime loading |
 | Compiled 4D host | Unpacked artifact, fresh report, compiled mode true | Intel/Windows 4D remain separate checks |
 | Dependency-manager install | Actual published asset download/load | Manual local install is not this check |
-| Signing/notarization | Final signed artifact checks, Accepted notarization when enabled | Optional; normally `not_run`, unsigned stated clearly |
+| Signing/notarization | Final signed artifact checks, Accepted notarization when enabled | Required when `release-policy.json` lists the version (currently `["*"]` on main); local runs are normally `not_run`, unsigned stated clearly |
 
 Summarize revision/input digest, language, tool versions/platform, exact commands,
 artifact/report paths and unvalidated checks. Never describe an Apple Silicon
 local package as fully cross-platform accepted. Partial acceptance is **NOT
-release ready**; publication requires all mandatory gates. Optional unsigned
-signing status alone is not a blocker for this unsigned pipeline.
+release ready**; publication requires all mandatory gates, including signing where policy requires it.
+Unsigned status is not a blocker for local acceptance only.
 Report the **actual** compiler used: Go **1.25.1** was available in the local
 November 1 observation, whereas **1.26.10** is the CI pin and the source minimum
 is 1.23. Do not relabel a local 1.25.1 build as a 1.26.10 build.
@@ -819,8 +819,7 @@ Report unsupported/unavailable checks as `not_run`; local success remains
 `release_ready:false`. Approved publication additionally requires a main-only
 Build dispatch of synchronized source metadata at an immutable full SHA,
 all required native artifact/tests, hosted 4D opt-in and the final
-package-host gate. Signing is optional by default; a listed version or explicit signed dispatch
-requires every signing/notarization gate to pass before tag creation/publication.
+package-host gate. Signing follows `release-policy.json`; on `main` it is `["*"]`, so every new version requires every signing/notarization gate to pass before tag creation/publication.
 
 The final handoff must identify the repository/namespace/class/CLI/language,
 revision and input provenance, exact commands/results, tool versions, stable ZIP

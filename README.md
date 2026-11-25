@@ -5,8 +5,12 @@ A **CLI-backed 4D component for 4D 21 LTS and later**. Each participating
 executable. That executable serves the dashboard; **4D's web server is not
 started or used**.
 
-The first version is read-only: measurements, local process/session summaries,
-refresh, and light/dark/system appearance. There are no administrative commands.
+Monitoring is read-only: measurements, local process/session summaries,
+refresh, bounded history and light/dark/system appearance. Separately enabled,
+guarded **operator mode** (off by default) adds a closed action catalog (see
+[Operator mode](#operator-mode-off-by-default)) and a log browser limited to
+the dashboard's own audit log. No arbitrary method, SQL, shell, file path or
+process/session selector is ever executed.
 The researched [capability inventory and ordered roadmap](docs/dashboard-capabilities.md)
 separates 21 LTS observations from later APIs and future, separately gated administration.
 The mobile-aware interface uses system fonts, semantic HTML, keyboard-accessible
@@ -59,7 +63,7 @@ with another component installed in your host.
 For an accepted published asset, a host dependency entry is:
 
 ```json
-{"version":2100,"dependencies":{"dashboard":{"github":"miyako/dashboard","tag": "0.1.0"}}}
+{"version":2100,"dependencies":{"dashboard":{"github":"miyako/dashboard","tag": "0.1.9"}}}
 ```
 
 New component tags are **prefix-free** SemVer (`0.1.0`, never `v0.1.0`).
@@ -219,14 +223,18 @@ authorization system. Do not expose it directly to the public internet.
 ### Operator mode (off by default)
 
 Operator mode is **off** unless host code opts in, listing exactly which
-actions an operator may use. The closed catalog has three monitor-level
-actions; none administers the database or server:
+actions an operator may use. The closed catalog (`cli/actions.json`, shared by
+Go and 4D) holds monitor-level actions, test actions and two real
+administrative actions; the host enables only the ones it lists:
 
 | Action | Effect |
 | --- | --- |
 | `operator.noop` | Nothing; proves the pipeline |
+| `operator.sleep`, `operator.exclusiveSleep` | Test actions (1-20 s, 1-10 s) that exercise progress and maintenance behavior |
 | `monitor.cadence` | Sampling interval of 2, 5 or 10 s for this run (default 2 s, never faster) |
 | `monitor.diagnostics` | Operator-only snapshot of 20 sanitized monitor counters |
+| `cache.flush` | Plain `FLUSH CACHE` (never `*`); local only; result is **unverified** |
+| `cache.size` | Tier B, local only, needs the host's `authorize` formula; 100 MiB minimum, increases capped at 75% of physical memory, checked against `Get cache size` |
 
 ```4d
 $monitor.start(New object("operator"; New object("actions"; New collection("monitor.cadence"; "monitor.diagnostics"))); $event)
@@ -242,8 +250,8 @@ $monitor.start(New object("operator"; New object("actions"; New collection("moni
   single-use and bound to the operator session, action, exact arguments, the
   4D instance epoch, a target generation and a 60-second expiry. At most one
   action is in flight, at most 6 requests per minute. Acceptance is not a
-  result: an action without a result after 30 s is reported as
-  `outcome_unknown`, never retried.
+  result: an action without a result by its catalog deadline (30 s for most,
+  60 s for the cache actions) is reported as `outcome_unknown`, never retried.
 - Each dispatched action is audited in the **host's** Logs folder,
   `Logs/dashboard/audit.jsonl` (rotated at 1 MiB, 4 files), as hashed IDs
   and argument digests only. If the audit record cannot be written, nothing
@@ -287,14 +295,16 @@ mode, operators get a **Logs** tab that pages through the dashboard's own audit 
 new lines. 4D approves and records every open before a byte is shown, and fails closed. Files are
 read by the CLI, confined to the host Logs folder and refused if a file is a link, has been
 swapped, rotated or truncated. There is no export and nothing is kept in the browser. 4D's own logs
-(diagnostic, debug, request) come in later phases; see
+(diagnostic, debug, request) are not implemented: L0 format confirmation on
+full 4D and phases L2-L4 are open, and HTTP/web, mail and ORDA logs stay
+excluded. Logs are sensitive free text and no generic redaction is claimed. See
 [docs/log-browsing-design.md](docs/log-browsing-design.md).
 
-### Administrative actions (foundations only)
+### Administrative actions
 
-The groundwork for administrative actions is in place. The first two real
-actions, both off unless the host lists them, are `cache.flush` and
-`cache.size`. Setting the cache size needs the host's `authorize` approval
+The first two real administrative actions, both off unless the host lists
+them, are `cache.flush` and `cache.size`. Further actions (phases A1-A3 in the
+design) are not implemented and need separate owner approval. Setting the cache size needs the host's `authorize` approval
 and is capped at 75% of physical memory when raising; see section 9 of
 [docs/operator-actions.md](docs/operator-actions.md). Actions come from one catalog,
 `cli/actions.json`, shared by Go and 4D. They run on their own cooperative 4D
@@ -334,7 +344,7 @@ The table stays at most 128 records; normal completion leaves it empty.
 **Testing only:** explicit `FLUSH CACHE` and `FLUSH CACHE(*)` force writes and
 cache eviction to exercise disk-read counters. Never copy these flushes or the
 workload into a production database; they deliberately distort performance.
-The dashboard component and browser remain read-only.
+Monitoring itself remains read-only; the synthetic preview never enables operator mode.
 
 The runner reports the isolated directory and readiness without printing the
 access token. Its private `preview-status.json` contains the browser bootstrap
@@ -530,7 +540,7 @@ silently skipped.
 CLI to 4D:
 
 ```json
-{"protocol":1,"kind":"ready","url":"http://127.0.0.1:PORT/#token=PRIVATE","version":"0.1.0"}
+{"protocol":1,"kind":"ready","url":"http://127.0.0.1:PORT/#token=PRIVATE","version":"0.1.9"}
 {"protocol":1,"kind":"request","epoch":"INSTANCE-UUID","id":"64-lowercase-hex","action":"refresh"}
 ```
 
@@ -668,9 +678,12 @@ No tag, release, signing secret or publication is required for local acceptance.
 The inherited `workflow-contract.json` is checked with
 `python3 scripts/workflow_contract.py --root .`; install its development-only
 parser from `tooling/requirements-workflow.txt` if missing.
-Optional signed-release credentials remain
+Signed-release credentials remain
 [user-owned](AGENTS.md#user-owned-credential-setup-and-reuse):
 only the user runs `scripts/set-release-secrets.sh`; setup does not authorize
-publication or make signing mandatory.
+publication. `release-policy.json` on `main` is `["*"]`, so every future
+Build requires Apple signing and notarization and fails closed without the
+credentials. Release 0.1.9 was published **unsigned**, before that policy.
+Local acceptance still needs no secrets.
 See [AGENTS.md](AGENTS.md) for the full inherited packaging/release playbook.
 The MIT license and bundled Go runtime notice are retained; tool4d is not bundled.

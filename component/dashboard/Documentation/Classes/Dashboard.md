@@ -1,7 +1,7 @@
 # Dashboard
 
-`cs.Dashboard.Dashboard` is the public facade for the CLI-backed, read-only
-dashboard. Requires **4D 21 LTS or later**. It does not use 4D's web server.
+`cs.Dashboard.Dashboard` is the public facade for the CLI-backed dashboard (read-only
+monitoring; guarded operator actions are off unless the host enables them). Requires **4D 21 LTS or later**. It does not use 4D's web server.
 
 `new(target : Text)` selects `macOS-universal` or explicit `Windows-x64`.
 The bundled `dashboard` executable is resolved from component Resources only.

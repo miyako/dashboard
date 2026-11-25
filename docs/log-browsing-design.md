@@ -2,7 +2,7 @@
 
 Status: **design accepted** (section 10 records the decisions). **L1 is implemented**: the
 `dashboard.audit` family only, with the file map, open, paging and follow, and the fail-closed
-`logAccess` round-trip. L0 (confirming 4D's own log formats on full 4D) and L2–L4 are not started.
+`logAccess` round-trip. L0 is **partly done**: a disposable full 4D 21.2 standalone probe (section 2) confirmed the diagnostic/debug formats; Server request/process and backup-journal logs are unconfirmed. L2–L4 are not started.
 
 Found while implementing L1: `Folder(fk logs folder; *).path` returns the filesystem alias `/LOGS/`,
 not a real path, so the component converts `platformPath` to POSIX. A headless tool4d project's Logs
