@@ -451,7 +451,9 @@ async function operatorRefresh() {
   } catch { /* The viewer stream reports connectivity. */ }
 }
 // Logs tab (operator only; docs/log-browsing-design.md). At most 2000 lines in memory, never persisted.
-const logState = { view: null, before: null, after: null, lines: [], timer: undefined };
+// The list is virtualized: fixed-height rows, so only the visible ones plus a margin are in the DOM.
+const LOG_ROW = 20, LOG_OVERSCAN = 20;
+const logState = { view: null, before: null, after: null, end: null, lines: [], timer: undefined, level: '', more: null };
 async function logsGet(route) {
   const response = await fetch('/api/operator/logs/' + route);
   let data = {};
@@ -460,45 +462,89 @@ async function logsGet(route) {
   return data;
 }
 function renderLogLines() {
-  $('log-lines').replaceChildren(...logState.lines.map(line => { const li = el('li', line.text); if (line.truncated) li.className = 'truncated'; return li; }));
+  const box = $('log-lines'), rows = $('log-rows');
+  const w = DashboardOperator.logWindow(box.scrollTop, box.clientHeight || 400, LOG_ROW, logState.lines.length, LOG_OVERSCAN);
+  rows.style.paddingTop = `${w.padTop}px`; rows.style.paddingBottom = `${w.padBottom}px`;
+  rows.replaceChildren(...logState.lines.slice(w.start, w.end).map(line => {
+    const li = el('li', line.text);
+    if (line.truncated) li.append(el('span', ' … [line truncated]', 'truncated'));
+    return li;
+  }));
 }
-function addLogPage(page, direction) {
+let logFrame = 0;
+$('log-lines').addEventListener('scroll', () => { if (!logFrame) logFrame = requestAnimationFrame(() => { logFrame = 0; renderLogLines(); }); });
+function resetLogLines() { Object.assign(logState, { before: null, after: null, lines: [], more: null }); $('log-more').hidden = true; }
+// anchor: 'bottom' after opening or following at the end, 'top' after a jump, 'keep' when older lines are added above.
+function addLogPage(page, direction, anchor) {
+  const box = $('log-lines'), stick = box.scrollTop + box.clientHeight >= box.scrollHeight - 4;
   const merged = DashboardOperator.mergeLines(logState.lines, page.lines, direction, 2000);
   logState.lines = merged.lines;
   if (direction === 'backward' || !logState.before) logState.before = page.before;
   if (direction === 'forward' || !logState.after) logState.after = page.after;
   if (direction === 'forward' && merged.evicted) logState.before = logState.lines.length ? logState.lines[0].cursor : logState.before;
   $('log-older').disabled = page.atStart === true && direction === 'backward';
-  const box = $('log-lines'), stick = box.scrollTop + box.clientHeight >= box.scrollHeight - 4;
+  logState.more = page.limited ? { direction, cursor: direction === 'backward' ? page.before : page.after } : null;
+  $('log-more').hidden = !logState.more;
+  // Draw once so the padding gives the list its new height, then move, then draw the rows for that position.
   renderLogLines();
-  if (direction === 'forward' && stick) box.scrollTop = box.scrollHeight;
+  box.scrollTop = anchor === 'bottom' || (direction === 'forward' && stick && anchor !== 'top') ? box.scrollHeight
+    : anchor === 'top' ? 0 : box.scrollTop + (direction === 'backward' ? page.lines.length * LOG_ROW : 0);
+  renderLogLines();
+  $('log-note').textContent = DashboardOperator.logNote(page, logState.lines.length > 0);
 }
 function logFailure(error) {
   $('log-note').textContent = error.message;
   if (error.status === 410) { $('log-follow').checked = false; clearInterval(logState.timer); }
+}
+async function logLoad(direction, cursor, limit, anchor) {
+  addLogPage(await logsGet('page?' + DashboardOperator.logsQuery(logState.view, cursor, direction, limit, logState.level)), direction, anchor);
 }
 async function openLog(file) {
   clearInterval(logState.timer); $('log-follow').checked = false;
   $('log-note').textContent = 'Waiting for 4D to approve and record this…';
   try {
     const opened = await operatorCall('logs/open', { file: file.id });
-    Object.assign(logState, { view: opened.view, before: null, after: null, lines: [] });
+    resetLogLines();
+    Object.assign(logState, { view: opened.view, end: opened.page.after, level: '' });
+    $('log-level').value = ''; $('log-time').value = '';
+    const filters = (file.filters || []).length > 0;
+    $('log-filters').hidden = !filters; $('log-time-help').hidden = !filters;
     $('log-title').textContent = opened.file.name; $('log-viewer').hidden = false;
-    addLogPage(opened.page, 'forward');
-    $('log-lines').scrollTop = $('log-lines').scrollHeight;
+    addLogPage(opened.page, 'forward', 'bottom');
     $('log-note').textContent = `Showing the last ${opened.page.lines.length} lines.`;
   } catch (error) { $('log-note').textContent = `Not opened: ${error.message}`; }
 }
 $('log-older').addEventListener('click', async () => {
   if (!logState.view) return;
-  try { addLogPage(await logsGet('page?' + DashboardOperator.logsQuery(logState.view, logState.before, 'backward', 200)), 'backward'); }
-  catch (error) { logFailure(error); }
+  try { await logLoad('backward', logState.before, 200, 'keep'); } catch (error) { logFailure(error); }
+});
+$('log-more').addEventListener('click', async () => {
+  if (!logState.view || !logState.more) return;
+  const { direction, cursor } = logState.more;
+  try { await logLoad(direction, cursor, 200, 'keep'); } catch (error) { logFailure(error); }
+});
+// Changing the level restarts from the end of the file, so the newest matching lines come first.
+$('log-level').addEventListener('change', async () => {
+  if (!logState.view) return;
+  clearInterval(logState.timer); $('log-follow').checked = false;
+  logState.level = $('log-level').value; resetLogLines();
+  try { await logLoad('backward', logState.end, 200, 'bottom'); } catch (error) { logFailure(error); }
+});
+$('log-jump').addEventListener('click', async () => {
+  const time = $('log-time').value;
+  if (!logState.view) return;
+  if (!time) { $('log-note').textContent = 'Choose a date and time first.'; return; }
+  clearInterval(logState.timer); $('log-follow').checked = false;
+  try {
+    const page = await logsGet('page?' + DashboardOperator.logsJumpQuery(logState.view, time, 200, logState.level));
+    resetLogLines(); addLogPage(page, 'forward', 'top');
+  } catch (error) { logFailure(error); }
 });
 $('log-follow').addEventListener('change', () => {
   clearInterval(logState.timer);
   if (!$('log-follow').checked || !logState.view) return;
   logState.timer = setInterval(async () => {
-    try { addLogPage(await logsGet('page?' + DashboardOperator.logsQuery(logState.view, logState.after, 'forward', 500)), 'forward'); }
+    try { await logLoad('forward', logState.after, 500); }
     catch (error) { logFailure(error); }
   }, 2000);
 });

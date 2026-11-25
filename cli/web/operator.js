@@ -128,10 +128,37 @@ const DashboardOperator = (() => {
     unknown_log_file: 'that file is no longer available',
     target_unavailable: '4D is not reporting right now',
     rate_limited: 'too many requests; wait a moment',
+    invalid_time: 'that is not a valid date and time',
+    invalid_filter: 'that level is not available',
+    unsupported_filter: 'this log has no levels or times to filter',
+    line_too_long: 'a line in this log is too long to page through',
   };
   function logReason(code) { return logReasons[code] || reason(code); }
-  function logsQuery(view, cursor, direction, limit) {
-    return new URLSearchParams({ view, cursor, direction, limit: String(limit) }).toString();
+  function logsQuery(view, cursor, direction, limit, level) {
+    const query = new URLSearchParams({ view, cursor, direction, limit: String(limit) });
+    if (level) query.set('level', level);
+    return query.toString();
+  }
+  // Jump to a host-local time (the log carries no time zone); the server answers with a forward page from there.
+  function logsJumpQuery(view, time, limit, level) {
+    const query = new URLSearchParams({ view, time, limit: String(limit) });
+    if (level) query.set('level', level);
+    return query.toString();
+  }
+  // Which rows of a fixed-height list to draw: the visible ones plus an overscan margin, and the padding that
+  // stands in for the rest, so the DOM stays small whatever the number of lines held in memory.
+  function logWindow(scrollTop, viewport, rowHeight, total, overscan) {
+    if (!(rowHeight > 0) || total <= 0) return { start: 0, end: 0, padTop: 0, padBottom: 0 };
+    const first = Math.floor(Math.max(0, scrollTop) / rowHeight);
+    const visible = Math.ceil(Math.max(0, viewport) / rowHeight) + 1;
+    const start = Math.min(Math.max(0, first - overscan), total);
+    const end = Math.min(total, first + visible + overscan);
+    return { start, end, padTop: start * rowHeight, padBottom: (total - end) * rowHeight };
+  }
+  function logNote(page, shown) {
+    if (page.limited) return `Scanned a large part of the file without finding ${shown ? 'more' : 'any'}; continue to keep looking.`;
+    if (page.atTime === false) return 'No lines at or after that time.';
+    return '';
   }
   // Keeps at most `cap` lines, evicting from the end far from where the reader is moving.
   function mergeLines(existing, incoming, direction, cap) {
@@ -147,6 +174,6 @@ const DashboardOperator = (() => {
   }
   function headers() { return { 'Content-Type': 'application/json', 'X-Dashboard-Action': 'operator' }; }
   function newestFirst(records) { return [...records].sort((a, b) => b.requestedAt.localeCompare(a.requestedAt)); }
-  return { logReason, logsQuery, mergeLines, logFileLabel, tokens, noopArgs, argsFor, argsFromSpec, labels, reason, describe, summary, cadence, diagnosticRows, secondsLeft, headers, newestFirst };
+  return { logReason, logsQuery, logsJumpQuery, logWindow, logNote, mergeLines, logFileLabel, tokens, noopArgs, argsFor, argsFromSpec, labels, reason, describe, summary, cadence, diagnosticRows, secondsLeft, headers, newestFirst };
 })();
 if (typeof module !== 'undefined') module.exports = DashboardOperator;

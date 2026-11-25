@@ -1173,11 +1173,13 @@ var $lgCases : Object
 var $lgName : Text
 $lgOperator:=cs.Dashboard._DashboardOperator.new()
 $report.logUnits:=New object("validate"; New object; "check"; New object; "access"; New object)
-$report.logUnits.catalog:=OB Keys($lgOperator.logCatalog())
+$report.logUnits.catalog:=OB Keys($lgOperator.logCatalog()).orderBy()
 $report.logUnits.validate.noOperator:=$lgOperator.validateLogs(New object("families"; New collection("dashboard.audit")); False)
 $report.logUnits.validate.unknownFamily:=$lgOperator.validateLogs(New object("families"; New collection("4d.httpDebug")); True)
 $report.logUnits.validate.extraKey:=$lgOperator.validateLogs(New object("families"; New collection("dashboard.audit"); "root"; "/etc"); True)
 $report.logUnits.validate.valid:=$lgOperator.validateLogs(New object("families"; New collection("dashboard.audit")); True)
+$report.logUnits.validate.sensitiveWithoutAuthorize:=$lgOperator.validateLogs(New object("families"; New collection("4d.diagnostic")); True; False)
+$report.logUnits.validate.sensitiveWithAuthorize:=$lgOperator.validateLogs(New object("families"; New collection("4d.diagnostic")); True; True)
 $lgFolder:=Folder(Temporary folder; fk platform path).folder("dashboard-logs-"+Generate UUID)
 $lgOperator:=cs.Dashboard._DashboardOperator.new(New collection("operator.noop"); "log-epoch"; $lgFolder)
 $lgOperator.relay:=False

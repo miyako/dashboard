@@ -58,7 +58,7 @@ Function logCatalog()->$catalog : Object
 		$catalog[$family.id]:=$family
 	End for each
 
-Function validateLogs($value : Variant; $operatorEnabled : Boolean)->$result : Object
+Function validateLogs($value : Variant; $operatorEnabled : Boolean; $hasAuthorize : Boolean)->$result : Object
 	var $catalog; $seen : Object
 	var $id : Variant
 	var $families : Collection
@@ -87,6 +87,11 @@ Function validateLogs($value : Variant; $operatorEnabled : Boolean)->$result : O
 		End if
 		If ((Value type($catalog[$id])#Is object) | ($seen[$id]=True))
 			$result.error:="logs families must be unique catalog IDs"
+			return
+		End if
+		If (($catalog[$id].sensitivity="sensitive") & Not($hasAuthorize))
+			// Sensitive families (4D's own logs) are never offered without the host's approval formula.
+			$result.error:="sensitive log families require an operator authorize formula"
 			return
 		End if
 		$seen[$id]:=True

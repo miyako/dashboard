@@ -3102,6 +3102,16 @@
               "families": [
                 "dashboard.audit"
               ]
+            },
+            "sensitiveWithoutAuthorize": {
+              "ok": false,
+              "error": "sensitive log families require an operator authorize formula"
+            },
+            "sensitiveWithAuthorize": {
+              "ok": true,
+              "families": [
+                "4d.diagnostic"
+              ]
             }
           },
           "check": {
@@ -3155,6 +3165,7 @@
             }
           },
           "catalog": [
+            "4d.diagnostic",
             "dashboard.audit"
           ],
           "auditStates": [

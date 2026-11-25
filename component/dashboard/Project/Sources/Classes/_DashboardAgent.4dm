@@ -90,7 +90,7 @@ Function launch()
 		// Log browsing (docs/log-browsing-design.md): the CLI reads the host Logs folder; 4D authorizes and audits.
 		var $logs : Object
 		var $logsFolder : 4D.Folder
-		$logs:=cs._DashboardOperator.new().validateLogs(This.options.logs; This.operator#Null)
+		$logs:=cs._DashboardOperator.new().validateLogs(This.options.logs; This.operator#Null; This.authorize#Null)
 		If (Not($logs.ok))
 			This.fail($logs.error)
 			return
