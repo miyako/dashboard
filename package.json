@@ -2,7 +2,7 @@
   "name": "dashboard",
   "version": "0.1.9",
   "private": true,
-  "description": "Read-only web dashboard for local 4D instance metrics over a versioned streaming protocol",
+  "description": "Web dashboard for local 4D instance metrics over a versioned streaming protocol; read-only monitoring with separately enabled, guarded operator actions",
   "license": "MIT",
   "tool": {
     "platform": "macos",
