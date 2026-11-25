@@ -2,7 +2,7 @@
 
 Status: **design accepted** (section 10 records the decisions). **L1 is implemented**: the
 `dashboard.audit` family only, with the file map, open, paging and follow, and the fail-closed
-`logAccess` round-trip. L0 is **partly done**: a disposable full 4D 21.2 standalone probe (section 2) confirmed the diagnostic/debug formats; Server request/process and backup-journal logs are unconfirmed. **L2 is implemented** (see "L2 as built" at the end of section 9): the `4d.diagnostic` family with a level filter, jump to time and a windowed viewer. L3–L4 are not started.
+`logAccess` round-trip. L0 is **partly done**: a disposable full 4D 21.2 standalone probe (section 2) confirmed the diagnostic/debug formats; Server request/process and backup-journal logs are unconfirmed. **L2 is implemented** (see "L2 as built" at the end of section 9): the `4d.diagnostic` family with a level filter, jump to time and a windowed viewer. **L3 is implemented** (see "L3 as built"): bounded plain-text search. L4 is not started.
 
 Found while implementing L1: `Folder(fk logs folder; *).path` returns the filesystem alias `/LOGS/`,
 not a real path, so the component converts `platformPath` to POSIX. A headless tool4d project's Logs
@@ -231,6 +231,29 @@ need a separate decision with its own controls; masking HTTP headers is not a pr
   protocol with a **synthetic** diagnostic file. Not verified: real 4D diagnostic logs beyond the earlier
   probe, WARN/INFO/DEBUG/TRACE names in real files, a 4D host calling `authorize` for this family on
   Server, UTF-16 files (they would show replacement characters), Intel/Windows hosts.
+
+### L3 as built
+
+- `POST /api/operator/logs/search` with `{view, text, caseInsensitive, direction, from}` where `from` is
+  `"start"`, `"end"` or a cursor from this view. Unknown fields, text outside 1-128 bytes of valid UTF-8 without
+  control characters, and forged cursors are 400s. It works on any opened family.
+- Authorization first: a `logAccess` frame with `op:"search"` and `queryDigest`, an HMAC of the text and the
+  case flag under the run's key (16 hex), never the text. 4D validates the frame strictly (nine keys for a
+  search, eight for an open), calls the host `authorize` formula, writes `logs.search` to the audit with the
+  digest folded into the args digest, and answers. Denial, audit failure or silence serves nothing. Every
+  request, including a continuation, is authorized and audited again.
+- Bounds: 64 MiB scanned and 200 matches per request, at most 30 requests a minute and one in flight per
+  operator session, the same file/rotation/truncation checks as paging, and cancellation when the browser
+  disconnects. The response gives `next`, `limited`, `complete` and `scanned`; a match's cursor opens a page at
+  that line.
+- Plain substring on the displayed (16 KiB-capped) line, optionally case-insensitive; no regular expressions.
+  Results are drawn from text nodes with highlight marks, never `innerHTML`; at most 1000 matches stay in
+  the browser and nothing is stored there.
+- Verified here: Go tests (authorization and digest, denial/audit/timeout, semantics, paging both ways,
+  validation, the rate limit, one in flight, rotation) and a 200 MiB budget test (a 1 GiB run via
+  `DASHBOARD_LARGE_LOG=1` took about 3 s over 17 requests with a bounded heap), Node tests, and a Chromium run
+  against the real CLI with a synthetic log. The new host-contract cases need hosted CI. Not verified: a real
+  4D `authorize` on Server, real diagnostic logs beyond the earlier probe, Intel/Windows.
 
 ## 10. Owner decisions (recorded: the recommended defaults were accepted)
 
