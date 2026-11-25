@@ -9,7 +9,7 @@ Monitoring is read-only: measurements, local process/session summaries,
 refresh, bounded history and light/dark/system appearance. Separately enabled,
 guarded **operator mode** (off by default) adds a closed action catalog (see
 [Operator mode](#operator-mode-off-by-default)) and a log browser limited to
-the dashboard's own audit log. No arbitrary method, SQL, shell, file path or
+the dashboard's own audit log and, with the host's approval formula, 4D's diagnostic log. No arbitrary method, SQL, shell, file path or
 process/session selector is ever executed.
 The researched [capability inventory and ordered roadmap](docs/dashboard-capabilities.md)
 separates 21 LTS observations from later APIs and future, separately gated administration.
@@ -301,10 +301,11 @@ Every opened log (the audit log too) also has a plain-text **search** (at most 1
 pattern): up to 200 matches and 64 MiB read per request, newest or oldest first, with a continuation, at most
 30 searches a minute and one at a time per operator session. Each search request is approved and recorded
 by 4D before any byte is read, and the audit holds only a keyed digest of the text, never the text.
-Lines longer than 16 KiB are searched only in their first 16 KiB. 4D approves and records every open before a byte is shown, and fails closed. Files are
+Lines longer than 16 KiB are searched only in their first 16 KiB.
+4D approves and records every open before a byte is shown, and fails closed. Files are
 read by the CLI, confined to the host Logs folder and refused if a file is a link, has been
 swapped, rotated or truncated. There is no export and nothing is kept in the browser. 4D's other logs
-(debug, request, TCP/UDP) are not implemented: L0 format confirmation on a 4D Server and phases L3-L4 are
+(debug, request, TCP/UDP) are not implemented: L0 format confirmation on a 4D Server and phase L4 are
 open, and HTTP/web, mail and ORDA logs stay excluded. Logs are sensitive free text and no generic redaction is claimed. See
 [docs/log-browsing-design.md](docs/log-browsing-design.md).
 
