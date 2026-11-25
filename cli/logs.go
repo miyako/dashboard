@@ -118,7 +118,9 @@ type logsConfig struct {
 	negotiated bool
 	views      map[string]*logView // by actor: one open view per operator session
 	pending    map[string]chan logDecision
-	waiting    map[string]bool // actors with an open waiting for 4D
+	waiting    map[string]bool // actors with an open or search waiting for 4D
+	searching  map[string]bool // actors with a search in flight (authorization through scan)
+	searches   map[string][]time.Time
 	expired    []string
 	pages      []time.Time
 }
@@ -149,7 +151,8 @@ func newLogs(root string, families map[string]*logFamily) (*logsConfig, error) {
 		return nil, err
 	}
 	return &logsConfig{root: filepath.Clean(root), families: families, key: key, views: map[string]*logView{},
-		pending: map[string]chan logDecision{}, waiting: map[string]bool{}}, nil
+		pending: map[string]chan logDecision{}, waiting: map[string]bool{}, searching: map[string]bool{},
+		searches: map[string][]time.Time{}}, nil
 }
 
 func (l *logsConfig) caps() logsCaps {
@@ -465,6 +468,8 @@ func (s *service) logsRoute(w http.ResponseWriter, r *http.Request, route string
 		operatorJSON(w, 200, map[string]any{"files": logs.list()})
 	case "open":
 		s.logsOpen(w, body, logs, actor)
+	case "search":
+		s.logsSearch(w, r, body, logs, actor)
 	case "page":
 		if r.Method != "GET" {
 			logError(w, 405, "get_required")
@@ -476,41 +481,32 @@ func (s *service) logsRoute(w http.ResponseWriter, r *http.Request, route string
 	}
 }
 
-func (s *service) logsOpen(w http.ResponseWriter, body []byte, logs *logsConfig, actor string) {
-	var req struct {
-		File *string `json:"file"`
-	}
-	if strictDecode(body, &req) != nil || req.File == nil {
-		logError(w, 400, "invalid_body")
-		return
-	}
-	file, ok := logs.resolve(*req.File)
-	if !ok {
-		logError(w, 404, errUnknownLogFile)
-		return
-	}
+// logAuthorize asks 4D to authorize and audit one log access (an open or a search) and waits for its answer
+// outside the service lock, so nothing else is blocked. It returns status 0 when 4D approved; otherwise the
+// HTTP status and error code to answer with. Nothing may be served on any other result (fail-closed).
+func (s *service) logAuthorize(logs *logsConfig, actor, op string, file logFile, extra map[string]any) (int, string) {
 	s.mu.Lock()
 	if !logs.negotiated || s.current.Epoch == "" || s.current.Status != "connected" {
 		s.mu.Unlock()
-		logError(w, 409, "target_unavailable")
-		return
+		return 409, "target_unavailable"
 	}
 	if logs.waiting[actor] {
 		s.mu.Unlock()
-		logError(w, 429, "open_pending")
-		return
+		return 429, "open_pending"
 	}
 	id := nonce()
 	decision := make(chan logDecision, 1)
-	if err := s.emit(map[string]any{"protocol": 1, "kind": "logAccess", "epoch": s.current.Epoch, "id": id,
-		"op": "open", "family": file.Family, "file": file.Name, "actor": actor}); err != nil {
+	frame := map[string]any{"protocol": 1, "kind": "logAccess", "epoch": s.current.Epoch, "id": id,
+		"op": op, "family": file.Family, "file": file.Name, "actor": actor}
+	for key, value := range extra {
+		frame[key] = value
+	}
+	if err := s.emit(frame); err != nil {
 		s.mu.Unlock()
-		logError(w, 503, "dispatch_failed")
-		return
+		return 503, "dispatch_failed"
 	}
 	logs.pending[id], logs.waiting[actor] = decision, true
 	s.mu.Unlock()
-	// Wait for 4D's authorization and audit outside the service lock: nothing else is blocked.
 	var result logDecision
 	select {
 	case result = <-decision:
@@ -527,14 +523,34 @@ func (s *service) logsOpen(w http.ResponseWriter, body []byte, logs *logsConfig,
 		}
 	}
 	delete(logs.waiting, actor)
-	if !result.ok {
-		status := 403
-		if result.code == "authorization_timeout" {
-			status = 504
-		}
-		logError(w, status, result.code)
+	if result.ok {
+		return 0, ""
+	}
+	if result.code == "authorization_timeout" {
+		return 504, result.code
+	}
+	return 403, result.code
+}
+
+func (s *service) logsOpen(w http.ResponseWriter, body []byte, logs *logsConfig, actor string) {
+	var req struct {
+		File *string `json:"file"`
+	}
+	if strictDecode(body, &req) != nil || req.File == nil {
+		logError(w, 400, "invalid_body")
 		return
 	}
+	file, ok := logs.resolve(*req.File)
+	if !ok {
+		logError(w, 404, errUnknownLogFile)
+		return
+	}
+	if status, code := s.logAuthorize(logs, actor, "open", file, nil); status != 0 {
+		logError(w, status, code)
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	f, info, err := openConfined(file.path)
 	if err != nil {
 		logError(w, 410, errRotated)
@@ -678,11 +694,11 @@ func (s *service) logsPage(w http.ResponseWriter, r *http.Request, logs *logsCon
 	case direction == "forward" && match == nil:
 		lines, after, err = readForward(f, offset, end, limit)
 	case direction == "forward":
-		lines, after, limited, err = readFilteredForward(f, offset, end, limit, match)
+		lines, after, limited, err = readFilteredForward(f, offset, end, limit, match, maxFilterScan, nil)
 	case match == nil:
 		lines, err = readBackward(f, offset, limit)
 	default:
-		lines, before, limited, err = readFilteredBackward(f, offset, limit, match)
+		lines, before, limited, err = readFilteredBackward(f, offset, limit, match, maxFilterScan, nil)
 	}
 	if err != nil {
 		logError(w, 422, err.Error())

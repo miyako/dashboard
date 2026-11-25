@@ -1168,7 +1168,7 @@ $report.restartUnits.delay.push($rsAgent.restartDelay(0; 250))
 HOST_Phase:="log access units"
 var $lgOperator : cs.Dashboard._DashboardOperator
 var $lgFolder; $lgBroken : 4D.Folder
-var $lgMessage; $lgCheck : Object
+var $lgMessage; $lgCheck; $lgSearch : Object
 var $lgCases : Object
 var $lgName : Text
 $lgOperator:=cs.Dashboard._DashboardOperator.new()
@@ -1192,7 +1192,12 @@ $lgCases:=New object(\
 	"patternMismatch"; New object("file"; "audit.9.jsonl"); \
 	"searchOp"; New object("op"; "search"); \
 	"extraField"; New object("path"; "/etc/passwd"); \
-	"duplicate"; New object)
+	"duplicate"; New object; \
+	"searchValid"; New object("op"; "search"; "queryDigest"; "0123456789abcdef"; "id"; Generate digest("log two"; SHA256 digest)); \
+	"searchBadDigest"; New object("op"; "search"; "queryDigest"; "not-a-digest"; "id"; Generate digest("log three"; SHA256 digest)); \
+	"searchTextNotDigest"; New object("op"; "search"; "queryDigest"; "message 123 secret"; "id"; Generate digest("log four"; SHA256 digest)); \
+	"openWithDigest"; New object("queryDigest"; "0123456789abcdef"; "id"; Generate digest("log five"; SHA256 digest)); \
+	"unknownOp"; New object("op"; "export"; "id"; Generate digest("log six"; SHA256 digest)))
 For each ($lgName; OB Keys($lgCases))
 	$lgCheck:=OB Copy($lgMessage)
 	For each ($parameter; OB Keys($lgCases[$lgName]))
@@ -1203,13 +1208,18 @@ For each ($lgName; OB Keys($lgCases))
 End for each
 $lgCheck:=$lgOperator.logCatalog()["dashboard.audit"]
 $report.logUnits.access.allowed:=$lgOperator.logAccess($lgMessage; $lgCheck; Null)
+$lgSearch:=OB Copy($lgMessage)
+$lgSearch.op:="search"
+$lgSearch.queryDigest:="0123456789abcdef"
+$report.logUnits.access.searchAllowed:=$lgOperator.logAccess($lgSearch; $lgCheck; Null)
+$report.logUnits.access.searchDenied:=$lgOperator.logAccess($lgSearch; $lgCheck; Formula(False))
 $report.logUnits.access.denied:=$lgOperator.logAccess($lgMessage; $lgCheck; Formula(False))
 $report.logUnits.access.sensitiveWithoutAuthorize:=$lgOperator.logAccess($lgMessage; New object("id"; "test.sensitive"; "sensitivity"; "sensitive"); Null)
 $lgBroken:=Folder(Temporary folder; fk platform path).folder("dashboard-logs-"+Generate UUID)
 $lgBroken.folder("audit.jsonl").create()
 $lgOperator.folder:=$lgBroken
 $report.logUnits.access.auditUnavailable:=$lgOperator.logAccess($lgMessage; $lgCheck; Null)
-For each ($lgName; New collection("allowed"; "denied"; "sensitiveWithoutAuthorize"; "auditUnavailable"))
+For each ($lgName; New collection("allowed"; "searchAllowed"; "searchDenied"; "denied"; "sensitiveWithoutAuthorize"; "auditUnavailable"))
 	OB REMOVE($report.logUnits.access[$lgName]; "id")
 End for each
 $report.logUnits.auditStates:=New collection

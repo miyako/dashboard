@@ -400,7 +400,7 @@ async function operatorCall(route, body) {
   let data = {};
   try { data = await response.json(); } catch { /* 204 and plain errors have no JSON body. */ }
   if (response.status === 401) stopOperator('Operator session ended');
-  if (!response.ok) throw new Error(DashboardOperator.reason(data.error) || `HTTP ${response.status}`);
+  if (!response.ok) throw Object.assign(new Error(DashboardOperator.reason(data.error) || `HTTP ${response.status}`), { status: response.status, code: data.error });
   return data;
 }
 let operatorCatalog = [];
@@ -506,6 +506,7 @@ async function openLog(file) {
     const opened = await operatorCall('logs/open', { file: file.id });
     resetLogLines();
     Object.assign(logState, { view: opened.view, end: opened.page.after, level: '' });
+    $('log-results').hidden = true; $('log-matches').replaceChildren(); $('log-search-text').value = ''; searchState.more = null;
     $('log-level').value = ''; $('log-time').value = '';
     const filters = (file.filters || []).length > 0;
     $('log-filters').hidden = !filters; $('log-time-help').hidden = !filters;
@@ -540,6 +541,53 @@ $('log-jump').addEventListener('click', async () => {
     resetLogLines(); addLogPage(page, 'forward', 'top');
   } catch (error) { logFailure(error); }
 });
+// Search (L3): each request is approved and recorded by 4D; the text is plain, at most 128 characters.
+const searchState = { text: '', insensitive: false, direction: 'backward', total: 0, more: null };
+const SEARCH_CAP = 1000;
+async function runSearch(from, append) {
+  if (!logState.view) return;
+  const body = DashboardOperator.logsSearchBody(logState.view, searchState.text, searchState.insensitive, searchState.direction, from);
+  $('log-results').hidden = false;
+  $('log-results-note').textContent = 'Waiting for 4D to approve and record this search…';
+  try {
+    const result = await operatorCall('logs/search', body);
+    if (!append) { $('log-matches').replaceChildren(); searchState.total = 0; }
+    for (const match of result.matches) {
+      if (searchState.total >= SEARCH_CAP) break;
+      const li = el('li'), button = el('button');
+      button.type = 'button';
+      for (const part of DashboardOperator.highlightParts(match.text, searchState.text, searchState.insensitive)) {
+        button.append(part.hit ? el('mark', part.text) : document.createTextNode(part.text));
+      }
+      button.addEventListener('click', () => showMatch(match));
+      li.append(button); $('log-matches').append(li); searchState.total += 1;
+    }
+    const capped = searchState.total >= SEARCH_CAP && !result.complete;
+    searchState.more = result.complete || capped ? null : result.next;
+    $('log-search-more').hidden = !searchState.more;
+    $('log-results-note').textContent = capped ? `Showing the first ${SEARCH_CAP} matches; narrow the search.` : DashboardOperator.searchNote(result, searchState.total);
+  } catch (error) {
+    $('log-results-note').textContent = `Search failed: ${DashboardOperator.logReason(error.code) || error.message}`;
+    if (error.status === 410) logFailure(error);
+  }
+}
+// Opens the lines around a match; the level filter is cleared so the match is not filtered away.
+async function showMatch(match) {
+  clearInterval(logState.timer); $('log-follow').checked = false;
+  logState.level = ''; $('log-level').value = '';
+  try {
+    const page = await logsGet('page?' + DashboardOperator.logsQuery(logState.view, match.cursor, 'forward', 200, ''));
+    resetLogLines(); addLogPage(page, 'forward', 'top');
+  } catch (error) { logFailure(error); }
+}
+$('log-search').addEventListener('submit', event => {
+  event.preventDefault();
+  const text = $('log-search-text').value;
+  if (!text || text.length > 128) return;
+  Object.assign(searchState, { text, insensitive: $('log-search-case').checked, direction: $('log-search-dir').value, more: null });
+  runSearch(searchState.direction === 'forward' ? 'start' : 'end', false);
+});
+$('log-search-more').addEventListener('click', () => { if (searchState.more) runSearch(searchState.more, true); });
 $('log-follow').addEventListener('change', () => {
   clearInterval(logState.timer);
   if (!$('log-follow').checked || !logState.view) return;

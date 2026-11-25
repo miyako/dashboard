@@ -3145,11 +3145,37 @@
             "duplicate": {
               "ok": false,
               "error": "Duplicate dashboard log access"
+            },
+            "searchValid": {
+              "ok": true
+            },
+            "searchBadDigest": {
+              "ok": false,
+              "error": "Invalid dashboard log access frame"
+            },
+            "searchTextNotDigest": {
+              "ok": false,
+              "error": "Invalid dashboard log access frame"
+            },
+            "openWithDigest": {
+              "ok": false,
+              "error": "Invalid dashboard log access frame"
+            },
+            "unknownOp": {
+              "ok": false,
+              "error": "Invalid dashboard log access frame"
             }
           },
           "access": {
             "allowed": {
               "ok": true
+            },
+            "searchAllowed": {
+              "ok": true
+            },
+            "searchDenied": {
+              "ok": false,
+              "error": "host_denied"
             },
             "denied": {
               "ok": false,
@@ -3170,6 +3196,8 @@
           ],
           "auditStates": [
             "logs.open:completed:",
+            "logs.search:completed:",
+            "logs.search:failed:host_denied",
             "logs.open:failed:host_denied",
             "logs.open:failed:host_denied"
           ]

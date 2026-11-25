@@ -106,3 +106,21 @@ test('virtual log list draws only the visible rows', () => {
   assert.equal(operator.logWindow(99999, 400, 20, 10, 20).end, 10);
   assert.deepEqual(operator.logWindow(0, 400, 0, 10, 20), { start: 0, end: 0, padTop: 0, padBottom: 0 });
 });
+
+test('log search builds a plain body and highlights with text parts', () => {
+  assert.deepEqual(operator.logsSearchBody('v', 'x', true, 'backward', 'end'), { view: 'v', text: 'x', caseInsensitive: true, direction: 'backward', from: 'end' });
+  assert.equal(operator.logsSearchBody('v', 'x', undefined, 'forward', 'start').caseInsensitive, false);
+  assert.deepEqual(operator.highlightParts('a Foo b foo', 'foo', true), [
+    { text: 'a ', hit: false }, { text: 'Foo', hit: true }, { text: ' b ', hit: false }, { text: 'foo', hit: true }]);
+  assert.deepEqual(operator.highlightParts('a Foo b foo', 'foo', false), [{ text: 'a Foo b ', hit: false }, { text: 'foo', hit: true }]);
+  // Regular-expression characters are plain text, and markup stays text (it is only ever drawn as text nodes).
+  assert.deepEqual(operator.highlightParts('x.*y <b>', '.*', false), [{ text: 'x', hit: false }, { text: '.*', hit: true }, { text: 'y <b>', hit: false }]);
+  assert.deepEqual(operator.highlightParts('nothing', 'zzz', false), [{ text: 'nothing', hit: false }]);
+  assert.deepEqual(operator.highlightParts('abc', '', false), [{ text: 'abc', hit: false }]);
+  assert.equal(operator.highlightParts('İstanbul', 'i', true).length, 1, 'a length-changing lower-case does not highlight');
+  assert.match(operator.searchNote({ complete: true, scanned: 5 << 20 }, 0), /No matches; searched 5 MiB/);
+  assert.match(operator.searchNote({ complete: true, scanned: 0 }, 1), /1 match; the rest/);
+  assert.match(operator.searchNote({ complete: true, scanned: 300 << 10 }, 0), /searched 300 KiB/);
+  assert.match(operator.searchNote({ complete: false, scanned: 64 << 20 }, 12), /12 matches so far; searched 64 MiB.*Continue/);
+  assert.match(operator.logReason('search_pending'), /search is still running/);
+});

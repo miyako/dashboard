@@ -123,7 +123,8 @@ const DashboardOperator = (() => {
     host_denied: 'the host application did not approve opening this log',
     audit_unavailable: 'the audit log could not be written, so nothing was shown',
     authorization_timeout: '4D did not approve in time; try again',
-    open_pending: 'another log is still being opened',
+    open_pending: 'another log request is still waiting for 4D',
+    search_pending: 'another search is still running',
     transport_not_allowed: 'logs are only available over TLS or on this machine',
     unknown_log_file: 'that file is no longer available',
     target_unavailable: '4D is not reporting right now',
@@ -160,6 +161,32 @@ const DashboardOperator = (() => {
     if (page.atTime === false) return 'No lines at or after that time.';
     return '';
   }
+  // The body of a search request: plain text only (the server treats it as a substring, never a pattern).
+  function logsSearchBody(view, text, insensitive, direction, from) {
+    return { view, text, caseInsensitive: insensitive === true, direction, from };
+  }
+  // Splits a line around its matches so the page can draw highlights from text nodes (never innerHTML).
+  function highlightParts(text, needle, insensitive) {
+    if (!needle) return [{ text, hit: false }];
+    const hay = insensitive ? text.toLowerCase() : text, find = insensitive ? needle.toLowerCase() : needle;
+    // Lower-casing can change a string's length (some scripts); then positions no longer line up, so do not highlight.
+    if (hay.length !== text.length) return [{ text, hit: false }];
+    const parts = [];
+    let at = 0;
+    for (let index = hay.indexOf(find); index >= 0 && find.length > 0; index = hay.indexOf(find, at)) {
+      if (index > at) parts.push({ text: text.slice(at, index), hit: false });
+      parts.push({ text: text.slice(index, index + find.length), hit: true });
+      at = index + find.length;
+    }
+    if (at < text.length) parts.push({ text: text.slice(at), hit: false });
+    return parts.length ? parts : [{ text, hit: false }];
+  }
+  function searchNote(result, total) {
+    const bytes = Math.max(0, result.scanned || 0);
+    const scanned = bytes < 1048576 ? `${Math.max(1, Math.round(bytes / 1024))} KiB` : `${Math.round(bytes / 1048576)} MiB`;
+    if (result.complete) return total ? `${total} match${total === 1 ? '' : 'es'}; the rest of the file was searched.` : `No matches; searched ${scanned}.`;
+    return `${total} match${total === 1 ? '' : 'es'} so far; searched ${scanned} this time. Continue to keep looking.`;
+  }
   // Keeps at most `cap` lines, evicting from the end far from where the reader is moving.
   function mergeLines(existing, incoming, direction, cap) {
     const merged = direction === 'backward' ? [...incoming, ...existing] : [...existing, ...incoming];
@@ -174,6 +201,6 @@ const DashboardOperator = (() => {
   }
   function headers() { return { 'Content-Type': 'application/json', 'X-Dashboard-Action': 'operator' }; }
   function newestFirst(records) { return [...records].sort((a, b) => b.requestedAt.localeCompare(a.requestedAt)); }
-  return { logReason, logsQuery, logsJumpQuery, logWindow, logNote, mergeLines, logFileLabel, tokens, noopArgs, argsFor, argsFromSpec, labels, reason, describe, summary, cadence, diagnosticRows, secondsLeft, headers, newestFirst };
+  return { logReason, logsQuery, logsJumpQuery, logsSearchBody, highlightParts, searchNote, logWindow, logNote, mergeLines, logFileLabel, tokens, noopArgs, argsFor, argsFromSpec, labels, reason, describe, summary, cadence, diagnosticRows, secondsLeft, headers, newestFirst };
 })();
 if (typeof module !== 'undefined') module.exports = DashboardOperator;

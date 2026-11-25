@@ -23,6 +23,8 @@ const (
 	timeProbeSkip = 64        // unparsable lines skipped when probing for a timestamp
 )
 
+var errScanCancelled = errors.New("cancelled")
+
 var diagnosticLevels = map[string]bool{"ERROR": true, "WARN": true, "INFO": true, "DEBUG": true, "TRACE": true}
 
 var diagnosticLine = regexp.MustCompile(`^[0-9]+ ([0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]{1,3})?) \[[^\]\n]*\] ([A-Z]+) - `)
@@ -75,11 +77,14 @@ func reverseLines(lines []logLine) {
 
 // readFilteredForward returns up to limit matching lines from a line start. next is where a continuation
 // starts; limited reports that the scan budget ended the scan before the file or the limit did.
-func readFilteredForward(f *os.File, from, end int64, limit int, match func(string) bool) (lines []logLine, next int64, limited bool, err error) {
+func readFilteredForward(f *os.File, from, end int64, limit int, match func(string) bool, budget int64, stop func() bool) (lines []logLine, next int64, limited bool, err error) {
 	lines = []logLine{}
 	pos := from
 	for pos < end {
-		if pos-from >= maxFilterScan {
+		if stop != nil && stop() {
+			return nil, 0, false, errScanCancelled
+		}
+		if pos-from >= budget {
 			return lines, pos, true, nil
 		}
 		chunk, chunkEnd, err := readForward(f, pos, end, filterChunk)
@@ -142,11 +147,14 @@ func backwardBlock(f *os.File, before int64) ([]logLine, int64, error) {
 }
 
 // readFilteredBackward returns up to limit matching lines that end before a line start, oldest first.
-func readFilteredBackward(f *os.File, before int64, limit int, match func(string) bool) (lines []logLine, newBefore int64, limited bool, err error) {
+func readFilteredBackward(f *os.File, before int64, limit int, match func(string) bool, budget int64, stop func() bool) (lines []logLine, newBefore int64, limited bool, err error) {
 	collected := []logLine{}
 	pos := before
 	for pos > 0 {
-		if before-pos >= maxFilterScan {
+		if stop != nil && stop() {
+			return nil, 0, false, errScanCancelled
+		}
+		if before-pos >= budget {
 			reverseLines(collected)
 			return collected, pos, true, nil
 		}

@@ -103,17 +103,32 @@ Function checkLogAccess($message : Object; $families : Collection)->$result : Ob
 	// Strict validation of a CLI logAccess frame; returns the family entry when valid.
 	var $field : Text
 	var $family : Object
+	var $keys; $texts : Collection
 	$result:=New object("ok"; False; "error"; "Invalid dashboard log access frame")
-	If (JSON Stringify(OB Keys($message).orderBy())#JSON Stringify(New collection("actor"; "epoch"; "family"; "file"; "id"; "kind"; "op"; "protocol")))
+	$keys:=New collection("actor"; "epoch"; "family"; "file"; "id"; "kind"; "op"; "protocol")
+	$texts:=New collection("actor"; "epoch"; "family"; "file"; "id"; "op")
+	If (Value type($message.op)=Is text)
+		If ($message.op="search")
+			// A search also carries a keyed digest of its text (never the text), which lands in the audit record.
+			$keys.push("queryDigest")
+			$texts.push("queryDigest")
+		End if
+	End if
+	If (JSON Stringify(OB Keys($message).orderBy())#JSON Stringify($keys.orderBy()))
 		return
 	End if
-	For each ($field; New collection("actor"; "epoch"; "family"; "file"; "id"; "op"))
+	For each ($field; $texts)
 		If (Value type($message[$field])#Is text)
 			return
 		End if
 	End for each
-	If (Not(Match regex("^[a-f0-9]{64}$"; $message.id)) | Not(Match regex("^[a-f0-9]{16}$"; $message.actor)) | ($message.op#"open"))
+	If (Not(Match regex("^[a-f0-9]{64}$"; $message.id)) | Not(Match regex("^[a-f0-9]{16}$"; $message.actor)) | (($message.op#"open") & ($message.op#"search")))
 		return
+	End if
+	If ($message.op="search")
+		If (Not(Match regex("^[a-f0-9]{16}$"; $message.queryDigest)))
+			return
+		End if
 	End if
 	If ((Length($message.epoch)#Length(This.epoch)) | (Position(This.epoch; $message.epoch; *)#1))
 		$result.error:="Dashboard log access for another epoch"
@@ -147,7 +162,11 @@ Function logAccess($message : Object; $family : Object; $authorize : 4D.Function
 	var $started : Integer
 	var $canonical : Text
 	var $record : Object
-	$canonical:=JSON Stringify(New object("family"; $message.family; "file"; $message.file))
+	If ($message.op="search")
+		$canonical:=JSON Stringify(New object("family"; $message.family; "file"; $message.file; "queryDigest"; $message.queryDigest))
+	Else
+		$canonical:=JSON Stringify(New object("family"; $message.family; "file"; $message.file))
+	End if
 	$record:=New object("v"; 1; "at"; ""; "epoch"; This.epoch; "action"; "logs."+$message.op; 		"id"; Substring(Generate digest($message.id; SHA256 digest); 1; 16); "actor"; $message.actor; 		"args"; Substring(Generate digest($canonical; SHA256 digest); 1; 16); "state"; "completed")
 	$frame:=New object("id"; $message.id; "ok"; True)
 	If (($authorize#Null) | ($family.sensitivity="sensitive"))

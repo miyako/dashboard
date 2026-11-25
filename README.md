@@ -296,7 +296,12 @@ new lines. Adding `"4d.diagnostic"` (which requires the operator `authorize` for
 without it) also lists 4D's diagnostic log. That viewer has a **level filter** (ERROR, WARN, INFO, DEBUG,
 TRACE; only ERROR has been seen in real files so far), a **jump to a host-local time** (the log records
 no time zone) and a windowed list, so a large file never fills the page. Filtered and time searches
-examine at most 8 MiB per request and say when they stopped early so you can continue. 4D approves and records every open before a byte is shown, and fails closed. Files are
+examine at most 8 MiB per request and say when they stopped early so you can continue.
+Every opened log (the audit log too) also has a plain-text **search** (at most 128 characters, never a
+pattern): up to 200 matches and 64 MiB read per request, newest or oldest first, with a continuation, at most
+30 searches a minute and one at a time per operator session. Each search request is approved and recorded
+by 4D before any byte is read, and the audit holds only a keyed digest of the text, never the text.
+Lines longer than 16 KiB are searched only in their first 16 KiB. 4D approves and records every open before a byte is shown, and fails closed. Files are
 read by the CLI, confined to the host Logs folder and refused if a file is a link, has been
 swapped, rotated or truncated. There is no export and nothing is kept in the browser. 4D's other logs
 (debug, request, TCP/UDP) are not implemented: L0 format confirmation on a 4D Server and phases L3-L4 are

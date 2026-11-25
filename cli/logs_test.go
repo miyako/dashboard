@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -641,7 +642,7 @@ func TestDiagnosticScansAreBounded(t *testing.T) {
 	d := newDiagFixture(t, b.String())
 	cursor := d.firstCursor(t)
 	hits, hops := 0, 0
-	for ; hops < 10; hops++ {
+	for ; hops < 20; hops++ {
 		code, page := d.get(url.Values{"cursor": {cursor}, "direction": {"forward"}, "limit": {"5"}, "level": {"ERROR"}})
 		if code != 200 {
 			t.Fatal(code, page)
@@ -674,5 +675,264 @@ func TestDiagnosticMultibyteAndLongLines(t *testing.T) {
 	if len(got) != 3 || !strings.Contains(got[0].(map[string]any)["text"].(string), "日本語のメッセージ") ||
 		got[1].(map[string]any)["truncated"] != true || got[2].(map[string]any)["text"] != "2 2026-11-15T10:00:10.000 [x] ERROR - after" {
 		t.Fatal(len(got))
+	}
+}
+
+// searchFixture opens a file and gives a helper that answers one search request the way 4D does.
+type searchFixture struct {
+	*diagFixture
+}
+
+func (d *searchFixture) search(text, direction, from string, insensitive bool, ok bool, code string) (int, map[string]any, map[string]any) {
+	d.t.Helper()
+	seen := d.answer(ok, code)
+	body, _ := json.Marshal(map[string]any{"view": d.view, "text": text, "caseInsensitive": insensitive, "direction": direction, "from": from})
+	w := d.c.call("POST", "logs/search", string(body))
+	var frameSeen map[string]any
+	select {
+	case frameSeen = <-seen:
+	case <-time.After(50 * time.Millisecond):
+	}
+	var out map[string]any
+	_ = json.Unmarshal(w.Body.Bytes(), &out)
+	return w.Code, out, frameSeen
+}
+
+func newSearchFixture(t *testing.T, text string) *searchFixture {
+	return &searchFixture{newDiagFixture(t, text)}
+}
+
+func TestSearchIsAuthorizedAndAuditedWithADigestNotTheText(t *testing.T) {
+	d := newSearchFixture(t, diagnosticText(300))
+	code, out, frameSeen := d.search("message 123 ", "forward", "start", false, true, "")
+	if code != 200 {
+		t.Fatal(code, out)
+	}
+	if frameSeen["kind"] != "logAccess" || frameSeen["op"] != "search" || frameSeen["family"] != "4d.diagnostic" ||
+		frameSeen["file"] != "4DDiagnosticLogTool_1.txt" || len(frameSeen) != 9 {
+		t.Fatal(frameSeen)
+	}
+	digest, _ := frameSeen["queryDigest"].(string)
+	if len(digest) != 16 || strings.Contains(fmt.Sprint(frameSeen), "message 123") {
+		t.Fatal("the frame must carry a digest, never the text", frameSeen)
+	}
+	if got := texts(map[string]any{"lines": out["matches"]}); len(got) != 1 || !strings.Contains(got[0], "message 123 ") {
+		t.Fatal(got)
+	}
+	// The same text and case flag give the same digest; different text or flag do not.
+	_, _, again := d.search("message 123 ", "forward", "start", false, true, "")
+	_, _, other := d.search("message 124 ", "forward", "start", false, true, "")
+	_, _, flagged := d.search("message 123 ", "forward", "start", true, true, "")
+	if again["queryDigest"] != digest || other["queryDigest"] == digest || flagged["queryDigest"] == digest {
+		t.Fatal("digest stability")
+	}
+	// Denied, audit-failed and unanswered searches serve nothing.
+	if code, out, _ := d.search("message", "forward", "start", false, false, "host_denied"); code != 403 || out["error"] != "host_denied" || out["matches"] != nil {
+		t.Fatal("denied", code, out)
+	}
+	if code, out, _ := d.search("message", "forward", "start", false, false, "audit_unavailable"); code != 403 || out["matches"] != nil {
+		t.Fatal("audit", code, out)
+	}
+	logAccessTimeout = 100 * time.Millisecond
+	defer func() { logAccessTimeout = 5 * time.Second }()
+	if code, out, _ := d.search("message", "forward", "start", false, false, "silent"); code != 504 || out["matches"] != nil {
+		t.Fatal("timeout", code, out)
+	}
+}
+
+func TestSearchSemanticsAndCursors(t *testing.T) {
+	d := newSearchFixture(t, diagnosticText(1000))
+	matches := func(out map[string]any) []string { return texts(map[string]any{"lines": out["matches"]}) }
+	// Plain substring, case-sensitive by default: "info" matches no level, "INFO" does.
+	if _, out, _ := d.search("] info - ", "forward", "start", false, true, ""); len(matches(out)) != 0 || out["complete"] != true {
+		t.Fatal("case-sensitive")
+	}
+	if _, out, _ := d.search("] info - ", "forward", "start", true, true, ""); len(matches(out)) != 200 || out["complete"] != false {
+		t.Fatal("case-insensitive", len(matches(out)))
+	}
+	// Regex metacharacters are plain text.
+	if _, out, _ := d.search(".*", "forward", "start", false, true, ""); len(matches(out)) != 0 {
+		t.Fatal("regular expressions must not be interpreted")
+	}
+	// Multibyte text.
+	if _, out, _ := d.search("message 5 日本語", "forward", "start", false, true, ""); len(matches(out)) != 1 {
+		t.Fatal("multibyte")
+	}
+	// At most 200 matches per request; following `next` finds every one exactly once.
+	var all []string
+	from := "start"
+	for i := 0; i < 20; i++ {
+		_, out, _ := d.search("] WARN - ", "forward", from, false, true, "")
+		all = append(all, matches(out)...)
+		if out["complete"] == true {
+			break
+		}
+		from = out["next"].(string)
+	}
+	if len(all) != 250 {
+		t.Fatal("paged search found", len(all))
+	}
+	// Backward from the end returns the newest matches first-page, oldest first within the page.
+	_, out, _ := d.search("] ERROR - ", "backward", "end", false, true, "")
+	got := matches(out)
+	if len(got) != 200 || !strings.Contains(got[len(got)-1], "message 997 ") || out["complete"] != false {
+		t.Fatal("backward", len(got))
+	}
+	_, out, _ = d.search("] ERROR - ", "backward", out["next"].(string), false, true, "")
+	if len(matches(out)) != 50 || out["complete"] != true {
+		t.Fatal("backward continuation", len(matches(out)))
+	}
+	// A match's cursor opens a page at that line.
+	_, out, _ = d.search("message 777 ", "forward", "start", false, true, "")
+	cursor := out["matches"].([]any)[0].(map[string]any)["cursor"].(string)
+	if code, page := d.get(url.Values{"cursor": {cursor}, "direction": {"forward"}, "limit": {"2"}}); code != 200 || !strings.Contains(texts(page)[0], "message 777 ") {
+		t.Fatal("cursor", code)
+	}
+}
+
+func TestSearchValidationAndLimits(t *testing.T) {
+	d := newSearchFixture(t, diagnosticText(50))
+	post := func(body string) (int, map[string]any) {
+		w := d.c.call("POST", "logs/search", body)
+		var out map[string]any
+		_ = json.Unmarshal(w.Body.Bytes(), &out)
+		return w.Code, out
+	}
+	good := func(extra string) string {
+		return `{"view":"` + d.view + `","text":"x","caseInsensitive":false,"direction":"forward","from":"start"` + extra + `}`
+	}
+	if code, _ := post(good(`,"regex":true`)); code != 400 {
+		t.Fatal("unknown field", code)
+	}
+	for name, body := range map[string]string{
+		"empty text":   `{"view":"` + d.view + `","text":"","caseInsensitive":false,"direction":"forward","from":"start"}`,
+		"long text":    `{"view":"` + d.view + `","text":"` + strings.Repeat("a", 129) + `","caseInsensitive":false,"direction":"forward","from":"start"}`,
+		"newline":      `{"view":"` + d.view + `","text":"a\nb","caseInsensitive":false,"direction":"forward","from":"start"}`,
+		"nul":          `{"view":"` + d.view + `","text":"a\u0000b","caseInsensitive":false,"direction":"forward","from":"start"}`,
+		"bad dir":      `{"view":"` + d.view + `","text":"x","caseInsensitive":false,"direction":"sideways","from":"start"}`,
+		"missing from": `{"view":"` + d.view + `","text":"x","caseInsensitive":false,"direction":"forward"}`,
+		"missing case": `{"view":"` + d.view + `","text":"x","direction":"forward","from":"start"}`,
+		"not json":     `text=x`,
+	} {
+		if code, _ := post(body); code != 400 {
+			t.Fatal(name, code)
+		}
+	}
+	if code, out := post(strings.Replace(good(""), d.view, strings.Repeat("0", len(d.view)), 1)); code != 404 || out["error"] != "unknown_view" {
+		t.Fatal("unknown view", code)
+	}
+	if code, out := post(strings.Replace(good(""), `"start"`, `"7.deadbeef"`, 1)); code != 400 || out["error"] != errInvalidCursor {
+		t.Fatal("forged cursor", code)
+	}
+	// Nothing above reached 4D (no logAccess frame was emitted), so nothing was audited.
+	select {
+	case v := <-d.s.out:
+		t.Fatal("a rejected search reached 4D", v)
+	default:
+	}
+	// 30 searches per minute and session.
+	limited := 0
+	for i := 0; i < 40; i++ {
+		if code, _, _ := d.search("zzz", "forward", "start", false, true, ""); code == 429 {
+			limited++
+		}
+	}
+	if limited < 8 {
+		t.Fatal("rate limit", limited)
+	}
+}
+
+func TestSearchRefusesWhileAnotherIsInFlight(t *testing.T) {
+	d := newSearchFixture(t, diagnosticText(20))
+	pending := d.answer(false, "silent")
+	done := make(chan int, 1)
+	body := `{"view":"` + d.view + `","text":"x","caseInsensitive":false,"direction":"forward","from":"start"}`
+	logAccessTimeout = 300 * time.Millisecond
+	defer func() { logAccessTimeout = 5 * time.Second }()
+	go func() { done <- d.c.call("POST", "logs/search", body).Code }()
+	<-pending
+	if w := d.c.call("POST", "logs/search", body); w.Code != 429 {
+		t.Fatal("a second search while one waits for 4D", w.Code)
+	}
+	if code := <-done; code != 504 {
+		t.Fatal(code)
+	}
+}
+
+func TestSearchNeedsALiveUnrotatedView(t *testing.T) {
+	d := newSearchFixture(t, diagnosticText(20))
+	path := filepath.Join(d.root, "4DDiagnosticLogTool_1.txt")
+	if err := os.Rename(path, path+".old"); err != nil {
+		t.Fatal(err)
+	}
+	write(t, path, diagnosticText(5))
+	if code, out, _ := d.search("message", "forward", "start", false, true, ""); code != 410 || out["error"] != errRotated {
+		t.Fatal("rotated", code, out)
+	}
+}
+
+// TestSearchScanBudget builds a file several times the per-request budget and checks that one request stops at
+// the budget, that continuation finds the match beyond it, and that memory stays bounded.
+func TestSearchScanBudget(t *testing.T) {
+	total, wantHops := 200<<20, 3
+	if os.Getenv("DASHBOARD_LARGE_LOG") == "1" { // the design's 1 GiB fixture, too slow for every CI run
+		total, wantHops = 1<<30, 16
+	}
+	line := "1 2026-11-15T10:00:00.000 [x] INFO - " + strings.Repeat("p", 200) + "\n"
+	root := t.TempDir()
+	path := filepath.Join(root, "4DDiagnosticLog_1.txt")
+	fh, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	block := strings.Repeat(line, 4096)
+	for written := 0; written < total; written += len(block) {
+		if _, err := fh.WriteString(block); err != nil {
+			t.Fatal(err)
+		}
+	}
+	_, _ = fh.WriteString("2 2026-11-15T10:00:01.000 [x] ERROR - the needle at the very end\n")
+	fh.Close()
+	f := newLogsFixture(t)
+	families, _ := parseLogFamilies("dashboard.audit,4d.diagnostic")
+	f.s.logs.families = families
+	f.s.logs.root = root
+	opened := f.open("4DDiagnosticLog_1.txt")
+	d := &searchFixture{&diagFixture{f, opened["view"].(string)}}
+	var before, after runtime.MemStats
+	runtime.GC()
+	runtime.ReadMemStats(&before)
+	hops, hits, peak := 0, 0, uint64(0)
+	from := "start"
+	for ; hops < 20; hops++ {
+		start := time.Now()
+		code, out, _ := d.search("needle at the very end", "forward", from, false, true, "")
+		if code != 200 {
+			t.Fatal(code, out)
+		}
+		if took := time.Since(start); took > 20*time.Second {
+			t.Fatal("one request took", took)
+		}
+		if scanned := int64(out["scanned"].(float64)); scanned > searchScanBudget+(512<<10) {
+			t.Fatal("scanned beyond the budget", scanned)
+		}
+		hits += len(out["matches"].([]any))
+		runtime.ReadMemStats(&after)
+		if after.HeapAlloc > peak {
+			peak = after.HeapAlloc
+		}
+		if out["complete"] == true {
+			break
+		}
+		if hops == 0 && out["limited"] != true {
+			t.Fatal("the first request must stop at the budget")
+		}
+		from = out["next"].(string)
+	}
+	if hits != 1 || hops != wantHops {
+		t.Fatal("hits", hits, "hops", hops)
+	}
+	if peak > before.HeapAlloc+(48<<20) {
+		t.Fatalf("heap grew from %d to %d", before.HeapAlloc, peak)
 	}
 }
