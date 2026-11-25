@@ -75,3 +75,34 @@ test('log viewer keeps a bounded window and explains failures', () => {
   assert.deepEqual(Object.fromEntries(new URLSearchParams(operator.logsQuery('v', 'c.1', 'backward', 200))), { view: 'v', cursor: 'c.1', direction: 'backward', limit: '200' });
   assert.match(operator.logFileLabel({ name: 'audit.jsonl', size: 2048, modified: '2026-11-15T00:00:00Z' }), /audit\.jsonl — 2\.0 KiB/);
 });
+
+test('log viewer builds filtered and time-jump queries', () => {
+  assert.deepEqual(Object.fromEntries(new URLSearchParams(operator.logsQuery('v', 'c.1', 'forward', 50, 'ERROR'))), { view: 'v', cursor: 'c.1', direction: 'forward', limit: '50', level: 'ERROR' });
+  assert.equal(new URLSearchParams(operator.logsQuery('v', 'c.1', 'forward', 50, '')).has('level'), false);
+  assert.deepEqual(Object.fromEntries(new URLSearchParams(operator.logsJumpQuery('v', '2026-11-15T10:30:15', 200, 'WARN'))), { view: 'v', time: '2026-11-15T10:30:15', limit: '200', level: 'WARN' });
+  assert.equal(new URLSearchParams(operator.logsJumpQuery('v', '2026-11-15T10:30', 200)).has('level'), false);
+  assert.match(operator.logReason('invalid_time'), /valid date/);
+  assert.match(operator.logReason('unsupported_filter'), /no levels/);
+  assert.match(operator.logNote({ limited: true }, false), /without finding any/);
+  assert.match(operator.logNote({ limited: true }, true), /without finding more/);
+  assert.match(operator.logNote({ atTime: false }, false), /No lines at or after/);
+  assert.equal(operator.logNote({}, true), '');
+});
+
+test('virtual log list draws only the visible rows', () => {
+  const none = operator.logWindow(0, 400, 20, 0, 20);
+  assert.deepEqual(none, { start: 0, end: 0, padTop: 0, padBottom: 0 });
+  // 2000 rows at 20 px: the top shows rows 0..21 plus overscan, never the whole list.
+  const top = operator.logWindow(0, 400, 20, 2000, 20);
+  assert.equal(top.start, 0); assert.equal(top.end, 41); assert.equal(top.padTop, 0); assert.equal(top.padBottom, (2000 - 41) * 20);
+  const middle = operator.logWindow(10000, 400, 20, 2000, 20);
+  assert.equal(middle.start, 480); assert.equal(middle.end, 480 + 20 + 21 + 20);
+  assert.ok(middle.end - middle.start <= 62);
+  assert.equal(middle.padTop + (middle.end - middle.start) * 20 + middle.padBottom, 2000 * 20, 'padding keeps the scroll height');
+  const bottom = operator.logWindow(2000 * 20 - 400, 400, 20, 2000, 20);
+  assert.equal(bottom.end, 2000); assert.equal(bottom.padBottom, 0);
+  // Out-of-range and degenerate inputs stay inside the list.
+  assert.equal(operator.logWindow(-50, 400, 20, 10, 20).start, 0);
+  assert.equal(operator.logWindow(99999, 400, 20, 10, 20).end, 10);
+  assert.deepEqual(operator.logWindow(0, 400, 0, 10, 20), { start: 0, end: 0, padTop: 0, padBottom: 0 });
+});

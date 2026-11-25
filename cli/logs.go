@@ -52,6 +52,7 @@ type logFamily struct {
 	Pattern     string `json:"pattern"`
 	Format      string `json:"format"`
 	Sensitivity string `json:"sensitivity"`
+	Parse       string `json:"parse,omitempty"`
 	re          *regexp.Regexp
 }
 
@@ -82,7 +83,7 @@ func parseLogCatalog(raw []byte) ([]*logFamily, error) {
 	for _, f := range catalog.Families {
 		if !identifier.MatchString(f.ID) || seen[f.ID] || !logDir.MatchString(f.Dir) ||
 			(f.Format != "jsonl" && f.Format != "text" && f.Format != "tsv") ||
-			(f.Sensitivity != "normal" && f.Sensitivity != "sensitive") ||
+			(f.Sensitivity != "normal" && f.Sensitivity != "sensitive") || (f.Parse != "" && f.Parse != "diagnostic") ||
 			!strings.HasPrefix(f.Pattern, "^") || !strings.HasSuffix(f.Pattern, "$") {
 			return nil, fmt.Errorf("invalid log family %q", f.ID)
 		}
@@ -199,7 +200,9 @@ type logFile struct {
 	Name     string `json:"name"`
 	Size     int64  `json:"size"`
 	Modified string `json:"modified"`
-	path     string
+	// Filters lists what the viewer may ask for on this file (closed list from the family's parser).
+	Filters []string `json:"filters,omitempty"`
+	path    string
 }
 
 // list returns regular, non-symlinked files whose base name matches an enabled family (newest first).
@@ -224,8 +227,12 @@ func (l *logsConfig) list() []logFile {
 			if err != nil || !info.Mode().IsRegular() {
 				continue
 			}
-			files = append(files, logFile{ID: l.fileID(f.ID, name), Family: f.ID, Name: name, Size: info.Size(),
-				Modified: stamp(info.ModTime()), path: path})
+			entry := logFile{ID: l.fileID(f.ID, name), Family: f.ID, Name: name, Size: info.Size(),
+				Modified: stamp(info.ModTime()), path: path}
+			if f.Parse == "diagnostic" {
+				entry.Filters = []string{"level", "time"}
+			}
+			files = append(files, entry)
 		}
 	}
 	sort.Slice(files, func(i, j int) bool {
@@ -587,12 +594,56 @@ func (s *service) logsPage(w http.ResponseWriter, r *http.Request, logs *logsCon
 		logError(w, 404, "unknown_view")
 		return
 	}
-	offset, ok := logs.parseCursor(view.token, query.Get("cursor"))
+	family := logs.families[view.family]
+	level, when, cursor := query.Get("level"), query.Get("time"), query.Get("cursor")
 	direction := query.Get("direction")
 	limit, err := strconv.Atoi(query.Get("limit"))
-	if !ok || (direction != "forward" && direction != "backward") || err != nil || limit < 1 || limit > maxPageLines || len(query) != 4 {
+	for key := range query {
+		if key != "view" && key != "cursor" && key != "direction" && key != "limit" && key != "level" && key != "time" {
+			limit = 0
+		}
+	}
+	jumping := query.Has("time")
+	if jumping {
+		// A jump is a forward page from the first line at or after the time; it takes no cursor.
+		if query.Has("cursor") || (query.Has("direction") && direction != "forward") {
+			limit = 0
+		}
+		direction = "forward"
+	} else if !query.Has("cursor") || !query.Has("direction") {
+		limit = 0
+	}
+	var offset int64
+	ok := true
+	if !jumping {
+		offset, ok = logs.parseCursor(view.token, cursor)
+	}
+	if err != nil || limit < 1 || limit > maxPageLines || !ok || (direction != "forward" && direction != "backward") {
 		logError(w, 400, errInvalidCursor)
 		return
+	}
+	if (query.Has("level") || jumping) && family.Parse != "diagnostic" {
+		logError(w, 400, "unsupported_filter")
+		return
+	}
+	var match func(string) bool
+	if query.Has("level") {
+		if !diagnosticLevels[level] {
+			logError(w, 400, "invalid_filter")
+			return
+		}
+		match = levelMatcher(level)
+	}
+	target := ""
+	if jumping {
+		if !timeInput.MatchString(when) {
+			logError(w, 400, "invalid_time")
+			return
+		}
+		if target, ok = normalizeStamp(when); !ok {
+			logError(w, 400, "invalid_time")
+			return
+		}
 	}
 	f, info, err := openConfined(view.path)
 	if err != nil || !os.SameFile(view.info, info) {
@@ -612,21 +663,46 @@ func (s *service) logsPage(w http.ResponseWriter, r *http.Request, logs *logsCon
 		logError(w, 422, err.Error())
 		return
 	}
+	if jumping {
+		if offset, err = findTime(f, end, target); err != nil {
+			logError(w, 422, err.Error())
+			return
+		}
+	}
 	if offset > end {
 		offset = end
 	}
 	var lines []logLine
-	after := offset
-	if direction == "forward" {
+	after, before, limited := offset, offset, false
+	switch {
+	case direction == "forward" && match == nil:
 		lines, after, err = readForward(f, offset, end, limit)
-	} else {
+	case direction == "forward":
+		lines, after, limited, err = readFilteredForward(f, offset, end, limit, match)
+	case match == nil:
 		lines, err = readBackward(f, offset, limit)
+	default:
+		lines, before, limited, err = readFilteredBackward(f, offset, limit, match)
 	}
 	if err != nil {
 		logError(w, 422, err.Error())
 		return
 	}
-	operatorJSON(w, 200, logs.pageBody(view, lines, after, end))
+	body := logs.pageBody(view, lines, after, end)
+	if match != nil || jumping {
+		if direction == "forward" {
+			before = offset
+			if len(lines) > 0 {
+				before = lines[0].offset
+			}
+		}
+		body["before"], body["atStart"] = logs.cursor(view.token, before), before == 0
+		body["limited"] = limited
+	}
+	if jumping {
+		body["atTime"] = len(lines) > 0
+	}
+	operatorJSON(w, 200, body)
 }
 
 // applyLogAccessResultLocked delivers 4D's decision to the waiting open, or drops a late one.

@@ -292,12 +292,15 @@ and any action in flight is audited as orphaned. Tune or disable it with
 
 With `New object("logs"; New object("families"; New collection("dashboard.audit")))` and operator
 mode, operators get a **Logs** tab that pages through the dashboard's own audit log and can follow
-new lines. 4D approves and records every open before a byte is shown, and fails closed. Files are
+new lines. Adding `"4d.diagnostic"` (which requires the operator `authorize` formula and fails `start()`
+without it) also lists 4D's diagnostic log. That viewer has a **level filter** (ERROR, WARN, INFO, DEBUG,
+TRACE; only ERROR has been seen in real files so far), a **jump to a host-local time** (the log records
+no time zone) and a windowed list, so a large file never fills the page. Filtered and time searches
+examine at most 8 MiB per request and say when they stopped early so you can continue. 4D approves and records every open before a byte is shown, and fails closed. Files are
 read by the CLI, confined to the host Logs folder and refused if a file is a link, has been
-swapped, rotated or truncated. There is no export and nothing is kept in the browser. 4D's own logs
-(diagnostic, debug, request) are not implemented: L0 format confirmation on
-full 4D and phases L2-L4 are open, and HTTP/web, mail and ORDA logs stay
-excluded. Logs are sensitive free text and no generic redaction is claimed. See
+swapped, rotated or truncated. There is no export and nothing is kept in the browser. 4D's other logs
+(debug, request, TCP/UDP) are not implemented: L0 format confirmation on a 4D Server and phases L3-L4 are
+open, and HTTP/web, mail and ORDA logs stay excluded. Logs are sensitive free text and no generic redaction is claimed. See
 [docs/log-browsing-design.md](docs/log-browsing-design.md).
 
 ### Administrative actions

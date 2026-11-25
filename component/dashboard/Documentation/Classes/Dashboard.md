@@ -31,8 +31,9 @@ for compatibility; polling is optional, not the required callback interface.
 Options: `listen` (IP:port), `allowLAN` (Boolean), `tls-cert`, `tls-key`
 (absolute paths), `operator` (object), `restart` (object: `max` 0–10, where 0
 disables; `windowSeconds`; `initialDelayMs`; `livenessSeconds`; see
-`docs/restart-strategy.md`), `logs` (object: `families`, currently only `"dashboard.audit"`;
-needs `operator`; see `docs/log-browsing-design.md`). Default authenticated `127.0.0.1:0`; LAN
+`docs/restart-strategy.md`), `logs` (object: `families`, from `"dashboard.audit"` and `"4d.diagnostic"`;
+needs `operator`, and `4d.diagnostic` also needs the operator `authorize` formula, because 4D's own log is
+sensitive free text; see `docs/log-browsing-design.md`). Default authenticated `127.0.0.1:0`; LAN
 requires explicit opt-in and valid TLS. Unknown/invalid options fail explicitly.
 
 `operator` is off unless given, as `New object("actions"; New collection("monitor.cadence"))`:

@@ -1,6 +1,7 @@
 {
   "version": 1,
   "families": [
-    {"id": "dashboard.audit", "dir": "dashboard", "pattern": "^audit(\\.[1-3])?\\.jsonl$", "format": "jsonl", "sensitivity": "normal"}
+    {"id": "dashboard.audit", "dir": "dashboard", "pattern": "^audit(\\.[1-3])?\\.jsonl$", "format": "jsonl", "sensitivity": "normal"},
+    {"id": "4d.diagnostic", "dir": "", "pattern": "^4DDiagnosticLog(Server|Tool)?(_[0-9]+)?\\.txt$", "format": "text", "sensitivity": "sensitive", "parse": "diagnostic"}
   ]
 }

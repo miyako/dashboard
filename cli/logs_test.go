@@ -140,8 +140,19 @@ func texts(page map[string]any) []string {
 }
 
 func TestLogCatalogAndRoot(t *testing.T) {
-	if len(logFamilies) != 1 || logFamilies["dashboard.audit"].Dir != "dashboard" {
+	diag := logFamilies["4d.diagnostic"]
+	if len(logFamilies) != 2 || logFamilies["dashboard.audit"].Dir != "dashboard" || diag == nil || diag.Sensitivity != "sensitive" || diag.Parse != "diagnostic" {
 		t.Fatal(logFamilies)
+	}
+	for name, want := range map[string]bool{"4DDiagnosticLog.txt": true, "4DDiagnosticLog_1.txt": true, "4DDiagnosticLogTool_12.txt": true,
+		"4DDiagnosticLogServer.txt": true, "4DDiagnosticLog.txt.bak": false, "4DDiagnosticLogX_1.txt": false, "x4DDiagnosticLog.txt": false,
+		"4DDebugLog.txt": false, "Logweb.txt": false, "4DDiagnosticLog_1.txt\n": false} {
+		if diag.re.MatchString(name) != want {
+			t.Fatal(name, want)
+		}
+	}
+	if _, err := parseLogCatalog([]byte(`{"version":1,"families":[{"id":"x","dir":"","pattern":"^a$","format":"text","sensitivity":"normal","parse":"regex"}]}`)); err == nil {
+		t.Fatal("an unknown parser was accepted")
 	}
 	for _, bad := range []string{
 		`{"version":1,"families":[{"id":"x","dir":"..","pattern":"^a$","format":"text","sensitivity":"normal"}]}`,
@@ -383,5 +394,285 @@ func TestLogsNeedTLSOrLoopback(t *testing.T) {
 	c := loginAt(t, s, "192.0.2.10:8123")
 	if w := c.call("GET", "logs/files", "", hostIs("192.0.2.10:8123")); w.Code != 403 || decode(t, w)["error"] != "transport_not_allowed" {
 		t.Fatal("plain-HTTP LAN log access", w.Code)
+	}
+}
+
+// diagnosticFixture builds a 4D-style diagnostic log: seq time [component] LEVEL - message, one line per
+// minute from 2026-11-15T10:00, with a mix of levels, multibyte text, a continuation line and an unparsable banner.
+func diagnosticText(n int) string {
+	levels := []string{"INFO", "ERROR", "WARN", "DEBUG"}
+	var b strings.Builder
+	b.WriteString("-- startup banner without a timestamp --\n")
+	start := time.Date(2026, 11, 15, 10, 0, 0, 0, time.UTC)
+	for i := 0; i < n; i++ {
+		at := start.Add(time.Duration(i) * time.Minute).Format("2006-01-02T15:04:05.000")
+		fmt.Fprintf(&b, "%d %s [tool4d.APPL] %s - message %d 日本語\n", i+1, at, levels[i%len(levels)], i)
+		if i%50 == 7 {
+			b.WriteString("    continuation line of the previous message\n")
+		}
+	}
+	return b.String()
+}
+
+type diagFixture struct {
+	*logsFixture
+	view string
+}
+
+func newDiagFixture(t *testing.T, text string) *diagFixture {
+	t.Helper()
+	f := newLogsFixture(t)
+	families, _ := parseLogFamilies("dashboard.audit,4d.diagnostic")
+	f.s.logs.families = families
+	write(t, filepath.Join(f.root, "4DDiagnosticLogTool_1.txt"), text)
+	opened := f.open("4DDiagnosticLogTool_1.txt")
+	return &diagFixture{f, opened["view"].(string)}
+}
+
+func (d *diagFixture) get(q url.Values) (int, map[string]any) {
+	q.Set("view", d.view)
+	w := d.c.call("GET", "logs/page?"+q.Encode(), "")
+	var body map[string]any
+	_ = json.Unmarshal(w.Body.Bytes(), &body)
+	return w.Code, body
+}
+
+func TestDiagnosticLineParsing(t *testing.T) {
+	stamp, level, ok := parseDiagnostic("33 2026-11-15T11:57:46.101 [tool4d.APPL] ERROR - dashboard probe message one ()")
+	if !ok || stamp != "2026-11-15T11:57:46.101" || level != "ERROR" {
+		t.Fatal(stamp, level, ok)
+	}
+	if s, _, ok := parseDiagnostic("5 2026-11-15T11:57:46 [a b] INFO - x"); !ok || s != "2026-11-15T11:57:46.000" {
+		t.Fatal("a missing fraction is padded", s, ok)
+	}
+	if s, _, _ := parseDiagnostic("5 2026-11-15T11:57:46.5 [a] INFO - x"); s != "2026-11-15T11:57:46.500" {
+		t.Fatal("a short fraction is padded to the right", s)
+	}
+	for _, bad := range []string{"", "    continuation", "-- banner --", "5 2026-13-15T11:57:46.101 [a] INFO - x",
+		"5 2026-11-15T25:57:46.101 [a] INFO - x", "x 2026-11-15T11:57:46.101 [a] INFO - x", "5 2026-11-15T11:57:46.101 [a] info - x",
+		"5 2026-11-15T11:57:46.101 [a] INFO x", "5 2026-11-15T11:57:46.101 INFO - x"} {
+		if _, _, ok := parseDiagnostic(bad); ok {
+			t.Fatalf("%q parsed", bad)
+		}
+	}
+	for in, want := range map[string]string{"2026-11-15T10:30": "2026-11-15T10:30:00.000", "2026-11-15T10:30:15": "2026-11-15T10:30:15.000",
+		"2026-11-15T10:30:15.2": "2026-11-15T10:30:15.200", "2026-11-15T10:30:15.25": "2026-11-15T10:30:15.250"} {
+		if got, ok := normalizeStamp(in); !ok || got != want {
+			t.Fatal(in, got, ok)
+		}
+	}
+	if _, ok := normalizeStamp("2026-02-30T10:00"); ok {
+		t.Fatal("an impossible date was accepted")
+	}
+}
+
+func TestDiagnosticFilesAdvertiseFilters(t *testing.T) {
+	d := newDiagFixture(t, diagnosticText(10))
+	for _, file := range d.files() {
+		filters, has := file["filters"]
+		if (file["family"] == "4d.diagnostic") != has || (has && fmt.Sprint(filters) != "[level time]") {
+			t.Fatal(file)
+		}
+	}
+}
+
+func TestDiagnosticLevelFilterForwardAndBackward(t *testing.T) {
+	d := newDiagFixture(t, diagnosticText(400))
+	code, all := d.get(url.Values{"cursor": {d.firstCursor(t)}, "direction": {"forward"}, "limit": {"500"}, "level": {"ERROR"}})
+	if code != 200 {
+		t.Fatal(code, all)
+	}
+	got := texts(all)
+	if len(got) != 100 || all["limited"] != false || all["atEnd"] != true {
+		t.Fatal("forward filter", len(got), all["limited"], all["atEnd"])
+	}
+	for _, line := range got {
+		if !strings.Contains(line, "] ERROR - ") {
+			t.Fatal(line)
+		}
+	}
+	// Paging with a small limit continues exactly where it stopped, with no gaps or repeats.
+	var seen []string
+	cursor := d.firstCursor(t)
+	for i := 0; i < 20 && len(seen) < 100; i++ {
+		_, page := d.get(url.Values{"cursor": {cursor}, "direction": {"forward"}, "limit": {"30"}, "level": {"ERROR"}})
+		seen = append(seen, texts(page)...)
+		cursor = page["after"].(string)
+	}
+	if fmt.Sprint(seen) != fmt.Sprint(got) {
+		t.Fatal("paged filter differs", len(seen))
+	}
+	// Backward from the end returns the newest matches, oldest first.
+	_, end := d.get(url.Values{"cursor": {all["after"].(string)}, "direction": {"backward"}, "limit": {"5"}, "level": {"WARN"}})
+	back := texts(end)
+	if len(back) != 5 || !strings.Contains(back[4], "message 398 ") || !strings.Contains(back[0], "message 382 ") || end["atStart"] != false {
+		t.Fatal("backward", back)
+	}
+	// Walking backward to the start sees every WARN once.
+	var walked []string
+	cursor = all["after"].(string)
+	for i := 0; i < 40; i++ {
+		_, page := d.get(url.Values{"cursor": {cursor}, "direction": {"backward"}, "limit": {"7"}, "level": {"WARN"}})
+		walked = append(append([]string{}, texts(page)...), walked...)
+		cursor = page["before"].(string)
+		if page["atStart"] == true {
+			break
+		}
+	}
+	if len(walked) != 100 {
+		t.Fatal("walked", len(walked))
+	}
+	// Continuation lines and the banner never match a level.
+	for _, line := range walked {
+		if !strings.Contains(line, "] WARN - ") {
+			t.Fatal(line)
+		}
+	}
+}
+
+// firstCursor is a signed cursor for the start of the file, obtained the way the browser does: by paging
+// backward from the opened tail until the start is reached.
+func (d *diagFixture) firstCursor(t *testing.T) string {
+	t.Helper()
+	_, page := d.get(url.Values{"time": {"2000-01-01T00:00"}, "limit": {"1"}})
+	return page["before"].(string)
+}
+
+func TestDiagnosticFilterAndTimeAreValidated(t *testing.T) {
+	d := newDiagFixture(t, diagnosticText(20))
+	cursor := d.firstCursor(t)
+	base := func(extra url.Values) url.Values {
+		q := url.Values{"cursor": {cursor}, "direction": {"forward"}, "limit": {"10"}}
+		for k, v := range extra {
+			q[k] = v
+		}
+		return q
+	}
+	for name, q := range map[string]url.Values{
+		"unknown level":   base(url.Values{"level": {"error"}}),
+		"expression":      base(url.Values{"level": {"ERROR|INFO"}}),
+		"empty level":     base(url.Values{"level": {""}}),
+		"unknown key":     base(url.Values{"regex": {"x"}}),
+		"time and cursor": base(url.Values{"time": {"2026-11-15T10:00"}}),
+		"bad time":        {"time": {"yesterday"}, "limit": {"10"}},
+		"impossible time": {"time": {"2026-02-30T10:00"}, "limit": {"10"}},
+		"zone suffix":     {"time": {"2026-11-15T10:00:00Z"}, "limit": {"10"}},
+		"time backward":   {"time": {"2026-11-15T10:00"}, "direction": {"backward"}, "limit": {"10"}},
+		"no cursor":       {"direction": {"forward"}, "limit": {"10"}},
+		"no direction":    {"cursor": {cursor}, "limit": {"10"}},
+	} {
+		if code, body := d.get(q); code != 400 {
+			t.Fatal(name, code, body)
+		}
+	}
+	// The audit family has no parsed columns, so filters are refused there rather than ignored.
+	audit := newLogsFixture(t)
+	opened := audit.open("audit.jsonl")
+	q := url.Values{"view": {opened["view"].(string)}, "cursor": {opened["page"].(map[string]any)["before"].(string)},
+		"direction": {"backward"}, "limit": {"10"}, "level": {"ERROR"}}
+	if w := audit.c.call("GET", "logs/page?"+q.Encode(), ""); w.Code != 400 || decode(t, w)["error"] != "unsupported_filter" {
+		t.Fatal("level on a family without a parser", w.Code)
+	}
+	q = url.Values{"view": {opened["view"].(string)}, "time": {"2026-11-15T10:00"}, "limit": {"10"}}
+	if w := audit.c.call("GET", "logs/page?"+q.Encode(), ""); w.Code != 400 {
+		t.Fatal("time on a family without a parser", w.Code)
+	}
+}
+
+func TestDiagnosticJumpToTime(t *testing.T) {
+	text := diagnosticText(3000)
+	d := newDiagFixture(t, text)
+	first := func(target string) (string, map[string]any) {
+		code, page := d.get(url.Values{"time": {target}, "limit": {"3"}})
+		if code != 200 {
+			t.Fatal(target, code, page)
+		}
+		lines := texts(page)
+		if len(lines) == 0 {
+			return "", page
+		}
+		return lines[0], page
+	}
+	// 1500 minutes after 10:00 is 11:00 the next day: message 1500, exactly.
+	line, page := first("2026-11-16T11:00")
+	if !strings.Contains(line, "2026-11-16T11:00:00.000") || !strings.Contains(line, "message 1500 ") || page["atTime"] != true {
+		t.Fatal(line)
+	}
+	// Between two lines: the next line at or after the time.
+	if line, _ := first("2026-11-16T11:00:30"); !strings.Contains(line, "message 1501 ") {
+		t.Fatal(line)
+	}
+	// Before the first line: the first timestamped line (the banner has no timestamp, so a jump skips it).
+	if line, page := first("2000-01-01T00:00"); !strings.Contains(line, "message 0 ") || page["atStart"] != false {
+		t.Fatal(line, page["atStart"])
+	}
+	// After the last line: nothing at or after, and the page says so.
+	if line, page := first("2099-01-01T00:00"); line != "" || page["atTime"] != false || page["atEnd"] != true {
+		t.Fatal("past the end", line, page["atEnd"])
+	}
+	// Every minute in a sample resolves to its own line (binary search against a linear reference).
+	for _, i := range []int{0, 1, 2, 63, 64, 999, 1234, 2998, 2999} {
+		at := time.Date(2026, 11, 15, 10, 0, 0, 0, time.UTC).Add(time.Duration(i) * time.Minute).Format("2006-01-02T15:04")
+		if line, _ := first(at); !strings.Contains(line, fmt.Sprintf("message %d ", i)) {
+			t.Fatal(i, line)
+		}
+	}
+	// A jump combined with a level filter returns matches from that point only.
+	code, page := d.get(url.Values{"time": {"2026-11-16T11:00"}, "limit": {"2"}, "level": {"ERROR"}})
+	lines := texts(page)
+	if code != 200 || len(lines) != 2 || !strings.Contains(lines[0], "message 1501 ") || !strings.Contains(lines[1], "message 1505 ") {
+		t.Fatal(code, lines)
+	}
+}
+
+func TestDiagnosticScansAreBounded(t *testing.T) {
+	// 20 MiB of INFO lines with a single ERROR at the very end: one request must stop at the scan budget and
+	// say so, and following its continuation cursor must reach the match.
+	var b strings.Builder
+	start := time.Date(2026, 11, 15, 10, 0, 0, 0, time.UTC)
+	line := func(i int, level string) string {
+		return fmt.Sprintf("%d %s [x] %s - %s\n", i, start.Add(time.Duration(i)*time.Millisecond).Format("2006-01-02T15:04:05.000"), level, strings.Repeat("p", 200))
+	}
+	n := (20 << 20) / 260
+	for i := 0; i < n; i++ {
+		b.WriteString(line(i, "INFO"))
+	}
+	b.WriteString(line(n, "ERROR"))
+	d := newDiagFixture(t, b.String())
+	cursor := d.firstCursor(t)
+	hits, hops := 0, 0
+	for ; hops < 10; hops++ {
+		code, page := d.get(url.Values{"cursor": {cursor}, "direction": {"forward"}, "limit": {"5"}, "level": {"ERROR"}})
+		if code != 200 {
+			t.Fatal(code, page)
+		}
+		hits += len(texts(page))
+		if hops == 0 && (page["limited"] != true || len(texts(page)) != 0) {
+			t.Fatal("the first request must stop at the scan budget", page["limited"])
+		}
+		cursor = page["after"].(string)
+		if page["atEnd"] == true {
+			break
+		}
+	}
+	if hits != 1 || hops < 2 || hops > 4 {
+		t.Fatal("hits", hits, "hops", hops)
+	}
+	// Backward from the end with no match in the budget also stops and continues.
+	code, page := d.get(url.Values{"cursor": {cursor}, "direction": {"backward"}, "limit": {"5"}, "level": {"TRACE"}})
+	if code != 200 || page["limited"] != true || len(texts(page)) != 0 || page["atStart"] == true {
+		t.Fatal("backward budget", code, page["limited"])
+	}
+}
+
+func TestDiagnosticMultibyteAndLongLines(t *testing.T) {
+	long := "9 2026-11-15T10:00:09.000 [x] ERROR - " + strings.Repeat("あ", 10000) + "\n"
+	text := "1 2026-11-15T10:00:01.000 [x] ERROR - 日本語のメッセージ\n" + long + "2 2026-11-15T10:00:10.000 [x] ERROR - after\n"
+	d := newDiagFixture(t, text)
+	_, page := d.get(url.Values{"cursor": {d.firstCursor(t)}, "direction": {"forward"}, "limit": {"10"}, "level": {"ERROR"}})
+	got := page["lines"].([]any)
+	if len(got) != 3 || !strings.Contains(got[0].(map[string]any)["text"].(string), "日本語のメッセージ") ||
+		got[1].(map[string]any)["truncated"] != true || got[2].(map[string]any)["text"] != "2 2026-11-15T10:00:10.000 [x] ERROR - after" {
+		t.Fatal(len(got))
 	}
 }

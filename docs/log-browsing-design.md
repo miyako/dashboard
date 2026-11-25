@@ -2,7 +2,7 @@
 
 Status: **design accepted** (section 10 records the decisions). **L1 is implemented**: the
 `dashboard.audit` family only, with the file map, open, paging and follow, and the fail-closed
-`logAccess` round-trip. L0 is **partly done**: a disposable full 4D 21.2 standalone probe (section 2) confirmed the diagnostic/debug formats; Server request/process and backup-journal logs are unconfirmed. L2–L4 are not started.
+`logAccess` round-trip. L0 is **partly done**: a disposable full 4D 21.2 standalone probe (section 2) confirmed the diagnostic/debug formats; Server request/process and backup-journal logs are unconfirmed. **L2 is implemented** (see "L2 as built" at the end of section 9): the `4d.diagnostic` family with a level filter, jump to time and a windowed viewer. L3–L4 are not started.
 
 Found while implementing L1: `Folder(fk logs folder; *).path` returns the filesystem alias `/LOGS/`,
 not a real path, so the component converts `platformPath` to POSIX. A headless tool4d project's Logs
@@ -207,6 +207,30 @@ need a separate decision with its own controls; masking HTTP headers is not a pr
 | **L2** | `4d.diagnostic` with level filter and jump to time; the virtualized viewer | Real diagnostic logs from tool4d (probe-generated); the UI on the mock harness |
 | **L3** | Search with budget and continuation | Large synthetic files (1 GiB) stay within the memory and time budgets |
 | **L4** | Sensitive families (`4d.debug`, `4d.requests`, `4d.tcpudp`) behind `authorize` | Denial paths, audit of each open and search |
+
+### L2 as built
+
+- `cli/logs.json` gains `4d.diagnostic` (`dir: ""`, i.e. the Logs folder itself; `sensitivity: sensitive`;
+  `parse: "diagnostic"`). The component refuses to start it without an operator `authorize` formula, and
+  `logAccess` still denies a sensitive family when no formula is present.
+- Page requests accept `level` (exact match on `ERROR|WARN|INFO|DEBUG|TRACE`) and, instead of a cursor,
+  `time` (`YYYY-MM-DDTHH:MM[:SS[.mmm]]`, host-local, no zone). Anything else is a 400; both are refused on
+  a family without a parser (`unsupported_filter`). A level filter hides lines that do not parse
+  (the banner, multi-line continuations).
+- Filtered pages and the jump examine at most 8 MiB per request (`limited: true` plus a continuation
+  cursor when the budget ends first). Backward filtered scans read 256 KiB blocks. A time jump is a
+  binary search over byte offsets, then a short linear scan; it assumes timestamps do not go backwards,
+  so after a host clock change it returns the nearest line it can reach. Opening, filtering and jumping
+  are covered by the single audited open; they are not audited again.
+- The browser list is virtualized with fixed 20 px rows (about 50 rows in the DOM for 2000 in memory).
+  The "wrap" option of section 6 was **not** built, since wrapping needs variable row heights; long lines
+  scroll sideways. Line numbers (the sparse index of section 5) were not built either.
+- Verified here: Go tests (parsing, filters in both directions, 3000-line time search against a reference,
+  20 MiB scan budgets, multibyte and over-long lines, validation), Node tests for the window arithmetic,
+  and a real-browser run (Chromium, light and dark, 1100 px and 390 px) of the real CLI over the real stdin
+  protocol with a **synthetic** diagnostic file. Not verified: real 4D diagnostic logs beyond the earlier
+  probe, WARN/INFO/DEBUG/TRACE names in real files, a 4D host calling `authorize` for this family on
+  Server, UTF-16 files (they would show replacement characters), Intel/Windows hosts.
 
 ## 10. Owner decisions (recorded: the recommended defaults were accepted)
 
