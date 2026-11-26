@@ -271,6 +271,26 @@ need a separate decision with its own controls; masking HTTP headers is not a pr
 
 Still `not_run`: 4D Server logs (`4DRequestsLog`, process info), backup journals, UTF-16 files, other platforms.
 
+### L0 on 4D Server 21.2 (build 21.100711, macOS ARM, 2026-11-26)
+
+A disposable copy of `tests/probe` opened with `4D Server --dataless --startup-method=Probe`, synthetic events only,
+`4D Server log recording` and `Diagnostic log recording` switched on from the startup method. The Logs folder was
+`~/Library/Application Support/4D Server/<project>/Logs/` (outside the project folder).
+
+| File | Observed | Consequence |
+| --- | --- | --- |
+| `4DDiagnosticLogServer_1.txt` | Same `seq time [component] LEVEL - message` format; component `4D Server.APPL`. 4D itself logs **`New user connected (task, UUID, peerAddr, hostname)`** | Matches `^4DDiagnosticLog(Server\|Tool)?(_\d+)?\.txt$`; stays sensitive (host name, peer address, UUIDs) |
+| `4DRequestsLogServer_1.txt` | Written only by Server. Starts with `Log Session Identifer<TAB>id<TAB>Hostname<TAB>"host"<TAB>User Login Name<TAB>"login"`, then `N nth log opened on ...`, a TSV header (`sequence_number time systemID component process_info_index request bytes_out bytes_in exec_duration write_duration task_kind rtt extra`) and rows. `LOG EVENT(Into 4D request log; ...)` appears as a `'mess'` row | Not JSON, not the diagnostic format: needs its own parser/filter. The banner carries the OS login name and host name, so **sensitive** |
+| `4DRequestsLog_ProcessInfoServer_1.txt` | TSV with `process_name`, `IP`, `host_name`, `user_name`, `connection_uuid`, process ids | Sensitive; new family name (not in the catalog yet) |
+
+Also observed: the request logs were empty until the process had run for a few seconds (buffered), the sequence
+numbers are shared across the files of one run, and the Server process exited with status 139 after the startup
+method's `QUIT 4D` (after the report was written; a Server shutdown quirk, not a log result).
+
+L4 therefore needs: parsers for the requests and process-info TSV formats, a family entry for the process-info
+log, and an owner decision on exposing host and user names. Still `not_run`: backup journals (needs a data file and
+a backup), UTF-16, real client traffic in `4DRequestsLog`, non-macOS.
+
 ### L2/L3 on a real 4D host (tool4d 21.1, macOS ARM, 2026-11-26)
 
 The host contract's `/logDiagLive` starts the service with `dashboard.audit,4d.diagnostic` and a host `authorize`
