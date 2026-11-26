@@ -297,6 +297,11 @@ without it) also lists 4D's diagnostic log. That viewer has a **level filter** (
 TRACE; only ERROR has been seen in real files so far), a **jump to a host-local time** (the log records
 no time zone) and a windowed list, so a large file never fills the page. Filtered and time searches
 examine at most 8 MiB per request and say when they stopped early so you can continue.
+`"4d.requests"` and `"4d.requests.process"` (also sensitive, also requiring `authorize`) list the
+4D Server request log and process-info log, which carry **host names, OS login names, client IP addresses
+and user names**: the owner approved showing these to an authorized operator, and the host `authorize`
+formula is where a site can refuse them. They have no parser, so they get plain paging, follow and search
+only (no level filter or time jump; those are refused as unsupported). 4D writes them on 4D Server.
 Every opened log (the audit log too) also has a plain-text **search** (at most 128 characters, never a
 pattern): up to 200 matches and 64 MiB read per request, newest or oldest first, with a continuation, at most
 30 searches a minute and one at a time per operator session. Each search request is approved and recorded

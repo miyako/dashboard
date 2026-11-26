@@ -3198,6 +3198,8 @@
           },
           "catalog": [
             "4d.diagnostic",
+            "4d.requests",
+            "4d.requests.process",
             "dashboard.audit"
           ],
           "auditStates": [
@@ -3356,14 +3358,26 @@
               "logs.search:4d.diagnostic:logs:digest",
               "logs.search:4d.diagnostic:logs:digest",
               "logs.search:4d.diagnostic:logs:digest",
-              "logs.search:4d.diagnostic:logs:digest"
+              "logs.search:4d.diagnostic:logs:digest",
+              "logs.open:4d.requests:logs:none",
+              "logs.open:4d.requests.process:logs:none",
+              "logs.search:4d.requests.process:logs:digest"
             ],
             "private": false
           },
           "audit": {
-            "opens": 1,
-            "searches": 4,
+            "opens": 3,
+            "searches": 5,
             "noQueryText": true
+          },
+          "l4": {
+            "requestsListed": true,
+            "processListed": true,
+            "requestsFamily": "4d.requests",
+            "processFamily": "4d.requests.process",
+            "requestsOpened": true,
+            "processUser": true,
+            "processMatches": 1
           }
         }
       },
