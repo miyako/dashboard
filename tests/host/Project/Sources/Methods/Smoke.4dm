@@ -1659,11 +1659,18 @@ For ($dlIndex; 0; 39)
 	$dlText+=String($dlIndex+1)+" 2026-11-15T10:"+Substring("0"+String($dlSeconds\60); Length("0"+String($dlSeconds\60))-1)+":"+Substring("0"+String($dlSeconds%60); Length("0"+String($dlSeconds%60))-1)+".000 [synthetic.APPL] "+Choose($dlIndex%5; "ERROR"; "WARN"; "INFO"; "DEBUG"; "TRACE")+" - message "+String($dlIndex)+Choose(($dlIndex=6) | ($dlIndex=22) | ($dlIndex=37); " Needle-Live"; "")+Choose($dlIndex=22; " 日本語"; "")+Char(10)
 End for
 $dlFolder.setText($dlText; "UTF-8-no-bom"; Document with LF)
+// L4: synthetic request and process-info logs in the shape 4D Server writes (host and user names are synthetic).
+var $dlRequests; $dlProcess : 4D.File
+var $dlRequestsOpen; $dlProcessOpen; $dlProcessSearch : Object
+$dlRequests:=Folder(fk logs folder; *).file("4DRequestsLogTool_9048.txt")
+$dlProcess:=Folder(fk logs folder; *).file("4DRequestsLog_ProcessInfoTool_9048.txt")
+$dlRequests.setText("Log Session Identifer"+Char(9)+"0123456789ABCDEF0123456789ABCDEF"+Char(9)+"Hostname"+Char(9)+"\"synthetic-host\""+Char(10)+"sequence_number"+Char(9)+"time"+Char(9)+"request"+Char(10)+"3"+Char(9)+"2026-11-26T13:53:48.615"+Char(9)+"synthetic request event"+Char(10); "UTF-8-no-bom"; Document with LF)
+$dlProcess.setText("Log Session Identifer"+Char(9)+"0123456789ABCDEF0123456789ABCDEF"+Char(10)+"sequence_number"+Char(9)+"time"+Char(9)+"host_name"+Char(9)+"user_name"+Char(10)+"2"+Char(9)+"2026-11-26T13:53:48.615"+Char(9)+"\"synthetic-client\""+Char(9)+"\"synthetic-user\""+Char(10); "UTF-8-no-bom"; Document with LF)
 Use (Storage)
 	Storage.logCalls:=New shared collection
 End use
 $dlTool:=cs.Dashboard.Dashboard.new($target)
-$dlService:=$dlTool.start(New object("operator"; New object("actions"; New collection("operator.noop"); "authorize"; Formula(Log_authorize($1))); "logs"; New object("families"; New collection("dashboard.audit"; "4d.diagnostic"))); New object)
+$dlService:=$dlTool.start(New object("operator"; New object("actions"; New collection("operator.noop"); "authorize"; Formula(Log_authorize($1))); "logs"; New object("families"; New collection("dashboard.audit"; "4d.diagnostic"; "4d.requests"; "4d.requests.process"))); New object)
 $deadline:=Milliseconds+15000
 While (($dlService.samples<1) & ($dlService.status#"failed") & (Milliseconds<$deadline))
 	DELAY PROCESS(Current process; 6)
@@ -1729,6 +1736,28 @@ If ($dlService.status="running")
 			If (Value type($dlSearchJa.matches)=Is collection)
 				$report.logDiagLive.search.multibyte:=$dlSearchJa.matches.length
 			End if
+			// L4: request log and process-info log, opened and searched through the same authorization path.
+			$report.logDiagLive.l4:=New object("requestsListed"; False; "processListed"; False; "requestsFamily"; ""; "processFamily"; ""; "requestsOpened"; False; "processUser"; False; "processMatches"; 0)
+			$dlFile:=$dlFiles.files.query("name = :1"; "4DRequestsLogTool_9048.txt").first()
+			If ($dlFile#Null)
+				$report.logDiagLive.l4.requestsListed:=True
+				$report.logDiagLive.l4.requestsFamily:=String($dlFile.family)
+				$dlRequestsOpen:=Operator_json(Operator_http("POST"; $dlOrigin+"/api/operator/logs/open"; $dlHeaders; JSON Stringify(New object("file"; $dlFile.id))))
+				$report.logDiagLive.l4.requestsOpened:=(Value type($dlRequestsOpen.page)=Is object)
+			End if
+			$dlFile:=$dlFiles.files.query("name = :1"; "4DRequestsLog_ProcessInfoTool_9048.txt").first()
+			If ($dlFile#Null)
+				$report.logDiagLive.l4.processListed:=True
+				$report.logDiagLive.l4.processFamily:=String($dlFile.family)
+				$dlProcessOpen:=Operator_json(Operator_http("POST"; $dlOrigin+"/api/operator/logs/open"; $dlHeaders; JSON Stringify(New object("file"; $dlFile.id))))
+				If (Value type($dlProcessOpen.page)=Is object)
+					$report.logDiagLive.l4.processUser:=(Position("synthetic-user"; JSON Stringify($dlProcessOpen.page.lines); *)>0)
+					$dlProcessSearch:=Operator_json(Operator_http("POST"; $dlOrigin+"/api/operator/logs/search"; $dlHeaders; JSON Stringify(New object("view"; $dlProcessOpen.view; "text"; "synthetic-user"; "caseInsensitive"; False; "direction"; "forward"; "from"; "start"))))
+					If (Value type($dlProcessSearch.matches)=Is collection)
+						$report.logDiagLive.l4.processMatches:=$dlProcessSearch.matches.length
+					End if
+				End if
+			End if
 		End if
 	End if
 	// Every access went through the host authorize formula; the audit has digests, never the query text.
@@ -1766,6 +1795,12 @@ While ((Not($dlService.finished)) & (Milliseconds<$deadline))
 End while
 If ($dlFolder.exists)
 	$dlFolder.delete()
+End if
+If ($dlRequests.exists)
+	$dlRequests.delete()
+End if
+If ($dlProcess.exists)
+	$dlProcess.delete()
 End if
 HOST_Phase:="running failure watchdog"
 $lifecycle:=New signal
