@@ -29,6 +29,7 @@ $deadline:=Milliseconds+($request.seconds*1000)
 $report:=New object("success"; False; "finished"; False; "phase"; "starting"; "counts"; $workload.counts; "baseline"; $baseline; "samples"; New collection; "hostCompiled"; Is compiled mode(*))
 $report.datastore:=New object
 $report.backup:=New object
+$report.schema:=New object
 var $sample; $metric : Object
 $sample:=$monitor.collect()
 For each ($metric; $sample.value.metrics)
@@ -37,6 +38,9 @@ For each ($metric; $sample.value.metrics)
 	End if
 	If (Position("backup."; $metric.id; *)=1)
 		$report.backup[$metric.id]:=$metric
+	End if
+	If (Position("schema."; $metric.id; *)=1)
+		$report.schema[$metric.id]:=$metric
 	End if
 End for each
 $report.componentCompiled:=$monitor._cli.compiled

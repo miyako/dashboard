@@ -576,6 +576,17 @@
 			],
 			"Summary": ""
 		},
+		"schema()": {
+			"Syntax": "**.schema**()->metrics : Collection",
+			"Params": [
+				[
+					"metrics",
+					"Collection",
+					"<-"
+				]
+			],
+			"Summary": ""
+		},
 		"licenseUsage()": {
 			"Syntax": "**.licenseUsage**()->metrics : Collection",
 			"Params": [
@@ -660,6 +671,9 @@
 			],
 			"Summary": ""
 		},
+		"schemaMetrics": {
+			"Syntax": "schemaMetrics : Collection"
+		},
 		"encryptionMetrics": {
 			"Syntax": "encryptionMetrics : Collection"
 		},
@@ -671,6 +685,9 @@
 		},
 		"remote": {
 			"Syntax": "remote : Boolean"
+		},
+		"schemaReadAt": {
+			"Syntax": "schemaReadAt : Real"
 		},
 		"encryptionReadAt": {
 			"Syntax": "encryptionReadAt : Real"

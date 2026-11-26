@@ -29,6 +29,12 @@ class CrudEvidenceTests(unittest.TestCase):
                 for field, value in {"type": "4D", "networked": False, "classes": 1,
                                      "exposed": 0, "unexposed": 1}.items()
             },
+            "schema": {
+                "schema." + field: {"id": "schema." + field, "label": field, "type": "number",
+                    "unit": "tables" if field == "tables" else "fields", "kind": "static",
+                    "availability": "available", "value": value}
+                for field, value in {"tables": 1, "fields": 5, "indexedFields": 2}.items()
+            },
             "backup": {
                 "backup." + field: {"id": "backup." + field, "label": field,
                     "type": "number" if field in ("statusCode", "duration") else "text",
@@ -127,6 +133,20 @@ class CrudEvidenceTests(unittest.TestCase):
                 verify(bad)
         bad = copy.deepcopy(self.report)
         del bad["datastore"]["datastore.locked"]
+        with self.assertRaisesRegex(ValueError, "inventory"):
+            verify(bad)
+
+    def test_requires_the_real_fixture_structure_counts(self):
+        verify(self.report)
+        for field, update in (("tables", {"value": 0}), ("fields", {"value": 4}),
+                              ("indexedFields", {"value": 0}), ("fields", {"name": "private"}),
+                              ("indexedFields", {"availability": "unsupported"})):
+            bad = copy.deepcopy(self.report)
+            bad["schema"]["schema." + field].update(update)
+            with self.subTest(field=field, update=update), self.assertRaisesRegex(ValueError, "structure"):
+                verify(bad)
+        bad = copy.deepcopy(self.report)
+        del bad["schema"]["schema.fields"]
         with self.assertRaisesRegex(ValueError, "inventory"):
             verify(bad)
 

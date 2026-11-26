@@ -422,6 +422,17 @@ entries of that map, which lists **only** encryptable or encrypted tables, never
 all physical tables: zero is a valid answer. Iteration stops after 512 entries;
 overflow or any malformed entry invalidates both counts with no partial total.
 Table names, numbers and key material never leave the collector.
+Structure counts (`schema.tables`, `schema.fields`, `schema.indexedFields`) come from
+the classic structure commands (`Last table number`, `Is table number valid`,
+`Last field number`, `Is field number valid`, `GET FIELD PROPERTIES`) over the host's
+physical tables, independent of the ORDA mapping above (a table without a single
+primary key still counts here). They are read at most once per 60 seconds, read no
+record, and stop at 512 tables or 65536 fields, which invalidates all three with no
+partial total. `schema.indexedFields` counts fields whose indexed flag is set; it is
+**not** an index count (a composite index is not visible), and a dataless host reports
+zero because its indexes are not active. Remote clients report unsupported. No table or
+field name, number or type leaves the collector.
+
 `datastore.locked` is the `flushAndLock()` write freeze, which is also true
 while a backup or VSS snapshot holds the datastore. It differs from
 `database.locked` (data file write protection) and from record locks.

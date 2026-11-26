@@ -7,6 +7,8 @@ property backupMetrics : Collection
 property backupReadAt : Real
 property encryptionMetrics : Collection
 property encryptionReadAt : Real
+property schemaMetrics : Collection
+property schemaReadAt : Real
 
 Class constructor
 	var $system; $license; $read : Object
@@ -148,6 +150,9 @@ Function read($command : Text; $selector : Integer)->$result : Object
 			Else
 				$data:=Null
 			End if
+		: ($command="schema")
+			// Aggregate counts only: no table or field name, number or type leaves this loop.
+			$data:=This._schemaCounts()
 		: ($command="locked")
 			$store:=ds
 			If ($store#Null)
@@ -551,6 +556,101 @@ Function engine()->$metrics : Collection
 		$metrics.push(This._engineFlag("datastore.locked"; This.read("locked")))
 		$metrics.push(This._engineFlag("datastore.adminProtected"; This.read("adminProtected")))
 	End if
+
+Function _schemaCounts()->$counts : Object
+	// Classic structure commands over the host's tables. Bounded: at most 512 tables and 65536 fields, no record is read.
+	var $table; $field; $type; $length : Integer
+	var $indexed; $unique; $invisible : Boolean
+	$counts:=New object("tables"; 0; "fields"; 0; "indexedFields"; 0; "limitExceeded"; False)
+	For ($table; 1; Last table number)
+		If (Is table number valid($table))
+			If ($counts.tables=512)
+				$counts.limitExceeded:=True
+				return
+			End if
+			$counts.tables+=1
+			For ($field; 1; Last field number($table))
+				If (Is field number valid($table; $field))
+					If ($counts.fields=65536)
+						$counts.limitExceeded:=True
+						return
+					End if
+					$counts.fields+=1
+					GET FIELD PROPERTIES($table; $field; $type; $length; $indexed; $unique; $invisible)
+					If ($indexed)
+						$counts.indexedFields+=1
+					End if
+				End if
+			End for
+		End if
+	End for
+
+Function schema()->$metrics : Collection
+	var $now : Real
+	$now:=Milliseconds
+	If (This.schemaMetrics=Null)
+		This.schemaReadAt:=$now-60000
+	End if
+	// Structure counts change only with a schema edit: read them at most once per 60 seconds.
+	If (($now<This.schemaReadAt) | ($now-This.schemaReadAt>=60000))
+		If (This.remote)
+			This.schemaMetrics:=This._schemaMetrics(New object("ok"; True; "data"; Null; "remote"; True))
+		Else
+			This.schemaMetrics:=This._schemaMetrics(This.read("schema"))
+		End if
+		This.schemaReadAt:=Milliseconds
+	End if
+	$metrics:=This.schemaMetrics.copy()
+
+Function _schemaMetrics($read : Variant)->$metrics : Collection
+	var $data : Object
+	var $status; $reason; $field : Text
+	var $definition : Object
+	$metrics:=New collection
+	$status:="error"
+	$reason:="Structure read failed"
+	If (Value type($read)=Is object)
+		If (Value type($read.ok)=Is boolean)
+			If ($read.ok)
+				Case of
+					: ($read.remote=True)
+						$status:="unsupported"
+						$reason:="Unavailable on a remote client; run a collector on the server"
+					: ($read.data=Null)
+						$reason:="Invalid structure counts"
+					: (Value type($read.data)#Is object)
+						$reason:="Invalid structure counts"
+					Else
+						$data:=$read.data
+						$reason:="Invalid structure counts"
+						If ($data.limitExceeded=True)
+							$reason:="Structure limit exceeded (512 tables, 65536 fields)"
+						Else
+							$status:="available"
+							For each ($field; New collection("tables"; "fields"; "indexedFields"))
+								If ((Value type($data[$field])#Is real) & (Value type($data[$field])#Is longint))
+									$status:="error"
+								Else
+									If (($data[$field]<0) | ($data[$field]#Int($data[$field])))
+										$status:="error"
+									End if
+								End if
+							End for each
+						End if
+				End case
+			End if
+		End if
+	End if
+	For each ($definition; New collection(\
+		New object("id"; "schema.tables"; "label"; "Structure tables"; "unit"; "tables"; "field"; "tables"); \
+		New object("id"; "schema.fields"; "label"; "Structure fields"; "unit"; "fields"; "field"; "fields"); \
+		New object("id"; "schema.indexedFields"; "label"; "Fields with an active index"; "unit"; "fields"; "field"; "indexedFields")))
+		If ($status="available")
+			$metrics.push(This.metric($definition.id; $definition.label; "number"; $definition.unit; "static"; $data[$definition.field]))
+		Else
+			$metrics.push(This.unavailable($definition.id; $definition.label; "number"; $definition.unit; "static"; $status; $reason))
+		End if
+	End for each
 
 Function _engineFlag($id : Text; $read : Variant)->$metric : Object
 	var $label : Text
@@ -987,6 +1087,9 @@ Function snapshot()->$snapshot : Object
 		$metrics.push($entry)
 	End for each
 	For each ($entry; This.engine())
+		$metrics.push($entry)
+	End for each
+	For each ($entry; This.schema())
 		$metrics.push($entry)
 	End for each
 	For each ($entry; This._webMetrics(This.read("web")))
