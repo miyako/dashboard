@@ -186,6 +186,21 @@ and the targeting check **passes** against the host's own web server, not the co
 file, real clients, the 4D IDE, Windows and native Intel. The host test contract stays tool4d-specific; running
 the full contract on Server needs its own `web.*` expectations and a Server exit-status policy, which is not done.
 
+### Deployment evidence: Dependency Manager install (4D Server 21.2, 2026-11-26)
+
+A disposable host project (no code beyond a three-line startup method) declared
+`{"dashboard": {"github": "miyako/dashboard", "version": "0.1.9"}, "workers": {"github": "miyako/workers", "version": "20.0.23"}, "tcp": {"github": "miyako/tcp", "version": "20.0.14"}}` and was opened with 4D Server 21.2
+(`--dataless`). The Dependency Manager downloaded the three published release assets itself (no staging in
+`Components/`): the lock file records each with `loaded: true`, `found: true`, the exact tag and the
+`.../releases/download/<tag>/<name>.zip` archive URL, and lists `workers`/`tcp` as dashboard's own declared
+dependencies at the same pins. `cs.Dashboard.Dashboard.new("macOS-universal").version()` then ran the bundled
+native CLI from the downloaded package and returned `{"protocol":1,"version":"0.1.9"}`.
+
+This is the first `passed` Dependency Manager install for macOS ARM Server, for the **unsigned** 0.1.9
+release. It exercises the install and CLI launch only: not the live monitoring service, not a signed or
+notarized release (0.1.9 predates signing), not the 4D IDE, not Windows, not native Intel. Exit status of
+Server after `QUIT 4D` was 139 as in the earlier exploratory run.
+
 Each coherent increment is implemented, verified, committed and reviewed/merged
 before the next PR. This document does not authorize release/version changes.
 
