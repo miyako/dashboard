@@ -409,7 +409,7 @@ func (s *service) apply(m message) error {
 		}
 		seen := map[string]bool{}
 		for _, v := range m.Metrics {
-			if !validMetric(v) || seen[v.ID] {
+			if !validMetric(v) || seen[v.ID] || reservedMetric(v.ID) {
 				return errors.New("metric schema violation")
 			}
 			seen[v.ID] = true
@@ -450,12 +450,18 @@ func (s *service) apply(m message) error {
 		if len(metrics) > 256 || len(processes) > 512 || len(sessions) > 512 {
 			return errors.New("resulting state exceeds capacity")
 		}
+		// The CLI's own health rides every sample, after 4D's data and its deletions (4D cannot remove or forge it).
+		owned := s.ownedMetricsLocked(at)
+		sampled := append(append([]metric{}, m.Metrics...), owned...)
+		for _, o := range owned {
+			metrics[o.ID] = o
+		}
 		for k := range s.current.History {
 			if _, exists := metrics[k]; !exists {
 				delete(s.current.History, k)
 			}
 		}
-		for _, v := range m.Metrics {
+		for _, v := range sampled {
 			if _, exists := metrics[v.ID]; !exists {
 				continue
 			}

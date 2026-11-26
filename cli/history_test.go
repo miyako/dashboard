@@ -143,7 +143,7 @@ func window(metric, resolution string, from, to time.Time) string {
 
 func TestHistoryRecordsOnlyDynamicNumbersFromFrames(t *testing.T) {
 	s := historyService(t)
-	if len(s.hist.series) != 2 || s.hist.series["system.cores"] != nil || s.hist.series["app.name"] != nil {
+	if len(fromFourD(s.hist.series)) != 2 || s.hist.series["system.cores"] != nil || s.hist.series["app.name"] != nil {
 		t.Fatal(len(s.hist.series))
 	}
 	viewer, _ := json.Marshal(s.current)

@@ -13,7 +13,7 @@ const (
 	minuteRetention     = 24 * time.Hour
 	maxRawPoints        = 1800
 	maxMinuteBuckets    = 1440
-	maxHistorySeries    = 64
+	maxHistorySeries    = 72
 	counterGap          = 15 * time.Second
 	historyRequestRate  = 240
 	maxHistorySpan      = 24 * time.Hour

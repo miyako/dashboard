@@ -47,7 +47,7 @@ func TestFramesAndState(t *testing.T) {
 	if err := s.apply(update); err != nil {
 		t.Fatal(err)
 	}
-	if len(s.current.Processes) != 0 || len(s.current.Metrics) != 0 || len(s.current.History) != 0 {
+	if len(s.current.Processes) != 0 || len(fromFourD(s.current.Metrics)) != 0 || len(fromFourD(s.current.History)) != 0 {
 		t.Fatal(s.current)
 	}
 	if err := s.apply(update); err == nil {
@@ -152,7 +152,7 @@ func TestBackupMetadataContractAndNoRepeatedValueHistory(t *testing.T) {
 			}
 			if test.valid {
 				sample.Seq++
-				if err := s.apply(sample); err != nil || len(s.current.History) != 0 {
+				if err := s.apply(sample); err != nil || len(fromFourD(s.current.History)) != 0 {
 					t.Fatal("cached metadata acquired a rate graph", err)
 				}
 			}
@@ -207,7 +207,7 @@ func TestStaticDatastoreCountsAreBoundedAndUnavailableIsNotZero(t *testing.T) {
 	if err := s.apply(sample); err != nil {
 		t.Fatal(err)
 	}
-	if len(s.current.History) != 0 || s.current.Metrics["datastore.classes"].Value != nil {
+	if len(fromFourD(s.current.History)) != 0 || s.current.Metrics["datastore.classes"].Value != nil {
 		t.Fatal("static metadata graphed or unavailable became zero")
 	}
 }

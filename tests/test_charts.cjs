@@ -143,6 +143,7 @@ test('issue 17: placement hides license records off Server and moves three statu
   assert.equal(charts.placement(m('process.truncated', 'gauge', 'boolean'), 'standalone'), 'process-trends');
   assert.equal(charts.placement(m('app.cpuUsage'), 'standalone'), 'metrics');
   assert.equal(charts.placement(m('system.cores', 'static'), 'standalone'), 'static-metrics');
+  assert.equal(charts.placement(m('cli.heapBytes'), 'standalone'), 'static-metrics');
 });
 
 test('issue 17: smooth scroll offset and refresh notifications', () => {

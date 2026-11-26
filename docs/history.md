@@ -18,7 +18,7 @@ Written before the implementation; the reference for `cli/history.go`, the
   `counter`), as reported in `snapshot`/`update` frames. No text, booleans,
   static values, process or session lists, or activity identities. Process and
   session **counts** are already numeric gauges and are recorded.
-- At most **64 series**. A new series beyond 64 is not recorded.
+- At most **72 series** (64 for 4D plus room for the CLI's own five `cli.*` gauges). A new series beyond 72 is not recorded.
 - Times are the frame's `sampledAt`, never the browser's clock. Retention is
   measured back from the newest recorded sample, so it is deterministic.
 
@@ -45,7 +45,7 @@ elapsed seconds of those increments, assigned to the bucket of the later
 sample, or null when no increment qualified. Rates are never averaged across
 resets.
 
-Worst-case memory: 64 series × (1800 raw + 1440 buckets), about 9 MB.
+Worst-case memory: 72 series × (1800 raw + 1440 buckets), about 10 MB.
 
 ## API
 
