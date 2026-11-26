@@ -206,7 +206,7 @@ need a separate decision with its own controls; masking HTTP headers is not a pr
 | **L1** | File map, open, paging and tail for `dashboard.audit` only; the `logAccess` frame; confinement tests (traversal, symlink, swap, rotation, truncation) | Go tests, including a symlink-swap race; live tool4d reading its own audit; 410 on rotation |
 | **L2** | `4d.diagnostic` with level filter and jump to time; the virtualized viewer | Real diagnostic logs from tool4d (probe-generated); the UI on the mock harness |
 | **L3** | Search with budget and continuation | Large synthetic files (1 GiB) stay within the memory and time budgets |
-| **L4** | Sensitive families (`4d.debug`, `4d.requests`, `4d.tcpudp`) behind `authorize` | Denial paths, audit of each open and search |
+| **L4** | Sensitive families (`4d.requests` and `4d.requests.process` built; `4d.debug`, `4d.tcpudp` not) behind `authorize` | Denial paths, audit of each open and search |
 
 ### L2 as built
 
@@ -301,6 +301,21 @@ with tier `logs` and a digest only for searches, matching audit records, and no 
 Observation: `File.setText(...; "UTF-8")` writes a BOM, which the viewer shows as U+FEFF on line 1; real 4D logs
 were not observed to carry one. Still `not_run`: WARN/INFO/DEBUG/TRACE in 4D-written logs, 4D Server, Intel/Windows.
 
+### L4 as built (requests and process-info logs)
+
+- `cli/logs.json` (and its byte-identical component copy) gain `4d.requests` (`^4DRequestsLog(Server|Tool)?(_\d+)?\.txt$`) and
+  `4d.requests.process` (`^4DRequestsLog_ProcessInfo(Server|Tool)?(_\d+)?\.txt$`): `dir: ""`, `sensitivity: sensitive`, **no
+  parser**. The patterns are disjoint from each other and from the diagnostic family, and `Logweb*`, HTTP debug, SMTP/POP3/IMAP
+  and ORDA logs are still never listed.
+- Everything else is the existing path: the component refuses to start a sensitive family without the operator `authorize`
+  formula, every open and search is authorized and audited (digest, never text), plain paging, follow and search work, and
+  the level filter and time jump are refused (`unsupported_filter`) because there is no parser.
+- **Owner decision (2026-11-27):** an authorized operator may see the host names, OS login names, IP addresses and user names
+  these two logs contain. There is no masking and none is promised; a site that wants them hidden refuses the family in its
+  `authorize` formula or does not list it.
+- Not built: a TSV parser (columns, per-column filters), `4d.debug` and `4d.tcpudp`. Not verified: real client traffic in the
+  request log, 4D Server writing these files while the dashboard reads them, Windows.
+
 ## 10. Owner decisions (recorded: the recommended defaults were accepted)
 
 | # | Question | Decision |
@@ -310,6 +325,7 @@ were not observed to carry one. Still `not_run`: WARN/INFO/DEBUG/TRACE in 4D-wri
 | 3 | Sensitive families | `4d.debug`, `4d.requests`, `4d.requests.process` and `4d.tcpudp` require the host `authorize` formula. HTTP debug, HTTP client, SMTP/POP3/IMAP and ORDA logs stay excluded |
 | 4 | Network | TLS or loopback only, like tier B and C actions |
 | 5 | Export | No download or export in the first version |
+| 6 | Host and user names in the request and process-info logs | Shown to an authorized operator, unmasked (2026-11-27) |
 
 ### Original questions
 

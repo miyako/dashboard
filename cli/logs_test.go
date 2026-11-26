@@ -142,7 +142,7 @@ func texts(page map[string]any) []string {
 
 func TestLogCatalogAndRoot(t *testing.T) {
 	diag := logFamilies["4d.diagnostic"]
-	if len(logFamilies) != 2 || logFamilies["dashboard.audit"].Dir != "dashboard" || diag == nil || diag.Sensitivity != "sensitive" || diag.Parse != "diagnostic" {
+	if len(logFamilies) != 4 || logFamilies["dashboard.audit"].Dir != "dashboard" || diag == nil || diag.Sensitivity != "sensitive" || diag.Parse != "diagnostic" {
 		t.Fatal(logFamilies)
 	}
 	for name, want := range map[string]bool{"4DDiagnosticLog.txt": true, "4DDiagnosticLog_1.txt": true, "4DDiagnosticLogTool_12.txt": true,
@@ -150,6 +150,27 @@ func TestLogCatalogAndRoot(t *testing.T) {
 		"4DDebugLog.txt": false, "Logweb.txt": false, "4DDiagnosticLog_1.txt\n": false} {
 		if diag.re.MatchString(name) != want {
 			t.Fatal(name, want)
+		}
+	}
+	// L4: the request log and the process-info log are sensitive (SQL, logins, host and user names), disjoint,
+	// and have no parser, so they get plain paging and search only.
+	requests, process := logFamilies["4d.requests"], logFamilies["4d.requests.process"]
+	if requests == nil || process == nil || requests.Sensitivity != "sensitive" || process.Sensitivity != "sensitive" ||
+		requests.Parse != "" || process.Parse != "" || requests.Dir != "" || process.Dir != "" {
+		t.Fatal(logFamilies)
+	}
+	for name, want := range map[string]struct{ requests, process bool }{
+		"4DRequestsLogServer_1.txt": {true, false}, "4DRequestsLog.txt": {true, false}, "4DRequestsLog_2.txt": {true, false},
+		"4DRequestsLog_ProcessInfoServer_1.txt": {false, true}, "4DRequestsLog_ProcessInfo.txt": {false, true},
+		"4DRequestsLog_ProcessInfo_3.txt": {false, true}, "4DRequestsLog_Other.txt": {false, false},
+		"4DRequestsLog.txt.bak": {false, false}, "x4DRequestsLog.txt": {false, false}, "4DRequestsLog_1.txt\n": {false, false},
+		"4DDiagnosticLogServer_1.txt": {false, false}, "Logweb.txt": {false, false}, "4DTCPUDPLog.txt": {false, false},
+	} {
+		if requests.re.MatchString(name) != want.requests || process.re.MatchString(name) != want.process {
+			t.Fatal(name, want)
+		}
+		if strings.HasPrefix(name, "4DRequestsLog") && diag.re.MatchString(name) {
+			t.Fatal("families overlap on", name)
 		}
 	}
 	if _, err := parseLogCatalog([]byte(`{"version":1,"families":[{"id":"x","dir":"","pattern":"^a$","format":"text","sensitivity":"normal","parse":"regex"}]}`)); err == nil {
@@ -934,5 +955,90 @@ func TestSearchScanBudget(t *testing.T) {
 	}
 	if peak > before.HeapAlloc+(48<<20) {
 		t.Fatalf("heap grew from %d to %d", before.HeapAlloc, peak)
+	}
+}
+
+// Log L4 (owner decision 2026-11-26): an authorized operator may see the request log and the process-info log,
+// including their host and user names. Both are sensitive and have no parser: plain paging and search only.
+// The synthetic files copy the shape observed on 4D Server 21.2 (banner, `nth log opened`, TSV header, rows).
+const requestsLogText = "Log Session Identifer\t0123456789ABCDEF0123456789ABCDEF\tHostname\t\"synthetic-host\"\tUser Login Name\t\"synthetic-login\"\n" +
+	"1 nth log opened on Thursday, November 26, 2026 01:53:48 PM\n" +
+	"sequence_number\ttime\tsystemID\tcomponent\tprocess_info_index\trequest\tbytes_out\tbytes_in\texec_duration\twrite_duration\ttask_kind\trtt\textra\n" +
+	"3\t2026-11-26T13:53:48.615\t6439923712\t'mess'\t1\tsynthetic request event\t0\t\t\t\t\t\t\n" +
+	"4\t2026-11-26T13:53:49.001\t6439923712\t'mess'\t1\t日本語 synthetic\t0\t\t\t\t\t\t\n"
+
+const processLogText = "Log Session Identifer\t0123456789ABCDEF0123456789ABCDEF\tHostname\t\"synthetic-host\"\tUser Login Name\t\"synthetic-login\"\n" +
+	"sequence_number\ttime\tprocess_info_index\tCDB4DBaseContext\tsystemID\tserver_process_id\tremote_process_id\tprocess_name\tcID\tuID\tIP\thost_name\tuser_name\tconnection_uuid\tserver_process_unique_id\n" +
+	"2\t2026-11-26T13:53:48.615\t1\tD96F768FDFD44BF59C6E131ED612503B\t6439923712\t4\t4\t\"Client Manager\"\t0x0\t0x0\t192.0.2.7\t\"synthetic-client\"\t\"synthetic-user\"\t\t4\n"
+
+func newRequestsFixture(t *testing.T) *searchFixture {
+	t.Helper()
+	f := newLogsFixture(t)
+	families, err := parseLogFamilies("dashboard.audit,4d.diagnostic,4d.requests,4d.requests.process")
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.s.logs.families = families
+	write(t, filepath.Join(f.root, "4DRequestsLogServer_1.txt"), requestsLogText)
+	write(t, filepath.Join(f.root, "4DRequestsLog_ProcessInfoServer_1.txt"), processLogText)
+	write(t, filepath.Join(f.root, "Logweb.txt"), "#Fields: cs(cookie)\nsecret\n") // never offered
+	return &searchFixture{&diagFixture{logsFixture: f}}
+}
+
+func TestRequestAndProcessLogsAreSensitiveFamiliesWithPlainBrowsing(t *testing.T) {
+	d := newRequestsFixture(t)
+	family := map[string]string{}
+	for _, file := range d.files() {
+		name := file["name"].(string)
+		family[name] = file["family"].(string)
+		if _, has := file["filters"]; has && file["family"] != "4d.diagnostic" {
+			t.Fatal("a family without a parser advertised filters", file)
+		}
+	}
+	if family["4DRequestsLogServer_1.txt"] != "4d.requests" || family["4DRequestsLog_ProcessInfoServer_1.txt"] != "4d.requests.process" ||
+		family["Logweb.txt"] != "" {
+		t.Fatal(family)
+	}
+	// Opening asks 4D (host authorize) and carries the right family; a denial serves nothing.
+	seen := d.answer(false, "host_denied")
+	w := d.c.call("POST", "logs/open", `{"file":"`+d.fileID("4DRequestsLogServer_1.txt")+`"}`)
+	if w.Code != 403 {
+		t.Fatal("a denied open served", w.Code, w.Body)
+	}
+	if frame := <-seen; frame["family"] != "4d.requests" || frame["op"] != "open" {
+		t.Fatal(frame)
+	}
+	opened := d.open("4DRequestsLog_ProcessInfoServer_1.txt")
+	d.view = opened["view"].(string)
+	page := opened["page"].(map[string]any)
+	all := strings.Join(texts(page), "\n")
+	for _, want := range []string{"synthetic-user", "synthetic-client", "192.0.2.7", "Client Manager"} {
+		if !strings.Contains(all, want) {
+			t.Fatal("authorized operator should see", want, all)
+		}
+	}
+	// No parser: level and time filters are refused, never silently ignored.
+	for _, q := range []url.Values{{"level": {"ERROR"}, "cursor": {page["after"].(string)}, "direction": {"backward"}, "limit": {"10"}},
+		{"time": {"2026-11-26T13:53"}, "direction": {"forward"}, "limit": {"10"}}} {
+		if code, body := d.get(q); code != 400 || body["error"] != "unsupported_filter" {
+			t.Fatal(q, code, body)
+		}
+	}
+	// Search works and is audited with a digest, not the text.
+	code, out, frame := d.search("synthetic-user", "forward", "start", false, true, "")
+	if code != 200 || len(out["matches"].([]any)) != 1 || frame["family"] != "4d.requests.process" || frame["op"] != "search" {
+		t.Fatal(code, out, frame)
+	}
+	if strings.Contains(fmt.Sprint(frame), "synthetic-user") {
+		t.Fatal("the authorization frame carried the query text", frame)
+	}
+}
+
+func TestRequestLogOpensAndSearchesMultibyteRows(t *testing.T) {
+	d := newRequestsFixture(t)
+	d.view = d.open("4DRequestsLogServer_1.txt")["view"].(string)
+	code, out, _ := d.search("日本語", "forward", "start", false, true, "")
+	if code != 200 || len(out["matches"].([]any)) != 1 {
+		t.Fatal(code, out)
 	}
 }
