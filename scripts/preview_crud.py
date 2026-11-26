@@ -64,6 +64,18 @@ def verify(report):
                 or metric["availability"] != "available"
                 or type(metric["value"]) is not type(value) or metric["value"] != value):
             raise ValueError("Invalid or private datastore metadata: " + field)
+    # Real structure counts of the one-table fixture (catalog.4DCatalog): 1 table, 5 fields, 2 active indexes.
+    schema = report.get("schema", {})
+    if set(schema) != {"schema.tables", "schema.fields", "schema.indexedFields"}:
+        raise ValueError("Structure metric inventory mismatch")
+    for field, unit, value in (("tables", "tables", 1), ("fields", "fields", 5), ("indexedFields", "fields", 2)):
+        metric = schema["schema." + field]
+        if (set(metric) != {"id", "label", "type", "unit", "kind", "availability", "value"}
+                or metric["id"] != "schema." + field or metric["type"] != "number"
+                or metric["unit"] != unit or metric["kind"] != "static"
+                or metric["availability"] != "available"
+                or type(metric["value"]) is not int or metric["value"] != value):
+            raise ValueError("Invalid or private structure count: " + field)
     backup = report.get("backup", {})
     fields = ("lastAt", "nextAt", "statusCode", "duration", "beginUTC", "observedAt")
     if set(backup) != {"backup." + field for field in fields}:

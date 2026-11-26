@@ -100,6 +100,11 @@ counted from a map that lists only encryptable or encrypted tables. More than
 (the `flushAndLock()`/backup/VSS write freeze, not data file write protection)
 and `datastore.adminProtected` (Data Explorer access disabled) are read every
 sample. No table names, numbers or keys are exported, and nothing is changed.
+Structure counts `schema.tables`, `schema.fields` and `schema.indexedFields` (fields with
+the indexed flag set; not an index count, and zero on a dataless host) use the classic
+structure commands over the host's physical tables, at most once per 60 seconds, with
+no record read. More than 512 tables or 65536 fields invalidates all three; remote
+clients are unsupported. No names, numbers or types are exported.
 Web server fields use `WEB Server(Web server host database)`, so they describe
 the host's server, never the component's own. `web.running` is sampled; HTTP/HTTPS
 enabled and ports, HSTS enabled and max age (seconds), minimum TLS version

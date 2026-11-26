@@ -241,6 +241,18 @@ func TestEngineTableCountsAreBoundedAndFlagsAreStrictBooleans(t *testing.T) {
 	}
 }
 
+func TestSchemaFieldCountsAreBounded(t *testing.T) {
+	for _, test := range []struct {
+		value float64
+		valid bool
+	}{{0, true}, {65536, true}, {65537, false}, {-1, false}, {2.5, false}} {
+		m := metric{ID: "schema.fields", Label: "Structure fields", Type: "number", Unit: "fields", Kind: "static", Availability: "available", Value: test.value}
+		if validMetric(m) != test.valid {
+			t.Fatalf("field count %v", test.value)
+		}
+	}
+}
+
 func TestWebMetricsAreAClosedTypedAllowlist(t *testing.T) {
 	for _, test := range []struct {
 		id, typ, unit, kind string

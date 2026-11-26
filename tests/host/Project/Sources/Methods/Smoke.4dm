@@ -374,6 +374,51 @@ $engineCachedAt:=$collector.encryptionReadAt
 $normalized:=$collector.engine()
 $report.engine.refreshed:=($collector.encryptionReadAt-$engineCachedAt>=60000)
 $report.engine.inSnapshot:=($collector.snapshot().metrics.query("id = :1"; "datastore.locked").length=1)
+HOST_Phase:="structure counts normalization"
+var $schemaCases; $schemaMetrics : Object
+var $schemaCached : Real
+var $schemaLines : Collection
+$schemaCases:=New object(\
+	"valid"; New object("ok"; True; "data"; New object("tables"; 2; "fields"; 9; "indexedFields"; 3; "limitExceeded"; False; "tableName"; "PrivateSecret")); \
+	"empty"; New object("ok"; True; "data"; New object("tables"; 0; "fields"; 0; "indexedFields"; 0; "limitExceeded"; False)); \
+	"failed"; New object("ok"; False); \
+	"remote"; New object("ok"; True; "data"; Null; "remote"; True); \
+	"absent"; New object("ok"; True; "data"; Null); \
+	"overflow"; New object("ok"; True; "data"; New object("tables"; 512; "fields"; 100; "indexedFields"; 1; "limitExceeded"; True)); \
+	"invalidType"; New object("ok"; True; "data"; New object("tables"; 1; "fields"; "5"; "indexedFields"; 0; "limitExceeded"; False)); \
+	"negative"; New object("ok"; True; "data"; New object("tables"; 1; "fields"; -5; "indexedFields"; 0; "limitExceeded"; False)); \
+	"fraction"; New object("ok"; True; "data"; New object("tables"; 1; "fields"; 5; "indexedFields"; 0.5; "limitExceeded"; False)); \
+	"malformed"; "private-read")
+$report.schema:=New object("cases"; New object; "private"; False)
+For each ($name; OB Keys($schemaCases))
+	$schemaLines:=New collection
+	$normalized:=$collector._schemaMetrics($schemaCases[$name])
+	If ($normalized.length#3)
+		$report.success:=False
+	End if
+	For each ($measurement; $normalized)
+		$schemaLines.push($measurement.id+":"+$measurement.availability+":"+$measurement.unit+":"+String($measurement.value))
+		If (Position("Private"; JSON Stringify($measurement); *)>0)
+			$report.schema.private:=True
+		End if
+	End for each
+	$report.schema.cases[$name]:=$schemaLines
+End for each
+$report.schema.errorReason:=$collector._schemaMetrics($schemaCases.invalidType)[0].reason
+$report.schema.overflowReason:=$collector._schemaMetrics($schemaCases.overflow)[0].reason
+// Live read on this host (the fixture has no table): real counts, then the 60 second cache.
+$report.schema.live:=New collection
+For each ($measurement; $collector.schema())
+	$report.schema.live.push($measurement.id+":"+$measurement.availability+":"+String($measurement.value))
+End for each
+$schemaCached:=$collector.schemaReadAt
+$normalized:=$collector.schema()
+$report.schema.cached:=($collector.schemaReadAt=$schemaCached)
+$collector.schemaReadAt:=Milliseconds-60000
+$schemaCached:=$collector.schemaReadAt
+$normalized:=$collector.schema()
+$report.schema.refreshed:=($collector.schemaReadAt-$schemaCached>=60000)
+$report.schema.inSnapshot:=($collector.snapshot().metrics.query("id = :1"; "schema.fields").length=1)
 HOST_Phase:="web server normalization"
 var $webCases; $webValid; $webCase; $webHost; $webRead : Object
 $webValid:=New object("isRunning"; False; "HTTPEnabled"; True; "HTTPPort"; 8080; "HTTPSEnabled"; False; "HTTPSPort"; 8443; "HSTSEnabled"; False; "HSTSMaxAge"; 63072000; "minTLSVersion"; 3; "perfectForwardSecrecy"; True; "openSSLVersion"; "OpenSSL 3.5.1 1 Jul 2025"; \

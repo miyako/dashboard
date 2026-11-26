@@ -3232,6 +3232,93 @@
         }
       },
       {
+        "path": "/schema/cases",
+        "equals": {
+          "valid": [
+            "schema.tables:available:tables:2",
+            "schema.fields:available:fields:9",
+            "schema.indexedFields:available:fields:3"
+          ],
+          "empty": [
+            "schema.tables:available:tables:0",
+            "schema.fields:available:fields:0",
+            "schema.indexedFields:available:fields:0"
+          ],
+          "failed": [
+            "schema.tables:error:tables:",
+            "schema.fields:error:fields:",
+            "schema.indexedFields:error:fields:"
+          ],
+          "remote": [
+            "schema.tables:unsupported:tables:",
+            "schema.fields:unsupported:fields:",
+            "schema.indexedFields:unsupported:fields:"
+          ],
+          "absent": [
+            "schema.tables:error:tables:",
+            "schema.fields:error:fields:",
+            "schema.indexedFields:error:fields:"
+          ],
+          "overflow": [
+            "schema.tables:error:tables:",
+            "schema.fields:error:fields:",
+            "schema.indexedFields:error:fields:"
+          ],
+          "invalidType": [
+            "schema.tables:error:tables:",
+            "schema.fields:error:fields:",
+            "schema.indexedFields:error:fields:"
+          ],
+          "negative": [
+            "schema.tables:error:tables:",
+            "schema.fields:error:fields:",
+            "schema.indexedFields:error:fields:"
+          ],
+          "fraction": [
+            "schema.tables:error:tables:",
+            "schema.fields:error:fields:",
+            "schema.indexedFields:error:fields:"
+          ],
+          "malformed": [
+            "schema.tables:error:tables:",
+            "schema.fields:error:fields:",
+            "schema.indexedFields:error:fields:"
+          ]
+        }
+      },
+      {
+        "path": "/schema/private",
+        "equals": false
+      },
+      {
+        "path": "/schema/errorReason",
+        "equals": "Invalid structure counts"
+      },
+      {
+        "path": "/schema/overflowReason",
+        "equals": "Structure limit exceeded (512 tables, 65536 fields)"
+      },
+      {
+        "path": "/schema/live",
+        "equals": [
+          "schema.tables:available:0",
+          "schema.fields:available:0",
+          "schema.indexedFields:available:0"
+        ]
+      },
+      {
+        "path": "/schema/cached",
+        "equals": true
+      },
+      {
+        "path": "/schema/refreshed",
+        "equals": true
+      },
+      {
+        "path": "/schema/inSnapshot",
+        "equals": true
+      },
+      {
         "path": "/logDiagLive",
         "equals": {
           "status": "running",
