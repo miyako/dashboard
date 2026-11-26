@@ -1,76 +1,66 @@
 # Handover: continue `miyako/dashboard` on the Mac (local session)
 
-Written 2026-11-25 at the end of a cloud session. The cloud session could not run 4D (Linux container), so everything below that needs a real 4D runtime is still open. The source of truth is GitHub, not this file: re-check it before acting.
+Written 2026-11-25 at the end of a cloud session; refreshed 2026-11-26 after the local Mac session. The cloud session could not run 4D (Linux container), so everything below that needs a real 4D runtime is still open. The source of truth is GitHub, not this file: re-check it before acting.
 
 ## Start here (copy this into the local session)
 
 > Take over `miyako/dashboard`. Read `AGENTS.md`, issue #29 (the handover and constraints) and `docs/log-browsing-design.md` first, then re-check `main`, releases, CI, issues and PRs, since they may have moved. Run `python3 scripts/doctor.py --root .`, then the local acceptance run, and report what `passed`, `failed` and `not_run`. After that continue with the open items in the order given in the section "What is left". One bounded change at a time, small PRs, only open a PR when I ask. Never bump a version, dispatch Build, create or move a tag, touch signing secrets or publish a release unless I explicitly say so.
 
-## State at hand-off
+## State at hand-off (refreshed 2026-11-26, local Mac session)
 
 | Item | Value |
 | --- | --- |
-| `main` | `8954de575e5a4588d1aa52b2fc570ac42157e8c2` (merge of #33). Re-check. |
-| Latest release | `0.1.9`, published **unsigned**. Nothing was released, tagged or signed in this session. |
+| `main` | `370bedf` (merge of #41). Re-check. |
+| Latest release | `0.1.9`, published **unsigned**. Nothing was released, tagged, bumped or signed in either session. |
 | Release policy | `release-policy.json` is `["*"]`: every future Build must be Apple-signed and notarized. Credentials are user-owned (see AGENTS.md). |
-| Open PRs / issues | None opened by this session; #29 (the handover issue) is still open. |
-| Compiler pin | tool4d 21.1, build 100562, macOS ARM (`package.json` `tool`). |
+| Compiler pin | tool4d 21.1, build 100562, macOS ARM (`package.json` `tool`). Local run used Go 1.27.4 (CI pins 1.26.10). |
+| Open issue | #29 (the handover issue). No open PRs from this work. |
 
-### Merged this session (all with green CI, including the hosted tool4d `assembly` job)
+### Merged in the local session (all with green CI, including the hosted tool4d `assembly` job)
 
 | PR | What |
 | --- | --- |
-| #30 | Docs reconciliation: README, class docs, package/template descriptions, design-doc status lines, AGENTS.md signing wording, `tests/test_playbook.py` no longer pins the README example tag. |
-| #31 | **Log L2**: `4d.diagnostic` family (sensitive; needs the operator `authorize` formula, enforced at `start()`), exact-match level filter (`ERROR/WARN/INFO/DEBUG/TRACE`), host-local time jump, 8 MiB scan budget for filtered/time requests, virtualized viewer. |
-| #32 | **Log L3**: `POST /api/operator/logs/search` (plain text, 64 MiB / 200 matches per request, 30 per minute, one in flight), authorized and audited per request through a `logAccess` frame with `op:"search"` and a keyed `queryDigest` (never the text), search panel in the UI. |
-| #33 | README follow-up for L2/L3. |
+| #35 | Live L2/L3 host test (`/logDiagLive`: synthetic diagnostic file, WARN filter, time jump, search, host `authorize` calls, audit digests, no query text in audit); `lipo -verify_arch` one architecture per call (newer lipo rejects the variadic form); L0 observations from tool4d 21.1 and 4D Server 21.2 in `docs/log-browsing-design.md` |
+| #36 | Roadmap 2e part 1: `schema.tables`, `schema.fields`, `schema.indexedFields` (classic structure commands, 60 s cache, 512 table / 65536 field caps, remote unsupported). Real data host reports 1/5/2; a dataless open reports 0 indexed fields |
+| #37 | Roadmap 2e part 2: owned CLI health, five `cli.*` gauges added by the Go process to every sample (reserved prefix, not forgeable or deletable by 4D); history series cap 72 |
+| #38 | Docs: exploratory 4D Server 21.2 run of the compiled package: smoke test completes, `web.*` fields available, host-versus-component targeting passes |
+| #41 | Log L4 for `4d.requests` and `4d.requests.process` (sensitive, behind `authorize`, plain paging/follow/search, no parser); owner decision 2026-11-27: an authorized operator may see host and user names, unmasked. Live host test through the host `authorize` formula and the audit |
+| #39 | Docs: Dependency Manager install of the published 0.1.9 release (plus `workers` 20.0.23, `tcp` 20.0.14) on 4D Server 21.2: `loaded` and `found`, bundled CLI runs |
 
-Design notes for what was built are in `docs/log-browsing-design.md` ("L2 as built", "L3 as built").
+### Evidence matrix (revision `main` after #37, tool4d 21.1 build 100562, macOS ARM)
 
-### What was and was not verified
+`accept_local.py --cross`: `result:"partial"`, `finished:true`, `release_ready:false`.
 
-Verified (cloud, Linux): Python tests (278, 76 skipped), `go vet`, `go test -race`, Node tests (27), workflow contract, and a Chromium run (light/dark, 1100 px and 390 px) of the real Go CLI over the real stdin protocol with a synthetic diagnostic file and a Python stand-in for 4D. Hosted CI passed the new host-contract cases (strict frame checks, audit entries, sensitive-family `authorize` requirement) under macOS ARM tool4d.
+| Check | Status |
+| --- | --- |
+| Python unit, icons, workflow contract | passed |
+| Go `vet` and `test -race`, Node tests | passed |
+| CLI build, three Go targets | passed |
+| CLI test, macOS ARM native | passed |
+| CLI test, macOS Intel and Windows (native), Rosetta | not_run |
+| Assembly, source host, compile, package, compiled host (tool4d) | passed |
+| 4D Server 21.2, compiled package smoke test | exploratory only (exit 139 after `QUIT 4D`; contract is tool4d-specific) |
+| Dependency Manager install, Server 21.2 macOS ARM, unsigned 0.1.9 | passed (install and CLI launch only) |
+| 4D IDE, real clients, Windows 4D, native Intel 4D | not_run |
+| Signing and notarization | not_run (0.1.9 predates signing) |
 
-**Not verified, so still `not_run`:**
-- The diagnostic viewer, filter, time jump and search **through a real 4D host** (the host contract only tests the 4D-side validation and audit units; the browser path was tested against the CLI with a fake 4D).
-- WARN/INFO/DEBUG/TRACE level names in real 4D logs. Only `ERROR` has ever been observed.
-- `authorize` for these families on 4D Server; native Intel and Windows 4D hosts; real client/server; Dependency Manager install; signing/notarization; UTF-16 diagnostic files (they currently show replacement characters).
+Observations worth keeping: `LOG EVENT` has only info/warning/error severities (DEBUG/TRACE cannot be produced from it);
+`Diagnostic log level` must be set before recording starts; a new run appends to the same diagnostic file and restarts its
+sequence; 4D Server's request and process-info logs are TSV with a banner that carries the host name and OS login name.
 
-## Do this first on the Mac
+## What is left
 
-```bash
-git clone https://github.com/miyako/dashboard && cd dashboard   # or `git pull` in your checkout
-git log --oneline -3                                            # expect 8954de5 or newer
-python3 scripts/doctor.py --root .                              # read-only report
-python3 -m pip install -r tooling/requirements-workflow.txt     # only if the workflow check complains
-python3 -m unittest discover -s tests -v
-python3 scripts/generate_icons.py --check
-(cd cli && go test -race ./... && go vet ./... && node --check web/app.js && node --check web/charts.js && node --check web/operator.js)
-node --test tests/test_charts.cjs tests/test_operator.cjs
-python3 scripts/workflow_contract.py --root .
-python3 scripts/ci_config.py download-tool4d --root .           # pinned 21.1, hash-verified, into .tools/
-python3 scripts/accept_local.py --root . --repository miyako/dashboard \
-  --tool4d .tools/tool4d.app/Contents/MacOS/tool4d --cross
-```
-
-Expectations: on Apple Silicon `accept_local.py --cross` builds all three Go targets, tests the native one, and ends with `result:"partial"`, `finished:true`, `release_ready:false` and `dist/dashboard.zip` plus `dist/dashboard.acceptance.json`. Intel and Windows stay `not_run` (Rosetta is translated execution, not native Intel). Go needs 1.23+; CI pins 1.26.10, so report the compiler you actually used. Copy the ZIP and acceptance JSON out of the worktree if you want to keep them.
-
-Extras: `DASHBOARD_LARGE_LOG=1 go test -run SearchScanBudget ./...` in `cli/` runs the 1 GiB search budget test (about 3 s here).
-
-## What is left (in order)
-
-1. **Local acceptance on the Mac** (above). Record the evidence: revision, tool4d version/hash, per-check status.
-2. **Log L0 on real 4D, with disposable synthetic data only.** Use `scripts/probe_native.py` and isolated projects. Open questions, from `docs/log-browsing-design.md` section 2:
-   - the real level names in `4DDiagnosticLog*` (WARN/INFO/DEBUG/TRACE), multi-line messages, localized text, UTF-8 vs UTF-16, very long lines;
-   - `4DRequestsLog*` and the process-info log (these are written only by **4D Server**; needs a Server fixture);
-   - backup journal names and formats (needs a data file and a backup; never start backups on user data).
-   Record platform, version and behavior for each. Do not call database parameter selectors 114/115 (they crashed tool4d 21.1).
-3. **A live 4D test of L2/L3**: add a host test that starts `Dashboard` with `logs` families `dashboard.audit,4d.diagnostic` and an `authorize` formula, writes synthetic lines to the host's diagnostic log, then drives open, filter, jump and search over HTTP and checks the audit trail. Today the live host test (`/logLive` in `tests/host/contract.json`) covers the audit family only.
-4. **Log L4** (debug, request, TCP/UDP families behind `authorize`) only after real fixtures exist and the owner confirms the families. HTTP/web, HTTP client, mail and ORDA logs stay excluded (Logweb contains cookies).
-5. **More aggregate metrics** (roadmap 2e): safe datastore physical/table/index summaries, owned CLI health. Check units and 21 LTS availability against the official 21 docs and a real runtime; the `miyako/skills` lookup corpus is **21 R5 BETA**, not proof for 21 LTS.
-6. **Further administration**, one action at a time, only with owner approval (`docs/admin-actions-design.md`). Stateful locks need same-owner release and cleanup on error, timeout, stop and restart. Backup/journal/server operations need proven host targeting.
-7. **Deployment evidence**: normal IDE/Server loading, real client/server, Dependency Manager install, native Intel and Windows 4D. Record unavailable ones as `not_run`.
-8. **Final review and handoff**, with the AGENTS.md evidence matrix.
+1. **Log L4, remainder.** The request and process-info logs are done (#41). Still open: a TSV parser with per-column filters for
+   them, then `4d.debug` and `4d.tcpudp` (each needs real fixtures and your confirmation of the family). Not verified: real
+   client traffic in the request log while the dashboard reads it, Windows. HTTP/web, HTTP client, mail and ORDA logs stay
+   excluded (Logweb contains cookies).
+2. **Backup journals** (L0): needs a disposable data file and a backup; synthetic project only, never user data.
+3. **Further administration**, one action at a time, only with owner approval (`docs/admin-actions-design.md`).
+4. **More deployment evidence**: the live monitoring service on 4D Server with a real data file and real clients, the 4D
+   IDE, Windows and native Intel 4D. Record unavailable ones as `not_run`.
+5. **Hosted CI, signing and release**: a signed Build is the owner's call (secrets are user-owned; never dispatch Build or bump
+   a version without explicit instruction).
+6. **UTF-16 diagnostic files** (shown with replacement characters) and **DEBUG/TRACE lines written by 4D itself** remain unobserved.
 
 ## Constraints to keep (condensed from #29 and AGENTS.md)
 
