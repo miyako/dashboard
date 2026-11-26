@@ -923,7 +923,7 @@
 			"Summary": ""
 		},
 		"validateLogs()": {
-			"Syntax": "**.validateLogs**( *value* : Variant; *operatorEnabled* : Boolean )->result : Object",
+			"Syntax": "**.validateLogs**( *value* : Variant; *operatorEnabled* : Boolean; *hasAuthorize* : Boolean )->result : Object",
 			"Params": [
 				[
 					"value",
@@ -932,6 +932,11 @@
 				],
 				[
 					"operatorEnabled",
+					"Boolean",
+					"->"
+				],
+				[
+					"hasAuthorize",
 					"Boolean",
 					"->"
 				],

@@ -255,6 +255,52 @@ need a separate decision with its own controls; masking HTTP headers is not a pr
   against the real CLI with a synthetic log. The new host-contract cases need hosted CI. Not verified: a real
   4D `authorize` on Server, real diagnostic logs beyond the earlier probe, Intel/Windows.
 
+### L0 diagnostic-log content on tool4d 21.1 (build 21.100562, macOS ARM, 2026-11-26)
+
+`scripts/probe_native.py` in a disposable project, synthetic `LOG EVENT(Into 4D diagnostic log; ...)` calls with
+`Diagnostic log recording` on and `Diagnostic log level` set to `Log trace` **before** recording starts:
+
+| Question | Observed | Consequence |
+| --- | --- | --- |
+| Level names | `INFO`, `WARN`, `ERROR` written. `LOG EVENT` has only information/warning/error severities: a "debug" or "trace" message is logged as `INFO`. | `DEBUG`/`TRACE` stay in the filter list but cannot be produced from `LOG EVENT`; real DEBUG/TRACE lines would come from 4D itself (`not_run`) |
+| Level set after recording starts | Only the `ERROR` line was written (the earlier L0 observation) | Level must be configured first; document for hosts |
+| Multi-line message | Continuation lines have no prefix, and the message ends with ` ()` on the last line | A level filter hides continuations (as designed); search still matches them |
+| Localized / multibyte | UTF-8, no BOM (`Unicode text, UTF-8`) | Matches the UTF-8 decoding; UTF-16 still unobserved |
+| Very long line | A 40 kB message was written unbroken on one line | The 16 KiB display cap and truncation marker are needed |
+| Reuse across runs | A new run appends to the same file and the sequence restarts at 1, without a banner | Line numbers are not unique in a file; time is the ordering key (and may go backwards) |
+
+Still `not_run`: 4D Server logs (`4DRequestsLog`, process info), backup journals, UTF-16 files, other platforms.
+
+### L0 on 4D Server 21.2 (build 21.100711, macOS ARM, 2026-11-26)
+
+A disposable copy of `tests/probe` opened with `4D Server --dataless --startup-method=Probe`, synthetic events only,
+`4D Server log recording` and `Diagnostic log recording` switched on from the startup method. The Logs folder was
+`~/Library/Application Support/4D Server/<project>/Logs/` (outside the project folder).
+
+| File | Observed | Consequence |
+| --- | --- | --- |
+| `4DDiagnosticLogServer_1.txt` | Same `seq time [component] LEVEL - message` format; component `4D Server.APPL`. 4D itself logs **`New user connected (task, UUID, peerAddr, hostname)`** | Matches `^4DDiagnosticLog(Server\|Tool)?(_\d+)?\.txt$`; stays sensitive (host name, peer address, UUIDs) |
+| `4DRequestsLogServer_1.txt` | Written only by Server. Starts with `Log Session Identifer<TAB>id<TAB>Hostname<TAB>"host"<TAB>User Login Name<TAB>"login"`, then `N nth log opened on ...`, a TSV header (`sequence_number time systemID component process_info_index request bytes_out bytes_in exec_duration write_duration task_kind rtt extra`) and rows. `LOG EVENT(Into 4D request log; ...)` appears as a `'mess'` row | Not JSON, not the diagnostic format: needs its own parser/filter. The banner carries the OS login name and host name, so **sensitive** |
+| `4DRequestsLog_ProcessInfoServer_1.txt` | TSV with `process_name`, `IP`, `host_name`, `user_name`, `connection_uuid`, process ids | Sensitive; new family name (not in the catalog yet) |
+
+Also observed: the request logs were empty until the process had run for a few seconds (buffered), the sequence
+numbers are shared across the files of one run, and the Server process exited with status 139 after the startup
+method's `QUIT 4D` (after the report was written; a Server shutdown quirk, not a log result).
+
+L4 therefore needs: parsers for the requests and process-info TSV formats, a family entry for the process-info
+log, and an owner decision on exposing host and user names. Still `not_run`: backup journals (needs a data file and
+a backup), UTF-16, real client traffic in `4DRequestsLog`, non-macOS.
+
+### L2/L3 on a real 4D host (tool4d 21.1, macOS ARM, 2026-11-26)
+
+The host contract's `/logDiagLive` starts the service with `dashboard.audit,4d.diagnostic` and a host `authorize`
+formula, writes a synthetic 40-line `4DDiagnosticLogTool_9047.txt` (deleted afterwards), then drives open, level
+filter (`WARN`; lowercase is a 400), time jump (and a 400 for a bad time), and search (case-sensitive,
+case-insensitive, absent, multibyte) over HTTP. It asserts one `logs.open` and four `logs.search` authorize calls
+with tier `logs` and a digest only for searches, matching audit records, and no query text in the audit.
+Observation: `File.setText(...; "UTF-8")` writes a BOM, which the viewer shows as U+FEFF on line 1; real 4D logs
+were not observed to carry one. Still `not_run`: WARN/INFO/DEBUG/TRACE in 4D-written logs, 4D Server, Intel/Windows.
+
 ## 10. Owner decisions (recorded: the recommended defaults were accepted)
 
 | # | Question | Decision |
