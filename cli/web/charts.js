@@ -64,7 +64,8 @@ const DashboardCharts = (() => {
   // Which view a metric card belongs to; null hides it. Retained-license records exist only on 4D Server.
   function placement(metric, role) {
     if (metric.id.startsWith('license.usage.') && role !== 'server') return null;
-    if (metric.kind === 'static' || metric.id === 'app.uptime' || instanceStatusIDs.includes(metric.id)) return 'static-metrics';
+    // The CLI's own health (cli.*) is instance information too, not a 4D trend.
+    if (metric.kind === 'static' || metric.id === 'app.uptime' || metric.id.startsWith('cli.') || instanceStatusIDs.includes(metric.id)) return 'static-metrics';
     if (metric.id.startsWith('database.')) return 'database-metrics';
     if (metric.id.startsWith('process.')) return 'process-trends';
     if (metric.id.startsWith('session.')) return 'session-trends';

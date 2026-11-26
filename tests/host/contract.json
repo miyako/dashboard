@@ -2724,7 +2724,13 @@
           "coverage": true,
           "rawCoversSamples": true,
           "bucketsMatchRaw": true,
-          "private": false
+          "private": false,
+          "cli": {
+            "status": 200,
+            "kind": "gauge",
+            "unit": "goroutines",
+            "points": true
+          }
         }
       },
       {

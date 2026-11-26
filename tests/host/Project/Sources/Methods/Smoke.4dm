@@ -1095,7 +1095,7 @@ If ($mcService.status="running")
 	$report.monitorLive.audit:=$mcAuditStates
 	// M5: the shared in-memory history, read back over HTTP from the real CLI.
 	var $hsFrom; $hsTo; $hsQuery : Text
-	var $hsRaw; $hsMinute : Object
+	var $hsRaw; $hsMinute; $hsCli; $hsCliBody : Object
 	var $hsBucket : Object
 	var $hsBucketTotal : Integer
 	// Time + Number is a Number in 4D: convert back to Time and roll the date across midnight.
@@ -1135,6 +1135,15 @@ If ($mcService.status="running")
 		$report.monitorLive.history.rawCoversSamples:=($hsRaw.points.length>=$mcService.samples)
 		$report.monitorLive.history.bucketsMatchRaw:=(Abs($hsBucketTotal-$hsRaw.points.length)<=1)
 		$report.monitorLive.history.private:=(Position($mcToken; $hsQuery; *)>0) | (Position($mcService.epoch; JSON Stringify($hsRaw); *)>0)
+		// The CLI's own health is recorded by the real service from the same frames (owned, never from 4D).
+		$hsCli:=Operator_http("GET"; $mcOrigin+"/api/history?metric=cli.goroutines&resolution=raw&from="+$hsFrom+"&to="+$hsTo; New object("Cookie"; "dashboard="+$mcCookie); "")
+		$report.monitorLive.history.cli:=New object("status"; $hsCli.status; "kind"; ""; "unit"; ""; "points"; False)
+		If ($hsCli.status=200)
+			$hsCliBody:=JSON Parse($hsCli.body)
+			$report.monitorLive.history.cli.kind:=String($hsCliBody.metric.kind)
+			$report.monitorLive.history.cli.unit:=String($hsCliBody.metric.unit)
+			$report.monitorLive.history.cli.points:=($hsCliBody.points.length>=$mcService.samples)
+		End if
 	End if
 End if
 $mcTool.stop()

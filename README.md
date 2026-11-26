@@ -270,7 +270,7 @@ Besides the live two-minute view, the graphs can show **15 min, 1 h, 6 h or
 them. The CLI keeps one shared record in memory, whether or not a browser is
 open: every sample for the last hour, then 1-minute buckets (min, max, mean,
 last and, for counters, an elapsed-time rate) for 24 hours. It covers at most
-64 graphed metrics, about 9 MB at worst. History starts empty each time the
+72 graphed metrics, about 10 MB at worst. History starts empty each time the
 dashboard starts, and nothing is written to disk or browser storage. Gaps stay
 gaps, and the chart says where recording began. Viewers fetch windows from
 `GET /api/history` (viewer login required, read-only, rate limited). The
@@ -422,6 +422,12 @@ entries of that map, which lists **only** encryptable or encrypted tables, never
 all physical tables: zero is a valid answer. Iteration stops after 512 entries;
 overflow or any malformed entry invalidates both counts with no partial total.
 Table names, numbers and key material never leave the collector.
+Owned CLI health: the dashboard process measures itself and adds `cli.uptime` (s), `cli.goroutines`,
+`cli.heapBytes`, `cli.viewers` (connected browser streams) and `cli.stdoutQueue` (frames waiting for 4D)
+to every sample, graphed in history and shown on Instance information. They are measured by the Go
+process, never supplied by 4D (a frame that uses the reserved `cli.` prefix is rejected, and 4D cannot
+delete them), and contain no URLs, tokens, paths or identities. They describe this CLI run, not 4D.
+
 Structure counts (`schema.tables`, `schema.fields`, `schema.indexedFields`) come from
 the classic structure commands (`Last table number`, `Is table number valid`,
 `Last field number`, `Is field number valid`, `GET FIELD PROPERTIES`) over the host's
