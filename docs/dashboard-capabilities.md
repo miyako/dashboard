@@ -170,6 +170,22 @@ binding, redacted audit, finite execution, postconditions and recovery.
 | 5 | Higher-risk opt-in PRs: backup trigger, admission/disconnect/abort, cache/config/security changes, SQL/web lifecycle, reload/restart/quit. | Real Server plus client fixtures, consequential confirmation and async postcondition; independent recovery transport, no internal targets. |
 | 6 | Destructive/offline restore/replay/compaction/encryption/key/schema/index/import/truncate/data-file/user-import work remains catalog-only. | Separate authorized requirements and disposable backup/restore/recovery evidence, never inferred from read-only telemetry. |
 
+### Deployment evidence: 4D Server 21.2 (build 21.100711, macOS ARM, 2026-11-26)
+
+The exact unpacked compiled component (`build/release-test/dashboard.4dbase`, mode `compiled:true`) was loaded by
+**4D Server 21.2** instead of tool4d, using the unchanged host test (`Smoke`, `--dataless`). The smoke test ran to
+`success:true`, `finished:true`; the generic execution probes, the renamed-executable launch and the live service
+phases behaved as under tool4d. The run is **exploratory, not an accepted gate**: Server exited with status 139 after
+the startup method's `QUIT 4D` (after the report was written), and the runner stopped at the first contract
+mismatch, which is expected because the contract describes tool4d.
+
+The one deliberate difference is the web server. 4D Server implements `WEB Server`, so the ten `web.*` fields are
+**available** (`web.running` false, HTTP enabled on 80, HTTPS on 443, HSTS off, minimum TLS 1.3, OpenSSL 3.5.9)
+and the targeting check **passes** against the host's own web server, not the component's, closing the 2c
+"host-versus-component targeting `not_run`" gap for macOS ARM Server. Not covered: a Server with a real data
+file, real clients, the 4D IDE, Windows and native Intel. The host test contract stays tool4d-specific; running
+the full contract on Server needs its own `web.*` expectations and a Server exit-status policy, which is not done.
+
 Each coherent increment is implemented, verified, committed and reviewed/merged
 before the next PR. This document does not authorize release/version changes.
 
