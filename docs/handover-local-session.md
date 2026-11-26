@@ -10,7 +10,7 @@ Written 2026-11-25 at the end of a cloud session; refreshed 2026-11-26 after the
 
 | Item | Value |
 | --- | --- |
-| `main` | `b7ab728` (merge of #39). Re-check. |
+| `main` | `370bedf` (merge of #41). Re-check. |
 | Latest release | `0.1.9`, published **unsigned**. Nothing was released, tagged, bumped or signed in either session. |
 | Release policy | `release-policy.json` is `["*"]`: every future Build must be Apple-signed and notarized. Credentials are user-owned (see AGENTS.md). |
 | Compiler pin | tool4d 21.1, build 100562, macOS ARM (`package.json` `tool`). Local run used Go 1.27.4 (CI pins 1.26.10). |
@@ -24,6 +24,7 @@ Written 2026-11-25 at the end of a cloud session; refreshed 2026-11-26 after the
 | #36 | Roadmap 2e part 1: `schema.tables`, `schema.fields`, `schema.indexedFields` (classic structure commands, 60 s cache, 512 table / 65536 field caps, remote unsupported). Real data host reports 1/5/2; a dataless open reports 0 indexed fields |
 | #37 | Roadmap 2e part 2: owned CLI health, five `cli.*` gauges added by the Go process to every sample (reserved prefix, not forgeable or deletable by 4D); history series cap 72 |
 | #38 | Docs: exploratory 4D Server 21.2 run of the compiled package: smoke test completes, `web.*` fields available, host-versus-component targeting passes |
+| #41 | Log L4 for `4d.requests` and `4d.requests.process` (sensitive, behind `authorize`, plain paging/follow/search, no parser); owner decision 2026-11-27: an authorized operator may see host and user names, unmasked. Live host test through the host `authorize` formula and the audit |
 | #39 | Docs: Dependency Manager install of the published 0.1.9 release (plus `workers` 20.0.23, `tcp` 20.0.14) on 4D Server 21.2: `loaded` and `found`, bundled CLI runs |
 
 ### Evidence matrix (revision `main` after #37, tool4d 21.1 build 100562, macOS ARM)
@@ -49,9 +50,10 @@ sequence; 4D Server's request and process-info logs are TSV with a banner that c
 
 ## What is left
 
-1. **Log L4** (requests and process-info logs behind `authorize`, then debug/TCP-UDP). Blocked on an owner decision: may host
-   and user names be shown to an authorized operator? Needs parsers for both TSV formats and a catalog entry for the
-   process-info log. HTTP/web, HTTP client, mail and ORDA logs stay excluded (Logweb contains cookies).
+1. **Log L4, remainder.** The request and process-info logs are done (#41). Still open: a TSV parser with per-column filters for
+   them, then `4d.debug` and `4d.tcpudp` (each needs real fixtures and your confirmation of the family). Not verified: real
+   client traffic in the request log while the dashboard reads it, Windows. HTTP/web, HTTP client, mail and ORDA logs stay
+   excluded (Logweb contains cookies).
 2. **Backup journals** (L0): needs a disposable data file and a backup; synthetic project only, never user data.
 3. **Further administration**, one action at a time, only with owner approval (`docs/admin-actions-design.md`).
 4. **More deployment evidence**: the live monitoring service on 4D Server with a real data file and real clients, the 4D
