@@ -255,6 +255,16 @@ need a separate decision with its own controls; masking HTTP headers is not a pr
   against the real CLI with a synthetic log. The new host-contract cases need hosted CI. Not verified: a real
   4D `authorize` on Server, real diagnostic logs beyond the earlier probe, Intel/Windows.
 
+### L2/L3 on a real 4D host (tool4d 21.1, macOS ARM, 2026-11-26)
+
+The host contract's `/logDiagLive` starts the service with `dashboard.audit,4d.diagnostic` and a host `authorize`
+formula, writes a synthetic 40-line `4DDiagnosticLogTool_9047.txt` (deleted afterwards), then drives open, level
+filter (`WARN`; lowercase is a 400), time jump (and a 400 for a bad time), and search (case-sensitive,
+case-insensitive, absent, multibyte) over HTTP. It asserts one `logs.open` and four `logs.search` authorize calls
+with tier `logs` and a digest only for searches, matching audit records, and no query text in the audit.
+Observation: `File.setText(...; "UTF-8")` writes a BOM, which the viewer shows as U+FEFF on line 1; real 4D logs
+were not observed to carry one. Still `not_run`: WARN/INFO/DEBUG/TRACE in 4D-written logs, 4D Server, Intel/Windows.
+
 ## 10. Owner decisions (recorded: the recommended defaults were accepted)
 
 | # | Question | Decision |

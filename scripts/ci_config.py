@@ -108,7 +108,9 @@ def assemble(root=ROOT):
     mac.parent.mkdir(parents=True, exist_ok=True)
     windows.parent.mkdir(parents=True, exist_ok=True)
     subprocess.run(["lipo", "-create", str(inputs[0]), str(inputs[1]), "-output", str(mac)], check=True)
-    subprocess.run(["lipo", str(mac), "-verify_arch", "x86_64", "arm64"], check=True)
+    # One architecture per call: newer lipo releases reject the variadic form ("requires exactly one input file").
+    for architecture in ("x86_64", "arm64"):
+        subprocess.run(["lipo", str(mac), "-verify_arch", architecture], check=True)
     mac.chmod(0o755)
     shutil.copyfile(inputs[2], windows)
     windows.chmod(0o755)

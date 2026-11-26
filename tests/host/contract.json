@@ -3232,6 +3232,49 @@
         }
       },
       {
+        "path": "/logDiagLive",
+        "equals": {
+          "status": "running",
+          "listed": true,
+          "family": "4d.diagnostic",
+          "open": {
+            "lines": 41,
+            "first": "-- synthetic banner --"
+          },
+          "level": {
+            "count": 8,
+            "allWarn": true,
+            "lowercase": 400
+          },
+          "jump": {
+            "first": "11 2026-11-15T10:05:00.000",
+            "badTime": 400
+          },
+          "search": {
+            "sensitive": 3,
+            "insensitive": 3,
+            "none": 0,
+            "multibyte": 1,
+            "complete": true
+          },
+          "authorize": {
+            "calls": [
+              "logs.open:4d.diagnostic:logs:none",
+              "logs.search:4d.diagnostic:logs:digest",
+              "logs.search:4d.diagnostic:logs:digest",
+              "logs.search:4d.diagnostic:logs:digest",
+              "logs.search:4d.diagnostic:logs:digest"
+            ],
+            "private": false
+          },
+          "audit": {
+            "opens": 1,
+            "searches": 4,
+            "noQueryText": true
+          }
+        }
+      },
+      {
         "path": "/abandonedSample",
         "equals": {
           "skipped": true,

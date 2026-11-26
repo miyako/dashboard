@@ -398,9 +398,11 @@ Resource assembly requires both macOS slices and Windows x64:
 python3 scripts/ci_config.py assemble --root .
 ```
 
-The genuine lipo verification order is:
-`lipo <universal-file> -verify_arch x86_64 arm64`, **not**
-`lipo -verify_arch x86_64 arm64 <file>`. Create with
+The genuine lipo verification order is the file first, then **one architecture
+per call**: `lipo <universal-file> -verify_arch x86_64`, then `... arm64`.
+Newer lipo releases (observed on macOS 27) reject the variadic
+`lipo <file> -verify_arch x86_64 arm64` with "requires exactly one input file",
+and `lipo -verify_arch ... <file>` is wrong on every release. Create with
 `lipo -create <intel-file> <arm-file> -output <universal-file>`.
 Check native dynamic dependencies and preserve executable ZIP modes.
 

@@ -144,7 +144,7 @@ class DeliveryTests(unittest.TestCase):
                              ["macos-15-intel", "macos-15", "windows-2022"])
             self.assertEqual({entry["language"] for entry in entries}, {language})
 
-    def test_assembly_places_file_before_variadic_verify_arch_option(self):
+    def test_assembly_verifies_each_architecture_with_the_file_first(self):
         inputs = []
         for target in ci_config.TARGETS:
             filename = self.config["cli"] + (".exe" if target == "windows-x64" else "")
@@ -161,7 +161,8 @@ class DeliveryTests(unittest.TestCase):
         self.assertEqual(run.call_args_list, [
             unittest.mock.call(["lipo", "-create", str(inputs[0]), str(inputs[1]),
                                 "-output", str(self.mac)], check=True),
-            unittest.mock.call(["lipo", str(self.mac), "-verify_arch", "x86_64", "arm64"], check=True),
+            unittest.mock.call(["lipo", str(self.mac), "-verify_arch", "x86_64"], check=True),
+            unittest.mock.call(["lipo", str(self.mac), "-verify_arch", "arm64"], check=True),
         ])
         self.assertEqual(destination, self.mac.parent.parent)
         self.assertEqual(self.mac.stat().st_mode & 0o777, 0o755)

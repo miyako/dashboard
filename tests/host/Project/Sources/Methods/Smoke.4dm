@@ -1588,6 +1588,131 @@ $deadline:=Milliseconds+15000
 While ((Not($lbService.finished)) & (Milliseconds<$deadline))
 	DELAY PROCESS(Current process; 6)
 End while
+HOST_Phase:="diagnostic log live"
+var $dlTool : cs.Dashboard.Dashboard
+var $dlService; $dlFiles; $dlFile; $dlOpen; $dlLevel; $dlJump; $dlSearch; $dlSearchCI; $dlSearchNone; $dlSearchJa : Object
+var $dlOrigin; $dlViewer; $dlToken; $dlCookie; $dlAudit; $dlText : Text
+var $dlHeaders : Object
+var $dlFolder : 4D.File
+var $dlCall : Object
+var $dlAllWarn; $dlNoRaw : Boolean
+var $dlIndex; $dlSeconds : Integer
+// Synthetic diagnostic lines only (never real logs): 40 lines, 30 s apart, levels cycling ERROR/WARN/INFO/DEBUG/TRACE.
+$dlFolder:=Folder(fk logs folder; *).file("4DDiagnosticLogTool_9047.txt")
+$dlText:="-- synthetic banner --"+Char(10)
+For ($dlIndex; 0; 39)
+	$dlSeconds:=$dlIndex*30
+	$dlText+=String($dlIndex+1)+" 2026-11-15T10:"+Substring("0"+String($dlSeconds\60); Length("0"+String($dlSeconds\60))-1)+":"+Substring("0"+String($dlSeconds%60); Length("0"+String($dlSeconds%60))-1)+".000 [synthetic.APPL] "+Choose($dlIndex%5; "ERROR"; "WARN"; "INFO"; "DEBUG"; "TRACE")+" - message "+String($dlIndex)+Choose(($dlIndex=6) | ($dlIndex=22) | ($dlIndex=37); " Needle-Live"; "")+Choose($dlIndex=22; " 日本語"; "")+Char(10)
+End for
+$dlFolder.setText($dlText; "UTF-8-no-bom"; Document with LF)
+Use (Storage)
+	Storage.logCalls:=New shared collection
+End use
+$dlTool:=cs.Dashboard.Dashboard.new($target)
+$dlService:=$dlTool.start(New object("operator"; New object("actions"; New collection("operator.noop"); "authorize"; Formula(Log_authorize($1))); "logs"; New object("families"; New collection("dashboard.audit"; "4d.diagnostic"))); New object)
+$deadline:=Milliseconds+15000
+While (($dlService.samples<1) & ($dlService.status#"failed") & (Milliseconds<$deadline))
+	DELAY PROCESS(Current process; 6)
+End while
+$report.logDiagLive:=New object("status"; $dlService.status)
+If ($dlService.status#"running")
+	$report.logDiagLive.error:=$dlService.error
+End if
+If ($dlService.status="running")
+	$dlOrigin:=Substring($dlService.url; 1; Position("/#token="; $dlService.url; *)-1)
+	$dlViewer:=Substring($dlService.url; Position("/#token="; $dlService.url; *)+8; 64)
+	$dlToken:=Substring($dlService.operatorUrl; Position("&operator="; $dlService.operatorUrl; *)+10; 64)
+	$dlCookie:=String(Operator_http("POST"; $dlOrigin+"/api/session"; New object("Origin"; $dlOrigin); $dlViewer).cookies.dashboard)
+	$dlHeaders:=New object("Origin"; $dlOrigin; "Cookie"; "dashboard="+$dlCookie; "X-Dashboard-Action"; "operator"; "Content-Type"; "application/json")
+	$dlHeaders.Cookie:="dashboard="+$dlCookie+"; dashboard_operator="+String(Operator_http("POST"; $dlOrigin+"/api/operator/session"; $dlHeaders; JSON Stringify(New object("token"; $dlToken))).cookies.dashboard_operator)
+	$dlFiles:=Operator_json(Operator_http("GET"; $dlOrigin+"/api/operator/logs/files"; New object("Cookie"; $dlHeaders.Cookie); ""))
+	$dlFile:=Null
+	If (Value type($dlFiles.files)=Is collection)
+		$dlFile:=$dlFiles.files.query("name = :1"; "4DDiagnosticLogTool_9047.txt").first()
+	End if
+	$report.logDiagLive.listed:=($dlFile#Null)
+	If ($dlFile#Null)
+		$report.logDiagLive.family:=String($dlFile.family)
+		$dlOpen:=Operator_json(Operator_http("POST"; $dlOrigin+"/api/operator/logs/open"; $dlHeaders; JSON Stringify(New object("file"; $dlFile.id))))
+		$report.logDiagLive.open:=New object("lines"; 0; "first"; "")
+		If (Value type($dlOpen.page)=Is object)
+			$report.logDiagLive.open.lines:=$dlOpen.page.lines.length
+			$report.logDiagLive.open.first:=Substring(String($dlOpen.page.lines.first().text); 1; 30)
+			// Level filter: scan backward from the end for WARN only.
+			$dlLevel:=Operator_json(Operator_http("GET"; $dlOrigin+"/api/operator/logs/page?view="+$dlOpen.view+"&cursor="+$dlOpen.page.after+"&direction=backward&limit=100&level=WARN"; New object("Cookie"; $dlHeaders.Cookie); ""))
+			$dlAllWarn:=(Value type($dlLevel.lines)=Is collection)
+			$report.logDiagLive.level:=New object("count"; 0; "allWarn"; False; "lowercase"; 0)
+			If ($dlAllWarn)
+				$report.logDiagLive.level.count:=$dlLevel.lines.length
+				For each ($dlText; $dlLevel.lines.extract("text"))
+					$dlAllWarn:=$dlAllWarn & (Position(" WARN - "; $dlText; *)>0)
+				End for each
+				$report.logDiagLive.level.allWarn:=$dlAllWarn
+			End if
+			$report.logDiagLive.level.lowercase:=Operator_http("GET"; $dlOrigin+"/api/operator/logs/page?view="+$dlOpen.view+"&cursor="+$dlOpen.page.after+"&direction=backward&limit=100&level=warn"; New object("Cookie"; $dlHeaders.Cookie); "").status
+			// Time jump: the first line at or after 10:05:00 is message 10 (sequence 11).
+			$dlJump:=Operator_json(Operator_http("GET"; $dlOrigin+"/api/operator/logs/page?view="+$dlOpen.view+"&direction=forward&limit=5&time=2026-11-15T10:05:00"; New object("Cookie"; $dlHeaders.Cookie); ""))
+			$report.logDiagLive.jump:=New object("first"; ""; "badTime"; Operator_http("GET"; $dlOrigin+"/api/operator/logs/page?view="+$dlOpen.view+"&direction=forward&limit=5&time=yesterday"; New object("Cookie"; $dlHeaders.Cookie); "").status)
+			If (Value type($dlJump.lines)=Is collection)
+				$report.logDiagLive.jump.first:=Substring(String($dlJump.lines.first().text); 1; 26)
+			End if
+			// Search: case-sensitive, case-insensitive, absent, and multibyte text.
+			$dlSearch:=Operator_json(Operator_http("POST"; $dlOrigin+"/api/operator/logs/search"; $dlHeaders; JSON Stringify(New object("view"; $dlOpen.view; "text"; "Needle-Live"; "caseInsensitive"; False; "direction"; "forward"; "from"; "start"))))
+			$dlSearchCI:=Operator_json(Operator_http("POST"; $dlOrigin+"/api/operator/logs/search"; $dlHeaders; JSON Stringify(New object("view"; $dlOpen.view; "text"; "needle-live"; "caseInsensitive"; True; "direction"; "forward"; "from"; "start"))))
+			$dlSearchNone:=Operator_json(Operator_http("POST"; $dlOrigin+"/api/operator/logs/search"; $dlHeaders; JSON Stringify(New object("view"; $dlOpen.view; "text"; "needle-live"; "caseInsensitive"; False; "direction"; "forward"; "from"; "start"))))
+			$dlSearchJa:=Operator_json(Operator_http("POST"; $dlOrigin+"/api/operator/logs/search"; $dlHeaders; JSON Stringify(New object("view"; $dlOpen.view; "text"; "日本語"; "caseInsensitive"; False; "direction"; "backward"; "from"; "end"))))
+			$report.logDiagLive.search:=New object("sensitive"; 0; "insensitive"; 0; "none"; 0; "multibyte"; 0; "complete"; False)
+			If (Value type($dlSearch.matches)=Is collection)
+				$report.logDiagLive.search.sensitive:=$dlSearch.matches.length
+				$report.logDiagLive.search.complete:=($dlSearch.complete=True)
+			End if
+			If (Value type($dlSearchCI.matches)=Is collection)
+				$report.logDiagLive.search.insensitive:=$dlSearchCI.matches.length
+			End if
+			If (Value type($dlSearchNone.matches)=Is collection)
+				$report.logDiagLive.search.none:=$dlSearchNone.matches.length
+			End if
+			If (Value type($dlSearchJa.matches)=Is collection)
+				$report.logDiagLive.search.multibyte:=$dlSearchJa.matches.length
+			End if
+		End if
+	End if
+	// Every access went through the host authorize formula; the audit has digests, never the query text.
+	$report.logDiagLive.authorize:=New object("calls"; New collection; "private"; False)
+	If (Storage.logCalls#Null)
+		For each ($dlCall; Storage.logCalls)
+			$report.logDiagLive.authorize.calls.push(String($dlCall.action)+":"+String($dlCall.args.family)+":"+String($dlCall.tier)+":"+Choose(Value type($dlCall.args.queryDigest)=Is text; "digest"; "none"))
+			If (Position("Needle"; JSON Stringify($dlCall); *)>0)
+				$report.logDiagLive.authorize.private:=True
+			End if
+		End for each
+	End if
+	$dlAudit:=""
+	If ($opAuditFile.exists)
+		$dlAudit:=$opAuditFile.getText()
+	End if
+	$dlNoRaw:=(Position("Needle"; $dlAudit; *)=0) & (Position("needle"; $dlAudit; *)=0)
+	$report.logDiagLive.audit:=New object("opens"; 0; "searches"; 0; "noQueryText"; $dlNoRaw)
+	For each ($operatorRaw; Split string($dlAudit; Char(10); sk ignore empty strings))
+		$operatorLine:=JSON Parse($operatorRaw)
+		If (($operatorLine.epoch=$dlService.epoch) & ($operatorLine.state="completed"))
+			If ($operatorLine.action="logs.open")
+				$report.logDiagLive.audit.opens:=$report.logDiagLive.audit.opens+1
+			End if
+			If ($operatorLine.action="logs.search")
+				$report.logDiagLive.audit.searches:=$report.logDiagLive.audit.searches+1
+			End if
+		End if
+	End for each
+End if
+$dlTool.stop()
+$deadline:=Milliseconds+15000
+While ((Not($dlService.finished)) & (Milliseconds<$deadline))
+	DELAY PROCESS(Current process; 6)
+End while
+If ($dlFolder.exists)
+	$dlFolder.delete()
+End if
 HOST_Phase:="running failure watchdog"
 $lifecycle:=New signal
 CALL WORKER(".workers"; "Dashboard_lifecycle"; "failure"; $target; New object; $lifecycle)
