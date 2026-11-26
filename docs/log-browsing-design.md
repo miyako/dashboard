@@ -255,6 +255,22 @@ need a separate decision with its own controls; masking HTTP headers is not a pr
   against the real CLI with a synthetic log. The new host-contract cases need hosted CI. Not verified: a real
   4D `authorize` on Server, real diagnostic logs beyond the earlier probe, Intel/Windows.
 
+### L0 diagnostic-log content on tool4d 21.1 (build 21.100562, macOS ARM, 2026-11-26)
+
+`scripts/probe_native.py` in a disposable project, synthetic `LOG EVENT(Into 4D diagnostic log; ...)` calls with
+`Diagnostic log recording` on and `Diagnostic log level` set to `Log trace` **before** recording starts:
+
+| Question | Observed | Consequence |
+| --- | --- | --- |
+| Level names | `INFO`, `WARN`, `ERROR` written. `LOG EVENT` has only information/warning/error severities: a "debug" or "trace" message is logged as `INFO`. | `DEBUG`/`TRACE` stay in the filter list but cannot be produced from `LOG EVENT`; real DEBUG/TRACE lines would come from 4D itself (`not_run`) |
+| Level set after recording starts | Only the `ERROR` line was written (the earlier L0 observation) | Level must be configured first; document for hosts |
+| Multi-line message | Continuation lines have no prefix, and the message ends with ` ()` on the last line | A level filter hides continuations (as designed); search still matches them |
+| Localized / multibyte | UTF-8, no BOM (`Unicode text, UTF-8`) | Matches the UTF-8 decoding; UTF-16 still unobserved |
+| Very long line | A 40 kB message was written unbroken on one line | The 16 KiB display cap and truncation marker are needed |
+| Reuse across runs | A new run appends to the same file and the sequence restarts at 1, without a banner | Line numbers are not unique in a file; time is the ordering key (and may go backwards) |
+
+Still `not_run`: 4D Server logs (`4DRequestsLog`, process info), backup journals, UTF-16 files, other platforms.
+
 ### L2/L3 on a real 4D host (tool4d 21.1, macOS ARM, 2026-11-26)
 
 The host contract's `/logDiagLive` starts the service with `dashboard.audit,4d.diagnostic` and a host `authorize`
